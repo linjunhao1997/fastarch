@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package iam.v1;
+
+option go_package = "iam.v1";
+option java_multiple_files = true;
+option java_package = "com.iam.v1";
+
+import "iam/common.proto";
+import "google/api/annotations.proto";
+
+// 认证服务
+service AuthenticationService {
+  // 密码认证
+  rpc PasswordAuth(PasswordAuthRequest) returns (PasswordAuthResponse) {
+    option (google.api.http) = {
+      post: "/authentication/password-auth"
+      body: "*"
+    };
+  }
+}
+
+message PasswordAuthRequest {
+  string username = 1;
+  string email = 2;
+  string password = 3;
+}
+
+message PasswordAuthResponse {
+  string access_token = 1;
+}

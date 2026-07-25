@@ -1,0 +1,22 @@
+database:
+  dsn: "root:mysql12345678@tcp(127.0.0.1:3306)/iam_dev?charset=utf8mb4&parseTime=True&loc=Local"
+
+redis:
+  addr: "localhost:6379"
+
+grpc:
+  addr: "127.0.0.1"
+  port: 9090
+
+http:
+  addr: "127.0.0.1"
+  port: 8080
+  endpoint: "127.0.0.1:9090"
+
+jwt:
+  secret: "your-secret-key"
+  expiration_hours: 24
+
+app:
+  name: "iam-service"
+  mode: "debug"

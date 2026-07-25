@@ -1,0 +1,236 @@
+syntax = "proto3";
+
+package iam.v1;
+
+option go_package = "iam.v1";
+option java_multiple_files = true;
+option java_package = "com.iam.v1";
+
+import "iam/common.proto";
+import "google/api/annotations.proto";
+
+
+// 授权管理服务
+service AuthorizationService {
+  // 创建权限
+  rpc CreatePermission(CreatePermissionRequest) returns (StatusResponse) {
+    option (google.api.http) = {
+      post: "/authorization/permissions"
+      body: "*"
+    };
+  }
+
+  // 获取权限信息
+  rpc GetPermission(GetRequest) returns (GetPermissionResponse) {
+    option (google.api.http) = {
+      get: "/authorization/permissions/{id}"
+    };
+  }
+
+  // 获取权限列表
+  rpc ListPermissions(ListPermissionsRequest) returns (ListPermissionsResponse) {
+    option (google.api.http) = {
+      get: "/authorization/permissions"
+    };
+  }
+
+  // 修改权限信息
+  rpc UpdatePermission(UpdatePermissionRequest) returns(StatusResponse) {
+    option (google.api.http) = {
+      patch: "/authorization/permissions"
+      body: "*"
+    };
+  }
+
+  // 创建角色
+  rpc CreateRole(CreateRoleRequest) returns (StatusResponse) {
+    option (google.api.http) = {
+      post: "/authorization/roles"
+      body: "*"
+    };
+  }
+
+  // 修改角色信息
+  rpc GetRole(GetRequest) returns (GetRoleResponse) {
+    option (google.api.http) = {
+      get: "/authorization/roles/{id}"
+    };
+  }
+
+  // 获取角色列表
+  rpc ListRoles(ListRolesRequest) returns (ListRolesResponse) {
+    option (google.api.http) = {
+      get: "/authorization/roles"
+    };
+  }
+
+  // 修改角色信息
+  rpc UpdateRole(UpdateRoleRequest) returns(StatusResponse) {
+    option (google.api.http) = {
+      patch: "/authorization/roles/{id}"
+      body: "*"
+    };
+  }
+
+  // 申请权限
+  rpc CreateSubscription(CreateSubscriptionRequest) returns (StatusResponse) {
+    option (google.api.http) = {
+      post: "/authorization/subscriptions"
+      body: "*"
+    };
+  }
+
+  // 申请记录
+  rpc GetSubscription(GetRequest) returns (GetSubscriptionResponse) {
+    option (google.api.http) = {
+      get: "/authorization/subscription/{id}"
+    };
+  }
+
+  // 修改申请记录
+  rpc UpdateSubscription(UpdateSubscriptionRequest) returns (StatusResponse) {
+    option (google.api.http) = {
+      patch: "/authorization/subscriptions/{id}"
+      body: "*"
+    };
+  }
+
+  // 申请记录列表
+  rpc ListSubscription(ListSubscriptionRequest) returns  (ListSubscriptionResponse) {
+    option (google.api.http) = {
+      get: "/authorization/subscriptions"
+    };
+  }
+
+  rpc CheckPermission(CheckPermissionRequest) returns (CheckPermissionResponse) {
+    option (google.api.http) = {
+      post: "/authorization/check_permission"
+      body: "*"
+    };
+  }
+}
+
+message CreatePermissionRequest {
+  int64 application_id = 1;
+  string name = 2;
+  string code = 3;
+  string value = 4;
+  string description = 5;
+}
+
+message CreateRoleRequest {
+  string name = 1;
+  string role_code = 2;
+}
+
+message ListPermissionsRequest {
+  int64 current_page = 1;
+  int64 page_size = 2;
+}
+
+message ListRolesRequest {
+  int64 current_page = 1;
+  int64 page_size = 2;
+}
+
+message GetPermissionResponse {
+  Status status = 1;
+  Permission permission = 2;
+}
+
+message GetRoleResponse {
+  Status status = 1;
+  Role role = 2;
+}
+
+message ListPermissionsResponse {
+  Status status = 1;
+  Page page = 2;
+  repeated Permission Permissions = 3;
+}
+
+message ListRolesResponse {
+  Status status = 1;
+  Page page = 2;
+  repeated Role roles = 3;
+}
+
+message UpdatePermissionRequest {
+  int64 id = 1;
+  string name = 2;
+  string enabled_status = 3;
+}
+
+message UpdateRoleRequest {
+  int64 id = 1;
+  string name = 2;
+  string enabled_status = 3;
+  repeated int64 added_permission_code_list = 4;
+  repeated int64 removed_permission_code_list = 5;
+}
+
+message CreateSubscriptionRequest {
+  int64 role_code_list = 1;
+  int64 permission_code_list = 2;
+}
+
+message UpdateSubscriptionRequest {
+  int64 id = 1;
+  int64 role_code_list = 2;
+  int64 permission_code_list = 3;
+}
+
+message ListSubscriptionRequest {
+  Page page = 1;
+}
+
+message GetSubscriptionResponse {
+  Status status = 1;
+  Subscription subscription = 2;
+}
+
+message ListSubscriptionResponse {
+  Status status = 1;
+  Page page = 2;
+  repeated Subscription subscriptions = 3;
+}
+
+// 权限信息
+message Permission {
+  string id = 1;
+  string name = 2;
+  int64 application_id = 3;
+  string permission_code = 4;
+  string enabled_status = 5;
+}
+
+// 角色信息
+message Role {
+  string id = 1;
+  string name = 2;
+  int64 application_id = 3;
+  string role_code = 4;
+  string enabled_status = 5;
+}
+
+// 权限申请记录
+message Subscription {
+  int64 source_application_code = 1;
+  int64 target_application_code = 2;
+  int64 role_code_list = 3;
+  int64 permission_code_list = 4;
+  int64 applicant_id = 5;
+  int64 approver_id  = 6;
+  string applicant_name = 7;
+  string approver_name = 8;
+  string status = 9;
+}
+
+// 检查权限
+message CheckPermissionRequest{
+  string application_code = 1;
+  string permission_code = 2;
+}
+message CheckPermissionResponse {
+  bool ok = 1;
+}

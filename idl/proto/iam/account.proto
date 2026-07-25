@@ -1,0 +1,82 @@
+syntax = "proto3";
+
+package iam.v1;
+
+option go_package = "iam.v1";
+option java_multiple_files = true;
+option java_package = "com.iam.v1";
+
+import "iam/common.proto";
+import "google/api/annotations.proto";
+import "buf/validate/validate.proto";
+
+// 账号管理服务
+service AccountService {
+  // 创建账号
+  rpc CreateAccount(CreateAccountRequest) returns (StatusResponse) {
+    option (google.api.http) = {
+      post: "/account/accounts"
+      body: "*"
+    };
+  }
+
+  // 获取账号信息
+  rpc GetAccount(GetRequest) returns (GetAccountResponse) {
+    option (google.api.http) = {
+      get: "/account/accounts/{id}"
+    };
+  }
+
+  // 获取账号列表
+  rpc ListAccounts(ListAccountsRequest) returns (ListAccountsResponse) {
+    option (google.api.http) = {
+      get: "/account/accounts"
+    };
+  }
+
+  // 修改账号
+  rpc UpdateAccount(UpdateAccountRequest) returns(StatusResponse) {
+    option (google.api.http) = {
+      patch: "/account/accounts/{id}"
+      body: "*"
+    };
+  }
+}
+
+message CreateAccountRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  string email = 2 [(buf.validate.field).string.email = true];
+  string kind = 3 [(buf.validate.field).string = { in: ["0", "1"] }];
+}
+
+message ListAccountsRequest {
+  int64 current_page = 1;
+  int64 page_size = 2;
+  string id = 3;
+}
+
+message GetAccountResponse {
+  Status status = 1;
+  Account account = 2;
+}
+
+message ListAccountsResponse {
+  Status status = 1;
+  Page page = 2;
+  repeated Account accounts = 3;
+}
+
+message UpdateAccountRequest {
+  int64 id = 1 [(buf.validate.field).required = true];
+  string status = 2;
+  string password = 3;
+}
+
+
+// 用户详细信息
+message Account {
+  string id = 1;
+  string name = 2;
+  string email = 3;
+  string kind_id = 4;
+}
