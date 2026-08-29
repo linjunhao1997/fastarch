@@ -3,6 +3,10 @@ package auth
 import (
 	"context"
 	"encoding/json"
+	"iam-service/pkg/constant"
+	"net/http"
+	"strings"
+
 	iam_v1 "github.com/linjunhao1997/idl/pb/iam"
 	"github.com/redis/go-redis/v9"
 	"github.com/spf13/cast"
@@ -10,9 +14,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-	"iam-service/pkg/constant"
-	"net/http"
-	"strings"
 )
 
 const (
@@ -42,7 +43,16 @@ func Interceptor(rdb *redis.Client) grpc.UnaryServerInterceptor {
 			return nil, status.Errorf(codes.Unauthenticated, "parse token failed: %v", err)
 		}
 
+		isAdmin, err := IsAdminFromJwt(tokenString)
+		if err != nil {
+			return nil, status.Errorf(codes.Unauthenticated, "parse token failed: %v", err)
+		}
+
 		newCtx := context.WithValue(ctx, contextAccountId, accountId)
+
+		if isAdmin {
+			return handler(newCtx, req)
+		}
 
 		str, err := rdb.Get(ctx, constant.GetAccountPermissionKey(cast.ToInt64(accountId))).Result()
 		if err != nil {

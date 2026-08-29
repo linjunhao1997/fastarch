@@ -17,9 +17,7 @@ export default function AccountListPage() {
     setLoading(true);
     try {
       const response = await accountApi.list(1, 100);
-      if (response.status.code === "0000") {
-        setUsers(response.accounts || []);
-      }
+      setUsers(response.accounts || []);
     } catch (error) {
       showNotification(error, "获取账号列表失败");
     } finally {
@@ -55,7 +53,7 @@ export default function AccountListPage() {
     { title: "ID", dataIndex: "id", key: "id" },
     { title: "姓名", dataIndex: "name", key: "name" },
     { title: "邮箱", dataIndex: "email", key: "email" },
-    { title: "状态", dataIndex: "status", key: "status" },
+    { title: "类型", dataIndex: "kindId", key: "kindId", render: (text: string) => text === "0" ? "用户" : "系统" },
     {
       title: "操作",
       key: "action",

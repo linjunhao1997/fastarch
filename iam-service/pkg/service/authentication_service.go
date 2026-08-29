@@ -3,18 +3,19 @@ package service
 import (
 	"context"
 	"encoding/json"
-	iam_v1 "github.com/linjunhao1997/idl/pb/iam"
-	"github.com/redis/go-redis/v9"
-	"github.com/spf13/cast"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
-	"gorm.io/gorm"
 	"iam-service/pkg/auth"
 	"iam-service/pkg/constant"
 	"iam-service/pkg/helper"
 	"iam-service/pkg/model"
 	"net/http"
 	"time"
+
+	iam_v1 "github.com/linjunhao1997/idl/pb/iam"
+	"github.com/redis/go-redis/v9"
+	"github.com/spf13/cast"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
+	"gorm.io/gorm"
 )
 
 type AuthenticationService struct {
@@ -54,10 +55,18 @@ func (a AuthenticationService) PasswordAuth(ctx context.Context, request *iam_v1
 	}
 
 	codeDict := make(map[string]struct{})
+	isAdmin := false
 	for _, role := range account.RoleList {
+		if role.Code == "admin" {
+			isAdmin = true
+			break
+		}
 		for _, permission := range role.PermissionList {
 			codeDict[role.Application.Name+":"+permission.Code] = struct{}{}
 		}
+	}
+	if isAdmin {
+		codeDict[constant.ApplicationCode+":admin"] = struct{}{}
 	}
 	var codes []string
 	for code := range codeDict {
@@ -77,6 +86,7 @@ func (a AuthenticationService) PasswordAuth(ctx context.Context, request *iam_v1
 		UserId:         cast.ToString(account.Id),
 		Username:       account.Name,
 		ExpirationTime: expirationTime,
+		IsAdmin:        isAdmin,
 	})
 
 	accessTokenCookie := http.Cookie{

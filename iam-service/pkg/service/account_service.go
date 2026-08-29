@@ -4,14 +4,17 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"time"
+
 	"github.com/go-dev-frame/sponge/pkg/krand"
+	common_v1 "github.com/linjunhao1997/idl/pb/common"
 	iam_v1 "github.com/linjunhao1997/idl/pb/iam"
 	"github.com/spf13/cast"
+	"google.golang.org/protobuf/types/known/emptypb"
 	"gorm.io/gorm"
-	"iam-service/pkg/constant"
+
 	"iam-service/pkg/helper"
 	"iam-service/pkg/model"
-	"time"
 )
 
 type AccountService struct {
@@ -20,23 +23,22 @@ type AccountService struct {
 
 var _ iam_v1.AccountServiceServer = (*AccountService)(nil)
 
-func (service *AccountService) GetAccount(ctx context.Context, request *iam_v1.GetRequest) (*iam_v1.GetAccountResponse, error) {
+func accountToPb(a model.Account) *iam_v1.Account {
+	return &iam_v1.Account{
+		Id:    cast.ToString(a.Id),
+		Name:  a.Name,
+		Email: a.Email,
+		Kind:  a.Kind,
+	}
+}
+
+func (service *AccountService) GetAccount(ctx context.Context, request *common_v1.GetRequest) (*iam_v1.Account, error) {
 	res := model.Account{}
-	err := service.db.WithContext(ctx).Where(model.AccountColumnId, request.Id).First(res).Error
+	err := service.db.WithContext(ctx).Where(model.AccountColumnId, request.Id).First(&res).Error
 	if err != nil {
 		return nil, err
 	}
-	return &iam_v1.GetAccountResponse{
-		Status: &iam_v1.Status{
-			Code: constant.ResponseCodeSuccess,
-		},
-		Account: &iam_v1.Account{
-			Id:     cast.ToString(request.Id),
-			Name:   res.Name,
-			Email:  res.Email,
-			KindId: res.Kind,
-		},
-	}, nil
+	return accountToPb(res), nil
 }
 
 func (service *AccountService) ListAccounts(ctx context.Context, request *iam_v1.ListAccountsRequest) (*iam_v1.ListAccountsResponse, error) {
@@ -60,24 +62,15 @@ func (service *AccountService) ListAccounts(ctx context.Context, request *iam_v1
 	}
 	accounts := make([]*iam_v1.Account, 0, len(res))
 	for _, v := range res {
-		accounts = append(accounts, &iam_v1.Account{
-			Id:     cast.ToString(v.Id),
-			Name:   v.Name,
-			Email:  v.Email,
-			KindId: v.Kind,
-		})
+		accounts = append(accounts, accountToPb(v))
 	}
 	return &iam_v1.ListAccountsResponse{
-		Status: &iam_v1.Status{
-			Code: constant.ResponseCodeSuccess,
-		},
 		Accounts: accounts,
 		Page:     helper.GetPage(request.CurrentPage, request.PageSize, count),
 	}, nil
-
 }
 
-func (service *AccountService) UpdateAccount(ctx context.Context, request *iam_v1.UpdateAccountRequest) (*iam_v1.StatusResponse, error) {
+func (service *AccountService) UpdateAccount(ctx context.Context, request *iam_v1.UpdateAccountRequest) (*emptypb.Empty, error) {
 	// 对account的id加分布式锁
 	var account model.Account
 	err := service.db.WithContext(ctx).Model(model.Account{}).
@@ -113,45 +106,32 @@ func (service *AccountService) UpdateAccount(ctx context.Context, request *iam_v
 	if result.RowsAffected == 0 {
 		return nil, ErrUpdateAccountBusy
 	}
-	return &iam_v1.StatusResponse{
-		Status: &iam_v1.Status{
-			Code: constant.ResponseCodeSuccess,
-		},
-	}, nil
+	return &emptypb.Empty{}, nil
 }
-
-var _ iam_v1.AccountServiceServer = (*AccountService)(nil)
 
 func NewAccountService(db *gorm.DB) iam_v1.AccountServiceServer {
 	return &AccountService{db: db}
 }
 
-func (service *AccountService) CreateAccount(ctx context.Context, request *iam_v1.CreateAccountRequest) (*iam_v1.StatusResponse, error) {
+func (service *AccountService) CreateAccount(ctx context.Context, request *iam_v1.CreateAccountRequest) (*iam_v1.Account, error) {
 	pkId := krand.NewID()
 	now := time.Now()
+	account := model.Account{
+		Id:         pkId,
+		Name:       request.Name,
+		Email:      request.Email,
+		Kind:       request.Kind,
+		CreateTime: now,
+		UpdateTime: now,
+	}
 	err := service.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		err := tx.Model(model.Account{}).Create(
-			&model.Account{
-				Id:         pkId,
-				Name:       request.Name,
-				Email:      request.Email,
-				Kind:       request.Kind,
-				CreateTime: now,
-				UpdateTime: now,
-			}).Error
-		if err != nil {
-			return err
-		}
-		return nil
+		return tx.Model(model.Account{}).Create(&account).Error
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	return &iam_v1.StatusResponse{Status: &iam_v1.Status{
-		Code:   constant.ResponseCodeSuccess,
-		DataId: cast.ToString(pkId),
-	}}, nil
+	return accountToPb(account), nil
 }
 
 func (service *AccountService) generateSalt() (string, error) {

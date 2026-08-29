@@ -16,8 +16,9 @@
     "application/json"
   ],
   "paths": {
-    "/authorization/check_permission": {
+    "/authorization/check-permission": {
       "post": {
+        "summary": "鉴权：校验当前账号是否拥有指定权限",
         "operationId": "AuthorizationService_CheckPermission",
         "responses": {
           "200": {
@@ -29,7 +30,7 @@
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/googlerpcStatus"
+              "$ref": "#/definitions/rpcStatus"
             }
           }
         },
@@ -62,7 +63,7 @@
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/googlerpcStatus"
+              "$ref": "#/definitions/rpcStatus"
             }
           }
         },
@@ -87,19 +88,19 @@
         ]
       },
       "post": {
-        "summary": "创建权限",
+        "summary": "创建权限，返回创建出的权限（含 id）",
         "operationId": "AuthorizationService_CreatePermission",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/v1StatusResponse"
+              "$ref": "#/definitions/v1Permission"
             }
           },
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/googlerpcStatus"
+              "$ref": "#/definitions/rpcStatus"
             }
           }
         },
@@ -116,37 +117,6 @@
         "tags": [
           "AuthorizationService"
         ]
-      },
-      "patch": {
-        "summary": "修改权限信息",
-        "operationId": "AuthorizationService_UpdatePermission",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/v1StatusResponse"
-            }
-          },
-          "default": {
-            "description": "An unexpected error response.",
-            "schema": {
-              "$ref": "#/definitions/googlerpcStatus"
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "body",
-            "in": "body",
-            "required": true,
-            "schema": {
-              "$ref": "#/definitions/v1UpdatePermissionRequest"
-            }
-          }
-        ],
-        "tags": [
-          "AuthorizationService"
-        ]
       }
     },
     "/authorization/permissions/{id}": {
@@ -157,13 +127,13 @@
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/v1GetPermissionResponse"
+              "$ref": "#/definitions/v1Permission"
             }
           },
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/googlerpcStatus"
+              "$ref": "#/definitions/rpcStatus"
             }
           }
         },
@@ -174,6 +144,53 @@
             "required": true,
             "type": "string",
             "format": "int64"
+          }
+        ],
+        "tags": [
+          "AuthorizationService"
+        ]
+      },
+      "patch": {
+        "summary": "修改权限信息",
+        "operationId": "AuthorizationService_UpdatePermission",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "enabledStatus": {
+                  "type": "string"
+                }
+              }
+            }
           }
         ],
         "tags": [
@@ -195,7 +212,7 @@
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/googlerpcStatus"
+              "$ref": "#/definitions/rpcStatus"
             }
           }
         },
@@ -220,19 +237,19 @@
         ]
       },
       "post": {
-        "summary": "创建角色",
+        "summary": "创建角色，返回创建出的角色（含 id）",
         "operationId": "AuthorizationService_CreateRole",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/v1StatusResponse"
+              "$ref": "#/definitions/v1Role"
             }
           },
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/googlerpcStatus"
+              "$ref": "#/definitions/rpcStatus"
             }
           }
         },
@@ -253,19 +270,19 @@
     },
     "/authorization/roles/{id}": {
       "get": {
-        "summary": "修改角色信息",
+        "summary": "获取角色信息",
         "operationId": "AuthorizationService_GetRole",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/v1GetRoleResponse"
+              "$ref": "#/definitions/v1Role"
             }
           },
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/googlerpcStatus"
+              "$ref": "#/definitions/rpcStatus"
             }
           }
         },
@@ -289,13 +306,14 @@
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/v1StatusResponse"
+              "type": "object",
+              "properties": {}
             }
           },
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/googlerpcStatus"
+              "$ref": "#/definitions/rpcStatus"
             }
           }
         },
@@ -323,15 +341,14 @@
                 "addedPermissionCodeList": {
                   "type": "array",
                   "items": {
-                    "type": "string",
-                    "format": "int64"
-                  }
+                    "type": "string"
+                  },
+                  "title": "本次新增/移除的权限编码"
                 },
                 "removedPermissionCodeList": {
                   "type": "array",
                   "items": {
-                    "type": "string",
-                    "format": "int64"
+                    "type": "string"
                   }
                 }
               }
@@ -343,84 +360,34 @@
         ]
       }
     },
-    "/authorization/subscription/{id}": {
-      "get": {
-        "summary": "申请记录",
-        "operationId": "AuthorizationService_GetSubscription",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/v1GetSubscriptionResponse"
-            }
-          },
-          "default": {
-            "description": "An unexpected error response.",
-            "schema": {
-              "$ref": "#/definitions/googlerpcStatus"
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "type": "string",
-            "format": "int64"
-          }
-        ],
-        "tags": [
-          "AuthorizationService"
-        ]
-      }
-    },
     "/authorization/subscriptions": {
       "get": {
         "summary": "申请记录列表",
-        "operationId": "AuthorizationService_ListSubscription",
+        "operationId": "AuthorizationService_ListSubscriptions",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/v1ListSubscriptionResponse"
+              "$ref": "#/definitions/v1ListSubscriptionsResponse"
             }
           },
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/googlerpcStatus"
+              "$ref": "#/definitions/rpcStatus"
             }
           }
         },
         "parameters": [
           {
-            "name": "page.total",
-            "description": "总记录数",
+            "name": "currentPage",
             "in": "query",
             "required": false,
             "type": "string",
             "format": "int64"
           },
           {
-            "name": "page.currentPage",
-            "description": "当前页码",
-            "in": "query",
-            "required": false,
-            "type": "string",
-            "format": "int64"
-          },
-          {
-            "name": "page.pageSize",
-            "description": "每页记录数",
-            "in": "query",
-            "required": false,
-            "type": "string",
-            "format": "int64"
-          },
-          {
-            "name": "page.totalPages",
-            "description": "总页数",
+            "name": "pageSize",
             "in": "query",
             "required": false,
             "type": "string",
@@ -432,19 +399,19 @@
         ]
       },
       "post": {
-        "summary": "申请权限",
+        "summary": "申请权限，返回创建出的申请记录（含 id）",
         "operationId": "AuthorizationService_CreateSubscription",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/v1StatusResponse"
+              "$ref": "#/definitions/v1Subscription"
             }
           },
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/googlerpcStatus"
+              "$ref": "#/definitions/rpcStatus"
             }
           }
         },
@@ -464,6 +431,36 @@
       }
     },
     "/authorization/subscriptions/{id}": {
+      "get": {
+        "summary": "申请记录详情",
+        "operationId": "AuthorizationService_GetSubscription",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Subscription"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "int64"
+          }
+        ],
+        "tags": [
+          "AuthorizationService"
+        ]
+      },
       "patch": {
         "summary": "修改申请记录",
         "operationId": "AuthorizationService_UpdateSubscription",
@@ -471,13 +468,14 @@
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/v1StatusResponse"
+              "type": "object",
+              "properties": {}
             }
           },
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/googlerpcStatus"
+              "$ref": "#/definitions/rpcStatus"
             }
           }
         },
@@ -497,12 +495,16 @@
               "type": "object",
               "properties": {
                 "roleCodeList": {
-                  "type": "string",
-                  "format": "int64"
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
                 },
                 "permissionCodeList": {
-                  "type": "string",
-                  "format": "int64"
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
                 }
               }
             }
@@ -515,7 +517,16 @@
     }
   },
   "definitions": {
-    "googlerpcStatus": {
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "rpcStatus": {
       "type": "object",
       "properties": {
         "code": {
@@ -533,29 +544,6 @@
           }
         }
       }
-    },
-    "iamv1Status": {
-      "type": "object",
-      "properties": {
-        "code": {
-          "type": "string"
-        },
-        "dataId": {
-          "type": "string"
-        },
-        "message": {
-          "type": "string"
-        }
-      }
-    },
-    "protobufAny": {
-      "type": "object",
-      "properties": {
-        "@type": {
-          "type": "string"
-        }
-      },
-      "additionalProperties": {}
     },
     "v1CheckPermissionRequest": {
       "type": "object",
@@ -580,10 +568,20 @@
     "v1CreatePermissionRequest": {
       "type": "object",
       "properties": {
+        "applicationId": {
+          "type": "string",
+          "format": "int64"
+        },
         "name": {
           "type": "string"
         },
-        "email": {
+        "code": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        },
+        "description": {
           "type": "string"
         }
       }
@@ -603,58 +601,26 @@
       "type": "object",
       "properties": {
         "roleCodeList": {
-          "type": "string",
-          "format": "int64"
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "permissionCodeList": {
-          "type": "string",
-          "format": "int64"
-        }
-      }
-    },
-    "v1GetPermissionResponse": {
-      "type": "object",
-      "properties": {
-        "status": {
-          "$ref": "#/definitions/iamv1Status"
-        },
-        "permission": {
-          "$ref": "#/definitions/v1Permission"
-        }
-      }
-    },
-    "v1GetRoleResponse": {
-      "type": "object",
-      "properties": {
-        "status": {
-          "$ref": "#/definitions/iamv1Status"
-        },
-        "role": {
-          "$ref": "#/definitions/v1Role"
-        }
-      }
-    },
-    "v1GetSubscriptionResponse": {
-      "type": "object",
-      "properties": {
-        "status": {
-          "$ref": "#/definitions/iamv1Status"
-        },
-        "subscription": {
-          "$ref": "#/definitions/v1Subscription"
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       }
     },
     "v1ListPermissionsResponse": {
       "type": "object",
       "properties": {
-        "status": {
-          "$ref": "#/definitions/iamv1Status"
-        },
         "page": {
           "$ref": "#/definitions/v1Page"
         },
-        "Permissions": {
+        "permissions": {
           "type": "array",
           "items": {
             "type": "object",
@@ -666,9 +632,6 @@
     "v1ListRolesResponse": {
       "type": "object",
       "properties": {
-        "status": {
-          "$ref": "#/definitions/iamv1Status"
-        },
         "page": {
           "$ref": "#/definitions/v1Page"
         },
@@ -681,12 +644,9 @@
         }
       }
     },
-    "v1ListSubscriptionResponse": {
+    "v1ListSubscriptionsResponse": {
       "type": "object",
       "properties": {
-        "status": {
-          "$ref": "#/definitions/iamv1Status"
-        },
         "page": {
           "$ref": "#/definitions/v1Page"
         },
@@ -722,7 +682,8 @@
           "format": "int64",
           "title": "总页数"
         }
-      }
+      },
+      "title": "分页信息（所有服务的列表响应复用）"
     },
     "v1Permission": {
       "type": "object",
@@ -768,32 +729,29 @@
       },
       "title": "角色信息"
     },
-    "v1StatusResponse": {
-      "type": "object",
-      "properties": {
-        "status": {
-          "$ref": "#/definitions/iamv1Status"
-        }
-      }
-    },
     "v1Subscription": {
       "type": "object",
       "properties": {
+        "id": {
+          "type": "string"
+        },
         "sourceApplicationCode": {
-          "type": "string",
-          "format": "int64"
+          "type": "string"
         },
         "targetApplicationCode": {
-          "type": "string",
-          "format": "int64"
+          "type": "string"
         },
         "roleCodeList": {
-          "type": "string",
-          "format": "int64"
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "permissionCodeList": {
-          "type": "string",
-          "format": "int64"
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "applicantId": {
           "type": "string",
@@ -814,21 +772,6 @@
         }
       },
       "title": "权限申请记录"
-    },
-    "v1UpdatePermissionRequest": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string",
-          "format": "int64"
-        },
-        "name": {
-          "type": "string"
-        },
-        "enabledStatus": {
-          "type": "string"
-        }
-      }
     }
   }
 }

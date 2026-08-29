@@ -13,8 +13,8 @@ export default function CreateAccountPage() {
   const onFinish = async (values: { name: string; email: string; kind: string }) => {
     setSubmitting(true);
     try {
-      const kindNum = values.kind === "user" ? 0 : 1;
-      await accountApi.create({ ...values, kind: kindNum });
+      const kindStr = values.kind === "user" ? "0" : "1";
+      await accountApi.create({ ...values, kind: kindStr });
       message.success("账号创建成功");
       navigate('/account_management/account_list');
     } catch (error) {

@@ -8,9 +8,11 @@ package iam_v1
 
 import (
 	context "context"
+	common "github.com/linjunhao1997/idl/pb/common"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -29,14 +31,14 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type AccountServiceClient interface {
-	// 创建账号
-	CreateAccount(ctx context.Context, in *CreateAccountRequest, opts ...grpc.CallOption) (*StatusResponse, error)
+	// 创建账号，返回创建出的账号（含 id）
+	CreateAccount(ctx context.Context, in *CreateAccountRequest, opts ...grpc.CallOption) (*Account, error)
 	// 获取账号信息
-	GetAccount(ctx context.Context, in *GetRequest, opts ...grpc.CallOption) (*GetAccountResponse, error)
+	GetAccount(ctx context.Context, in *common.GetRequest, opts ...grpc.CallOption) (*Account, error)
 	// 获取账号列表
 	ListAccounts(ctx context.Context, in *ListAccountsRequest, opts ...grpc.CallOption) (*ListAccountsResponse, error)
 	// 修改账号
-	UpdateAccount(ctx context.Context, in *UpdateAccountRequest, opts ...grpc.CallOption) (*StatusResponse, error)
+	UpdateAccount(ctx context.Context, in *UpdateAccountRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
 
 type accountServiceClient struct {
@@ -47,8 +49,8 @@ func NewAccountServiceClient(cc grpc.ClientConnInterface) AccountServiceClient {
 	return &accountServiceClient{cc}
 }
 
-func (c *accountServiceClient) CreateAccount(ctx context.Context, in *CreateAccountRequest, opts ...grpc.CallOption) (*StatusResponse, error) {
-	out := new(StatusResponse)
+func (c *accountServiceClient) CreateAccount(ctx context.Context, in *CreateAccountRequest, opts ...grpc.CallOption) (*Account, error) {
+	out := new(Account)
 	err := c.cc.Invoke(ctx, AccountService_CreateAccount_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -56,8 +58,8 @@ func (c *accountServiceClient) CreateAccount(ctx context.Context, in *CreateAcco
 	return out, nil
 }
 
-func (c *accountServiceClient) GetAccount(ctx context.Context, in *GetRequest, opts ...grpc.CallOption) (*GetAccountResponse, error) {
-	out := new(GetAccountResponse)
+func (c *accountServiceClient) GetAccount(ctx context.Context, in *common.GetRequest, opts ...grpc.CallOption) (*Account, error) {
+	out := new(Account)
 	err := c.cc.Invoke(ctx, AccountService_GetAccount_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -74,8 +76,8 @@ func (c *accountServiceClient) ListAccounts(ctx context.Context, in *ListAccount
 	return out, nil
 }
 
-func (c *accountServiceClient) UpdateAccount(ctx context.Context, in *UpdateAccountRequest, opts ...grpc.CallOption) (*StatusResponse, error) {
-	out := new(StatusResponse)
+func (c *accountServiceClient) UpdateAccount(ctx context.Context, in *UpdateAccountRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, AccountService_UpdateAccount_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -87,30 +89,30 @@ func (c *accountServiceClient) UpdateAccount(ctx context.Context, in *UpdateAcco
 // All implementations should embed UnimplementedAccountServiceServer
 // for forward compatibility
 type AccountServiceServer interface {
-	// 创建账号
-	CreateAccount(context.Context, *CreateAccountRequest) (*StatusResponse, error)
+	// 创建账号，返回创建出的账号（含 id）
+	CreateAccount(context.Context, *CreateAccountRequest) (*Account, error)
 	// 获取账号信息
-	GetAccount(context.Context, *GetRequest) (*GetAccountResponse, error)
+	GetAccount(context.Context, *common.GetRequest) (*Account, error)
 	// 获取账号列表
 	ListAccounts(context.Context, *ListAccountsRequest) (*ListAccountsResponse, error)
 	// 修改账号
-	UpdateAccount(context.Context, *UpdateAccountRequest) (*StatusResponse, error)
+	UpdateAccount(context.Context, *UpdateAccountRequest) (*emptypb.Empty, error)
 }
 
 // UnimplementedAccountServiceServer should be embedded to have forward compatible implementations.
 type UnimplementedAccountServiceServer struct {
 }
 
-func (UnimplementedAccountServiceServer) CreateAccount(context.Context, *CreateAccountRequest) (*StatusResponse, error) {
+func (UnimplementedAccountServiceServer) CreateAccount(context.Context, *CreateAccountRequest) (*Account, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateAccount not implemented")
 }
-func (UnimplementedAccountServiceServer) GetAccount(context.Context, *GetRequest) (*GetAccountResponse, error) {
+func (UnimplementedAccountServiceServer) GetAccount(context.Context, *common.GetRequest) (*Account, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetAccount not implemented")
 }
 func (UnimplementedAccountServiceServer) ListAccounts(context.Context, *ListAccountsRequest) (*ListAccountsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListAccounts not implemented")
 }
-func (UnimplementedAccountServiceServer) UpdateAccount(context.Context, *UpdateAccountRequest) (*StatusResponse, error) {
+func (UnimplementedAccountServiceServer) UpdateAccount(context.Context, *UpdateAccountRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateAccount not implemented")
 }
 
@@ -144,7 +146,7 @@ func _AccountService_CreateAccount_Handler(srv interface{}, ctx context.Context,
 }
 
 func _AccountService_GetAccount_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetRequest)
+	in := new(common.GetRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -156,7 +158,7 @@ func _AccountService_GetAccount_Handler(srv interface{}, ctx context.Context, de
 		FullMethod: AccountService_GetAccount_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AccountServiceServer).GetAccount(ctx, req.(*GetRequest))
+		return srv.(AccountServiceServer).GetAccount(ctx, req.(*common.GetRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }

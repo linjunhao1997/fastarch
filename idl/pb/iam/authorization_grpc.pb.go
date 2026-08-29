@@ -8,9 +8,11 @@ package iam_v1
 
 import (
 	context "context"
+	common "github.com/linjunhao1997/idl/pb/common"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -30,7 +32,7 @@ const (
 	AuthorizationService_CreateSubscription_FullMethodName = "/iam.v1.AuthorizationService/CreateSubscription"
 	AuthorizationService_GetSubscription_FullMethodName    = "/iam.v1.AuthorizationService/GetSubscription"
 	AuthorizationService_UpdateSubscription_FullMethodName = "/iam.v1.AuthorizationService/UpdateSubscription"
-	AuthorizationService_ListSubscription_FullMethodName   = "/iam.v1.AuthorizationService/ListSubscription"
+	AuthorizationService_ListSubscriptions_FullMethodName  = "/iam.v1.AuthorizationService/ListSubscriptions"
 	AuthorizationService_CheckPermission_FullMethodName    = "/iam.v1.AuthorizationService/CheckPermission"
 )
 
@@ -38,30 +40,31 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type AuthorizationServiceClient interface {
-	// 创建权限
-	CreatePermission(ctx context.Context, in *CreatePermissionRequest, opts ...grpc.CallOption) (*StatusResponse, error)
+	// 创建权限，返回创建出的权限（含 id）
+	CreatePermission(ctx context.Context, in *CreatePermissionRequest, opts ...grpc.CallOption) (*Permission, error)
 	// 获取权限信息
-	GetPermission(ctx context.Context, in *GetRequest, opts ...grpc.CallOption) (*GetPermissionResponse, error)
+	GetPermission(ctx context.Context, in *common.GetRequest, opts ...grpc.CallOption) (*Permission, error)
 	// 获取权限列表
 	ListPermissions(ctx context.Context, in *ListPermissionsRequest, opts ...grpc.CallOption) (*ListPermissionsResponse, error)
 	// 修改权限信息
-	UpdatePermission(ctx context.Context, in *UpdatePermissionRequest, opts ...grpc.CallOption) (*StatusResponse, error)
-	// 创建角色
-	CreateRole(ctx context.Context, in *CreateRoleRequest, opts ...grpc.CallOption) (*StatusResponse, error)
-	// 修改角色信息
-	GetRole(ctx context.Context, in *GetRequest, opts ...grpc.CallOption) (*GetRoleResponse, error)
+	UpdatePermission(ctx context.Context, in *UpdatePermissionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// 创建角色，返回创建出的角色（含 id）
+	CreateRole(ctx context.Context, in *CreateRoleRequest, opts ...grpc.CallOption) (*Role, error)
+	// 获取角色信息
+	GetRole(ctx context.Context, in *common.GetRequest, opts ...grpc.CallOption) (*Role, error)
 	// 获取角色列表
 	ListRoles(ctx context.Context, in *ListRolesRequest, opts ...grpc.CallOption) (*ListRolesResponse, error)
 	// 修改角色信息
-	UpdateRole(ctx context.Context, in *UpdateRoleRequest, opts ...grpc.CallOption) (*StatusResponse, error)
-	// 申请权限
-	CreateSubscription(ctx context.Context, in *CreateSubscriptionRequest, opts ...grpc.CallOption) (*StatusResponse, error)
-	// 申请记录
-	GetSubscription(ctx context.Context, in *GetRequest, opts ...grpc.CallOption) (*GetSubscriptionResponse, error)
+	UpdateRole(ctx context.Context, in *UpdateRoleRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// 申请权限，返回创建出的申请记录（含 id）
+	CreateSubscription(ctx context.Context, in *CreateSubscriptionRequest, opts ...grpc.CallOption) (*Subscription, error)
+	// 申请记录详情
+	GetSubscription(ctx context.Context, in *common.GetRequest, opts ...grpc.CallOption) (*Subscription, error)
 	// 修改申请记录
-	UpdateSubscription(ctx context.Context, in *UpdateSubscriptionRequest, opts ...grpc.CallOption) (*StatusResponse, error)
+	UpdateSubscription(ctx context.Context, in *UpdateSubscriptionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// 申请记录列表
-	ListSubscription(ctx context.Context, in *ListSubscriptionRequest, opts ...grpc.CallOption) (*ListSubscriptionResponse, error)
+	ListSubscriptions(ctx context.Context, in *ListSubscriptionsRequest, opts ...grpc.CallOption) (*ListSubscriptionsResponse, error)
+	// 鉴权：校验当前账号是否拥有指定权限
 	CheckPermission(ctx context.Context, in *CheckPermissionRequest, opts ...grpc.CallOption) (*CheckPermissionResponse, error)
 }
 
@@ -73,8 +76,8 @@ func NewAuthorizationServiceClient(cc grpc.ClientConnInterface) AuthorizationSer
 	return &authorizationServiceClient{cc}
 }
 
-func (c *authorizationServiceClient) CreatePermission(ctx context.Context, in *CreatePermissionRequest, opts ...grpc.CallOption) (*StatusResponse, error) {
-	out := new(StatusResponse)
+func (c *authorizationServiceClient) CreatePermission(ctx context.Context, in *CreatePermissionRequest, opts ...grpc.CallOption) (*Permission, error) {
+	out := new(Permission)
 	err := c.cc.Invoke(ctx, AuthorizationService_CreatePermission_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -82,8 +85,8 @@ func (c *authorizationServiceClient) CreatePermission(ctx context.Context, in *C
 	return out, nil
 }
 
-func (c *authorizationServiceClient) GetPermission(ctx context.Context, in *GetRequest, opts ...grpc.CallOption) (*GetPermissionResponse, error) {
-	out := new(GetPermissionResponse)
+func (c *authorizationServiceClient) GetPermission(ctx context.Context, in *common.GetRequest, opts ...grpc.CallOption) (*Permission, error) {
+	out := new(Permission)
 	err := c.cc.Invoke(ctx, AuthorizationService_GetPermission_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -100,8 +103,8 @@ func (c *authorizationServiceClient) ListPermissions(ctx context.Context, in *Li
 	return out, nil
 }
 
-func (c *authorizationServiceClient) UpdatePermission(ctx context.Context, in *UpdatePermissionRequest, opts ...grpc.CallOption) (*StatusResponse, error) {
-	out := new(StatusResponse)
+func (c *authorizationServiceClient) UpdatePermission(ctx context.Context, in *UpdatePermissionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, AuthorizationService_UpdatePermission_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -109,8 +112,8 @@ func (c *authorizationServiceClient) UpdatePermission(ctx context.Context, in *U
 	return out, nil
 }
 
-func (c *authorizationServiceClient) CreateRole(ctx context.Context, in *CreateRoleRequest, opts ...grpc.CallOption) (*StatusResponse, error) {
-	out := new(StatusResponse)
+func (c *authorizationServiceClient) CreateRole(ctx context.Context, in *CreateRoleRequest, opts ...grpc.CallOption) (*Role, error) {
+	out := new(Role)
 	err := c.cc.Invoke(ctx, AuthorizationService_CreateRole_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -118,8 +121,8 @@ func (c *authorizationServiceClient) CreateRole(ctx context.Context, in *CreateR
 	return out, nil
 }
 
-func (c *authorizationServiceClient) GetRole(ctx context.Context, in *GetRequest, opts ...grpc.CallOption) (*GetRoleResponse, error) {
-	out := new(GetRoleResponse)
+func (c *authorizationServiceClient) GetRole(ctx context.Context, in *common.GetRequest, opts ...grpc.CallOption) (*Role, error) {
+	out := new(Role)
 	err := c.cc.Invoke(ctx, AuthorizationService_GetRole_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -136,8 +139,8 @@ func (c *authorizationServiceClient) ListRoles(ctx context.Context, in *ListRole
 	return out, nil
 }
 
-func (c *authorizationServiceClient) UpdateRole(ctx context.Context, in *UpdateRoleRequest, opts ...grpc.CallOption) (*StatusResponse, error) {
-	out := new(StatusResponse)
+func (c *authorizationServiceClient) UpdateRole(ctx context.Context, in *UpdateRoleRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, AuthorizationService_UpdateRole_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -145,8 +148,8 @@ func (c *authorizationServiceClient) UpdateRole(ctx context.Context, in *UpdateR
 	return out, nil
 }
 
-func (c *authorizationServiceClient) CreateSubscription(ctx context.Context, in *CreateSubscriptionRequest, opts ...grpc.CallOption) (*StatusResponse, error) {
-	out := new(StatusResponse)
+func (c *authorizationServiceClient) CreateSubscription(ctx context.Context, in *CreateSubscriptionRequest, opts ...grpc.CallOption) (*Subscription, error) {
+	out := new(Subscription)
 	err := c.cc.Invoke(ctx, AuthorizationService_CreateSubscription_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -154,8 +157,8 @@ func (c *authorizationServiceClient) CreateSubscription(ctx context.Context, in 
 	return out, nil
 }
 
-func (c *authorizationServiceClient) GetSubscription(ctx context.Context, in *GetRequest, opts ...grpc.CallOption) (*GetSubscriptionResponse, error) {
-	out := new(GetSubscriptionResponse)
+func (c *authorizationServiceClient) GetSubscription(ctx context.Context, in *common.GetRequest, opts ...grpc.CallOption) (*Subscription, error) {
+	out := new(Subscription)
 	err := c.cc.Invoke(ctx, AuthorizationService_GetSubscription_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -163,8 +166,8 @@ func (c *authorizationServiceClient) GetSubscription(ctx context.Context, in *Ge
 	return out, nil
 }
 
-func (c *authorizationServiceClient) UpdateSubscription(ctx context.Context, in *UpdateSubscriptionRequest, opts ...grpc.CallOption) (*StatusResponse, error) {
-	out := new(StatusResponse)
+func (c *authorizationServiceClient) UpdateSubscription(ctx context.Context, in *UpdateSubscriptionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, AuthorizationService_UpdateSubscription_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -172,9 +175,9 @@ func (c *authorizationServiceClient) UpdateSubscription(ctx context.Context, in 
 	return out, nil
 }
 
-func (c *authorizationServiceClient) ListSubscription(ctx context.Context, in *ListSubscriptionRequest, opts ...grpc.CallOption) (*ListSubscriptionResponse, error) {
-	out := new(ListSubscriptionResponse)
-	err := c.cc.Invoke(ctx, AuthorizationService_ListSubscription_FullMethodName, in, out, opts...)
+func (c *authorizationServiceClient) ListSubscriptions(ctx context.Context, in *ListSubscriptionsRequest, opts ...grpc.CallOption) (*ListSubscriptionsResponse, error) {
+	out := new(ListSubscriptionsResponse)
+	err := c.cc.Invoke(ctx, AuthorizationService_ListSubscriptions_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -194,30 +197,31 @@ func (c *authorizationServiceClient) CheckPermission(ctx context.Context, in *Ch
 // All implementations should embed UnimplementedAuthorizationServiceServer
 // for forward compatibility
 type AuthorizationServiceServer interface {
-	// 创建权限
-	CreatePermission(context.Context, *CreatePermissionRequest) (*StatusResponse, error)
+	// 创建权限，返回创建出的权限（含 id）
+	CreatePermission(context.Context, *CreatePermissionRequest) (*Permission, error)
 	// 获取权限信息
-	GetPermission(context.Context, *GetRequest) (*GetPermissionResponse, error)
+	GetPermission(context.Context, *common.GetRequest) (*Permission, error)
 	// 获取权限列表
 	ListPermissions(context.Context, *ListPermissionsRequest) (*ListPermissionsResponse, error)
 	// 修改权限信息
-	UpdatePermission(context.Context, *UpdatePermissionRequest) (*StatusResponse, error)
-	// 创建角色
-	CreateRole(context.Context, *CreateRoleRequest) (*StatusResponse, error)
-	// 修改角色信息
-	GetRole(context.Context, *GetRequest) (*GetRoleResponse, error)
+	UpdatePermission(context.Context, *UpdatePermissionRequest) (*emptypb.Empty, error)
+	// 创建角色，返回创建出的角色（含 id）
+	CreateRole(context.Context, *CreateRoleRequest) (*Role, error)
+	// 获取角色信息
+	GetRole(context.Context, *common.GetRequest) (*Role, error)
 	// 获取角色列表
 	ListRoles(context.Context, *ListRolesRequest) (*ListRolesResponse, error)
 	// 修改角色信息
-	UpdateRole(context.Context, *UpdateRoleRequest) (*StatusResponse, error)
-	// 申请权限
-	CreateSubscription(context.Context, *CreateSubscriptionRequest) (*StatusResponse, error)
-	// 申请记录
-	GetSubscription(context.Context, *GetRequest) (*GetSubscriptionResponse, error)
+	UpdateRole(context.Context, *UpdateRoleRequest) (*emptypb.Empty, error)
+	// 申请权限，返回创建出的申请记录（含 id）
+	CreateSubscription(context.Context, *CreateSubscriptionRequest) (*Subscription, error)
+	// 申请记录详情
+	GetSubscription(context.Context, *common.GetRequest) (*Subscription, error)
 	// 修改申请记录
-	UpdateSubscription(context.Context, *UpdateSubscriptionRequest) (*StatusResponse, error)
+	UpdateSubscription(context.Context, *UpdateSubscriptionRequest) (*emptypb.Empty, error)
 	// 申请记录列表
-	ListSubscription(context.Context, *ListSubscriptionRequest) (*ListSubscriptionResponse, error)
+	ListSubscriptions(context.Context, *ListSubscriptionsRequest) (*ListSubscriptionsResponse, error)
+	// 鉴权：校验当前账号是否拥有指定权限
 	CheckPermission(context.Context, *CheckPermissionRequest) (*CheckPermissionResponse, error)
 }
 
@@ -225,41 +229,41 @@ type AuthorizationServiceServer interface {
 type UnimplementedAuthorizationServiceServer struct {
 }
 
-func (UnimplementedAuthorizationServiceServer) CreatePermission(context.Context, *CreatePermissionRequest) (*StatusResponse, error) {
+func (UnimplementedAuthorizationServiceServer) CreatePermission(context.Context, *CreatePermissionRequest) (*Permission, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreatePermission not implemented")
 }
-func (UnimplementedAuthorizationServiceServer) GetPermission(context.Context, *GetRequest) (*GetPermissionResponse, error) {
+func (UnimplementedAuthorizationServiceServer) GetPermission(context.Context, *common.GetRequest) (*Permission, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetPermission not implemented")
 }
 func (UnimplementedAuthorizationServiceServer) ListPermissions(context.Context, *ListPermissionsRequest) (*ListPermissionsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListPermissions not implemented")
 }
-func (UnimplementedAuthorizationServiceServer) UpdatePermission(context.Context, *UpdatePermissionRequest) (*StatusResponse, error) {
+func (UnimplementedAuthorizationServiceServer) UpdatePermission(context.Context, *UpdatePermissionRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdatePermission not implemented")
 }
-func (UnimplementedAuthorizationServiceServer) CreateRole(context.Context, *CreateRoleRequest) (*StatusResponse, error) {
+func (UnimplementedAuthorizationServiceServer) CreateRole(context.Context, *CreateRoleRequest) (*Role, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateRole not implemented")
 }
-func (UnimplementedAuthorizationServiceServer) GetRole(context.Context, *GetRequest) (*GetRoleResponse, error) {
+func (UnimplementedAuthorizationServiceServer) GetRole(context.Context, *common.GetRequest) (*Role, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetRole not implemented")
 }
 func (UnimplementedAuthorizationServiceServer) ListRoles(context.Context, *ListRolesRequest) (*ListRolesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListRoles not implemented")
 }
-func (UnimplementedAuthorizationServiceServer) UpdateRole(context.Context, *UpdateRoleRequest) (*StatusResponse, error) {
+func (UnimplementedAuthorizationServiceServer) UpdateRole(context.Context, *UpdateRoleRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateRole not implemented")
 }
-func (UnimplementedAuthorizationServiceServer) CreateSubscription(context.Context, *CreateSubscriptionRequest) (*StatusResponse, error) {
+func (UnimplementedAuthorizationServiceServer) CreateSubscription(context.Context, *CreateSubscriptionRequest) (*Subscription, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateSubscription not implemented")
 }
-func (UnimplementedAuthorizationServiceServer) GetSubscription(context.Context, *GetRequest) (*GetSubscriptionResponse, error) {
+func (UnimplementedAuthorizationServiceServer) GetSubscription(context.Context, *common.GetRequest) (*Subscription, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetSubscription not implemented")
 }
-func (UnimplementedAuthorizationServiceServer) UpdateSubscription(context.Context, *UpdateSubscriptionRequest) (*StatusResponse, error) {
+func (UnimplementedAuthorizationServiceServer) UpdateSubscription(context.Context, *UpdateSubscriptionRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateSubscription not implemented")
 }
-func (UnimplementedAuthorizationServiceServer) ListSubscription(context.Context, *ListSubscriptionRequest) (*ListSubscriptionResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ListSubscription not implemented")
+func (UnimplementedAuthorizationServiceServer) ListSubscriptions(context.Context, *ListSubscriptionsRequest) (*ListSubscriptionsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListSubscriptions not implemented")
 }
 func (UnimplementedAuthorizationServiceServer) CheckPermission(context.Context, *CheckPermissionRequest) (*CheckPermissionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CheckPermission not implemented")
@@ -295,7 +299,7 @@ func _AuthorizationService_CreatePermission_Handler(srv interface{}, ctx context
 }
 
 func _AuthorizationService_GetPermission_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetRequest)
+	in := new(common.GetRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -307,7 +311,7 @@ func _AuthorizationService_GetPermission_Handler(srv interface{}, ctx context.Co
 		FullMethod: AuthorizationService_GetPermission_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AuthorizationServiceServer).GetPermission(ctx, req.(*GetRequest))
+		return srv.(AuthorizationServiceServer).GetPermission(ctx, req.(*common.GetRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -367,7 +371,7 @@ func _AuthorizationService_CreateRole_Handler(srv interface{}, ctx context.Conte
 }
 
 func _AuthorizationService_GetRole_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetRequest)
+	in := new(common.GetRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -379,7 +383,7 @@ func _AuthorizationService_GetRole_Handler(srv interface{}, ctx context.Context,
 		FullMethod: AuthorizationService_GetRole_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AuthorizationServiceServer).GetRole(ctx, req.(*GetRequest))
+		return srv.(AuthorizationServiceServer).GetRole(ctx, req.(*common.GetRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -439,7 +443,7 @@ func _AuthorizationService_CreateSubscription_Handler(srv interface{}, ctx conte
 }
 
 func _AuthorizationService_GetSubscription_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetRequest)
+	in := new(common.GetRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -451,7 +455,7 @@ func _AuthorizationService_GetSubscription_Handler(srv interface{}, ctx context.
 		FullMethod: AuthorizationService_GetSubscription_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AuthorizationServiceServer).GetSubscription(ctx, req.(*GetRequest))
+		return srv.(AuthorizationServiceServer).GetSubscription(ctx, req.(*common.GetRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -474,20 +478,20 @@ func _AuthorizationService_UpdateSubscription_Handler(srv interface{}, ctx conte
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AuthorizationService_ListSubscription_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListSubscriptionRequest)
+func _AuthorizationService_ListSubscriptions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListSubscriptionsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(AuthorizationServiceServer).ListSubscription(ctx, in)
+		return srv.(AuthorizationServiceServer).ListSubscriptions(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: AuthorizationService_ListSubscription_FullMethodName,
+		FullMethod: AuthorizationService_ListSubscriptions_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AuthorizationServiceServer).ListSubscription(ctx, req.(*ListSubscriptionRequest))
+		return srv.(AuthorizationServiceServer).ListSubscriptions(ctx, req.(*ListSubscriptionsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -562,8 +566,8 @@ var AuthorizationService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _AuthorizationService_UpdateSubscription_Handler,
 		},
 		{
-			MethodName: "ListSubscription",
-			Handler:    _AuthorizationService_ListSubscription_Handler,
+			MethodName: "ListSubscriptions",
+			Handler:    _AuthorizationService_ListSubscriptions_Handler,
 		},
 		{
 			MethodName: "CheckPermission",

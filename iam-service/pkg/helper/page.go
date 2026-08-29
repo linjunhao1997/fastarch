@@ -1,7 +1,7 @@
 package helper
 
 import (
-	iam_v1 "github.com/linjunhao1997/idl/pb/iam"
+	common_v1 "github.com/linjunhao1997/idl/pb/common"
 	"iam-service/pkg/constant"
 	"math"
 )
@@ -24,13 +24,13 @@ func GetLimitAndOffset(currentPage, pageSize int64) (limit, offset int) {
 	return int(pageSize), int(currentPage-1) * int(pageSize)
 }
 
-func GetPage(currentPage, pageSize, total int64) *iam_v1.Page {
+func GetPage(currentPage, pageSize, total int64) *common_v1.Page {
 	currentPage, pageSize = SetDefaultPageParam(currentPage, pageSize)
 
 	// 求总页数
 	totalPages := int(math.Ceil(float64(total) / float64(pageSize)))
 
-	return &iam_v1.Page{
+	return &common_v1.Page{
 		Total:       total,
 		CurrentPage: currentPage,
 		PageSize:    pageSize,

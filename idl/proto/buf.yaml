@@ -1,11 +1,16 @@
 # For details on buf.yaml configuration, visit https://buf.build/docs/configuration/v2/buf-yaml
 version: v2
 deps:
-  -  buf.build/googleapis/googleapis
-  -  buf.build/bufbuild/protovalidate:v0.14.0
+  - buf.build/googleapis/googleapis
+  - buf.build/bufbuild/protovalidate:v0.14.0
 lint:
   use:
     - STANDARD
+  except:
+    - RPC_REQUEST_STANDARD_NAME   # 通用 GetRequest 跨资源复用
+    - RPC_RESPONSE_STANDARD_NAME  # CRUD 直接返回资源/Empty，不用 XxxResponse 信封包装
+    - RPC_REQUEST_RESPONSE_UNIQUE # 资源消息/Empty 跨多个 RPC 复用是有意设计
+    - PACKAGE_DIRECTORY_MATCH     # 现有目录布局 iam/ 对应 package iam.v1
 breaking:
   use:
     - FILE

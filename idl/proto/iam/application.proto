@@ -2,18 +2,20 @@ syntax = "proto3";
 
 package iam.v1;
 
-option go_package = "iam.v1";
+option go_package = "github.com/linjunhao1997/idl/pb/iam;iam_v1";
 option java_multiple_files = true;
 option java_package = "com.iam.v1";
 
-import "iam/common.proto";
+import "common/common.proto";
 import "google/api/annotations.proto";
+import "google/protobuf/empty.proto";
+import "buf/validate/validate.proto";
 
 
 // 应用管理服务
 service ApplicationService {
-  // 创建应用
-  rpc CreateApplication(CreateApplicationRequest) returns (StatusResponse) {
+  // 创建应用，返回创建出的应用（含 id）
+  rpc CreateApplication(CreateApplicationRequest) returns (Application) {
     option (google.api.http) = {
       post: "/application/applications"
       body: "*"
@@ -21,7 +23,7 @@ service ApplicationService {
   }
 
   // 获取应用信息
-  rpc GetApplication(GetRequest) returns (GetApplicationResponse) {
+  rpc GetApplication(common.v1.GetRequest) returns (Application) {
     option (google.api.http) = {
       get: "/application/applications/{id}"
     };
@@ -35,7 +37,7 @@ service ApplicationService {
   }
 
   // 修改应用信息
-  rpc UpdateApplication(UpdateApplicationRequest) returns(StatusResponse) {
+  rpc UpdateApplication(UpdateApplicationRequest) returns (google.protobuf.Empty) {
     option (google.api.http) = {
       patch: "/application/applications/{id}"
       body: "*"
@@ -44,8 +46,8 @@ service ApplicationService {
 }
 
 message CreateApplicationRequest {
-  string name = 1;
-  string email = 2;
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  string description = 2;
 }
 
 message ListApplicationsRequest {
@@ -53,25 +55,20 @@ message ListApplicationsRequest {
   int64 page_size = 2;
 }
 
-message GetApplicationResponse {
-  Status status = 1;
-  Application application = 2;
-}
-
 message ListApplicationsResponse {
-  Status status = 1;
-  Page page = 2;
-  repeated Application applications = 3;
+  common.v1.Page page = 1;
+  repeated Application applications = 2;
 }
 
 message UpdateApplicationRequest {
-  int64 id = 1;
+  int64 id = 1 [(buf.validate.field).required = true];
   string name = 2;
-  string enabled_status = 3;
+  string description = 3;
+  string enabled_status = 4;
 }
 
 
-// 应用详细信息
+// 应用信息
 message Application {
   string id = 1;
   string name = 2;

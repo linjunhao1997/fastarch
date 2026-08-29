@@ -15,6 +15,7 @@ import (
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/utilities"
+	"github.com/linjunhao1997/idl/pb/common"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/grpclog"
@@ -66,7 +67,7 @@ func local_request_AuthorizationService_CreatePermission_0(ctx context.Context, 
 }
 
 func request_AuthorizationService_GetPermission_0(ctx context.Context, marshaler runtime.Marshaler, client AuthorizationServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq GetRequest
+	var protoReq common.GetRequest
 	var metadata runtime.ServerMetadata
 
 	var (
@@ -92,7 +93,7 @@ func request_AuthorizationService_GetPermission_0(ctx context.Context, marshaler
 }
 
 func local_request_AuthorizationService_GetPermission_0(ctx context.Context, marshaler runtime.Marshaler, server AuthorizationServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq GetRequest
+	var protoReq common.GetRequest
 	var metadata runtime.ServerMetadata
 
 	var (
@@ -165,6 +166,23 @@ func request_AuthorizationService_UpdatePermission_0(ctx context.Context, marsha
 		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
 	}
 
+	var (
+		val string
+		ok  bool
+		err error
+		_   = err
+	)
+
+	val, ok = pathParams["id"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "id")
+	}
+
+	protoReq.Id, err = runtime.Int64(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "id", err)
+	}
+
 	msg, err := client.UpdatePermission(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
 	return msg, metadata, err
 
@@ -180,6 +198,23 @@ func local_request_AuthorizationService_UpdatePermission_0(ctx context.Context, 
 	}
 	if err := marshaler.NewDecoder(newReader()).Decode(&protoReq); err != nil && err != io.EOF {
 		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+
+	var (
+		val string
+		ok  bool
+		err error
+		_   = err
+	)
+
+	val, ok = pathParams["id"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "id")
+	}
+
+	protoReq.Id, err = runtime.Int64(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "id", err)
 	}
 
 	msg, err := server.UpdatePermission(ctx, &protoReq)
@@ -222,7 +257,7 @@ func local_request_AuthorizationService_CreateRole_0(ctx context.Context, marsha
 }
 
 func request_AuthorizationService_GetRole_0(ctx context.Context, marshaler runtime.Marshaler, client AuthorizationServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq GetRequest
+	var protoReq common.GetRequest
 	var metadata runtime.ServerMetadata
 
 	var (
@@ -248,7 +283,7 @@ func request_AuthorizationService_GetRole_0(ctx context.Context, marshaler runti
 }
 
 func local_request_AuthorizationService_GetRole_0(ctx context.Context, marshaler runtime.Marshaler, server AuthorizationServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq GetRequest
+	var protoReq common.GetRequest
 	var metadata runtime.ServerMetadata
 
 	var (
@@ -412,7 +447,7 @@ func local_request_AuthorizationService_CreateSubscription_0(ctx context.Context
 }
 
 func request_AuthorizationService_GetSubscription_0(ctx context.Context, marshaler runtime.Marshaler, client AuthorizationServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq GetRequest
+	var protoReq common.GetRequest
 	var metadata runtime.ServerMetadata
 
 	var (
@@ -438,7 +473,7 @@ func request_AuthorizationService_GetSubscription_0(ctx context.Context, marshal
 }
 
 func local_request_AuthorizationService_GetSubscription_0(ctx context.Context, marshaler runtime.Marshaler, server AuthorizationServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq GetRequest
+	var protoReq common.GetRequest
 	var metadata runtime.ServerMetadata
 
 	var (
@@ -532,37 +567,37 @@ func local_request_AuthorizationService_UpdateSubscription_0(ctx context.Context
 }
 
 var (
-	filter_AuthorizationService_ListSubscription_0 = &utilities.DoubleArray{Encoding: map[string]int{}, Base: []int(nil), Check: []int(nil)}
+	filter_AuthorizationService_ListSubscriptions_0 = &utilities.DoubleArray{Encoding: map[string]int{}, Base: []int(nil), Check: []int(nil)}
 )
 
-func request_AuthorizationService_ListSubscription_0(ctx context.Context, marshaler runtime.Marshaler, client AuthorizationServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq ListSubscriptionRequest
+func request_AuthorizationService_ListSubscriptions_0(ctx context.Context, marshaler runtime.Marshaler, client AuthorizationServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var protoReq ListSubscriptionsRequest
 	var metadata runtime.ServerMetadata
 
 	if err := req.ParseForm(); err != nil {
 		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
 	}
-	if err := runtime.PopulateQueryParameters(&protoReq, req.Form, filter_AuthorizationService_ListSubscription_0); err != nil {
+	if err := runtime.PopulateQueryParameters(&protoReq, req.Form, filter_AuthorizationService_ListSubscriptions_0); err != nil {
 		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
 	}
 
-	msg, err := client.ListSubscription(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	msg, err := client.ListSubscriptions(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
 	return msg, metadata, err
 
 }
 
-func local_request_AuthorizationService_ListSubscription_0(ctx context.Context, marshaler runtime.Marshaler, server AuthorizationServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq ListSubscriptionRequest
+func local_request_AuthorizationService_ListSubscriptions_0(ctx context.Context, marshaler runtime.Marshaler, server AuthorizationServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var protoReq ListSubscriptionsRequest
 	var metadata runtime.ServerMetadata
 
 	if err := req.ParseForm(); err != nil {
 		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
 	}
-	if err := runtime.PopulateQueryParameters(&protoReq, req.Form, filter_AuthorizationService_ListSubscription_0); err != nil {
+	if err := runtime.PopulateQueryParameters(&protoReq, req.Form, filter_AuthorizationService_ListSubscriptions_0); err != nil {
 		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
 	}
 
-	msg, err := server.ListSubscription(ctx, &protoReq)
+	msg, err := server.ListSubscriptions(ctx, &protoReq)
 	return msg, metadata, err
 
 }
@@ -690,7 +725,7 @@ func RegisterAuthorizationServiceHandlerServer(ctx context.Context, mux *runtime
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		var err error
 		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/iam.v1.AuthorizationService/UpdatePermission", runtime.WithHTTPPathPattern("/authorization/permissions"))
+		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/iam.v1.AuthorizationService/UpdatePermission", runtime.WithHTTPPathPattern("/authorization/permissions/{id}"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -840,7 +875,7 @@ func RegisterAuthorizationServiceHandlerServer(ctx context.Context, mux *runtime
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		var err error
 		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/iam.v1.AuthorizationService/GetSubscription", runtime.WithHTTPPathPattern("/authorization/subscription/{id}"))
+		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/iam.v1.AuthorizationService/GetSubscription", runtime.WithHTTPPathPattern("/authorization/subscriptions/{id}"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -882,7 +917,7 @@ func RegisterAuthorizationServiceHandlerServer(ctx context.Context, mux *runtime
 
 	})
 
-	mux.Handle("GET", pattern_AuthorizationService_ListSubscription_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+	mux.Handle("GET", pattern_AuthorizationService_ListSubscriptions_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
 		var stream runtime.ServerTransportStream
@@ -890,12 +925,12 @@ func RegisterAuthorizationServiceHandlerServer(ctx context.Context, mux *runtime
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		var err error
 		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/iam.v1.AuthorizationService/ListSubscription", runtime.WithHTTPPathPattern("/authorization/subscriptions"))
+		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/iam.v1.AuthorizationService/ListSubscriptions", runtime.WithHTTPPathPattern("/authorization/subscriptions"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
 		}
-		resp, md, err := local_request_AuthorizationService_ListSubscription_0(annotatedContext, inboundMarshaler, server, req, pathParams)
+		resp, md, err := local_request_AuthorizationService_ListSubscriptions_0(annotatedContext, inboundMarshaler, server, req, pathParams)
 		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
 		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
 		if err != nil {
@@ -903,7 +938,7 @@ func RegisterAuthorizationServiceHandlerServer(ctx context.Context, mux *runtime
 			return
 		}
 
-		forward_AuthorizationService_ListSubscription_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+		forward_AuthorizationService_ListSubscriptions_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
 
 	})
 
@@ -915,7 +950,7 @@ func RegisterAuthorizationServiceHandlerServer(ctx context.Context, mux *runtime
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		var err error
 		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/iam.v1.AuthorizationService/CheckPermission", runtime.WithHTTPPathPattern("/authorization/check_permission"))
+		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/iam.v1.AuthorizationService/CheckPermission", runtime.WithHTTPPathPattern("/authorization/check-permission"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -1045,7 +1080,7 @@ func RegisterAuthorizationServiceHandlerClient(ctx context.Context, mux *runtime
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		var err error
 		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/iam.v1.AuthorizationService/UpdatePermission", runtime.WithHTTPPathPattern("/authorization/permissions"))
+		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/iam.v1.AuthorizationService/UpdatePermission", runtime.WithHTTPPathPattern("/authorization/permissions/{id}"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -1177,7 +1212,7 @@ func RegisterAuthorizationServiceHandlerClient(ctx context.Context, mux *runtime
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		var err error
 		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/iam.v1.AuthorizationService/GetSubscription", runtime.WithHTTPPathPattern("/authorization/subscription/{id}"))
+		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/iam.v1.AuthorizationService/GetSubscription", runtime.WithHTTPPathPattern("/authorization/subscriptions/{id}"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -1215,25 +1250,25 @@ func RegisterAuthorizationServiceHandlerClient(ctx context.Context, mux *runtime
 
 	})
 
-	mux.Handle("GET", pattern_AuthorizationService_ListSubscription_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+	mux.Handle("GET", pattern_AuthorizationService_ListSubscriptions_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		var err error
 		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/iam.v1.AuthorizationService/ListSubscription", runtime.WithHTTPPathPattern("/authorization/subscriptions"))
+		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/iam.v1.AuthorizationService/ListSubscriptions", runtime.WithHTTPPathPattern("/authorization/subscriptions"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
 		}
-		resp, md, err := request_AuthorizationService_ListSubscription_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+		resp, md, err := request_AuthorizationService_ListSubscriptions_0(annotatedContext, inboundMarshaler, client, req, pathParams)
 		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
 		if err != nil {
 			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
 			return
 		}
 
-		forward_AuthorizationService_ListSubscription_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+		forward_AuthorizationService_ListSubscriptions_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
 
 	})
 
@@ -1243,7 +1278,7 @@ func RegisterAuthorizationServiceHandlerClient(ctx context.Context, mux *runtime
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		var err error
 		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/iam.v1.AuthorizationService/CheckPermission", runtime.WithHTTPPathPattern("/authorization/check_permission"))
+		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/iam.v1.AuthorizationService/CheckPermission", runtime.WithHTTPPathPattern("/authorization/check-permission"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -1269,7 +1304,7 @@ var (
 
 	pattern_AuthorizationService_ListPermissions_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"authorization", "permissions"}, ""))
 
-	pattern_AuthorizationService_UpdatePermission_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"authorization", "permissions"}, ""))
+	pattern_AuthorizationService_UpdatePermission_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"authorization", "permissions", "id"}, ""))
 
 	pattern_AuthorizationService_CreateRole_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"authorization", "roles"}, ""))
 
@@ -1281,13 +1316,13 @@ var (
 
 	pattern_AuthorizationService_CreateSubscription_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"authorization", "subscriptions"}, ""))
 
-	pattern_AuthorizationService_GetSubscription_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"authorization", "subscription", "id"}, ""))
+	pattern_AuthorizationService_GetSubscription_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"authorization", "subscriptions", "id"}, ""))
 
 	pattern_AuthorizationService_UpdateSubscription_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"authorization", "subscriptions", "id"}, ""))
 
-	pattern_AuthorizationService_ListSubscription_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"authorization", "subscriptions"}, ""))
+	pattern_AuthorizationService_ListSubscriptions_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"authorization", "subscriptions"}, ""))
 
-	pattern_AuthorizationService_CheckPermission_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"authorization", "check_permission"}, ""))
+	pattern_AuthorizationService_CheckPermission_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"authorization", "check-permission"}, ""))
 )
 
 var (
@@ -1313,7 +1348,7 @@ var (
 
 	forward_AuthorizationService_UpdateSubscription_0 = runtime.ForwardResponseMessage
 
-	forward_AuthorizationService_ListSubscription_0 = runtime.ForwardResponseMessage
+	forward_AuthorizationService_ListSubscriptions_0 = runtime.ForwardResponseMessage
 
 	forward_AuthorizationService_CheckPermission_0 = runtime.ForwardResponseMessage
 )

@@ -17,9 +17,7 @@ export default function RoleManagementPage() {
     setLoading(true);
     try {
       const response = await roleApi.list(1, 100);
-      if (response.status.code === "0000") {
-        setRoles(response.roles || []);
-      }
+      setRoles(response.roles || []);
     } catch (error) {
       showNotification(error, "获取角色列表失败");
     } finally {
@@ -50,9 +48,9 @@ export default function RoleManagementPage() {
   const columns = [
     { title: "ID", dataIndex: "id", key: "id" },
     { title: "角色名称", dataIndex: "name", key: "name" },
-    { title: "角色编码", dataIndex: "role_code", key: "role_code" },
-    { title: "所属应用", dataIndex: "application_id", key: "application_id" },
-    { title: "状态", dataIndex: "enabled_status", key: "enabled_status" },
+    { title: "角色编码", dataIndex: "roleCode", key: "roleCode" },
+    { title: "所属应用", dataIndex: "applicationId", key: "applicationId" },
+    { title: "状态", dataIndex: "enabledStatus", key: "enabledStatus" },
   ];
 
   return (

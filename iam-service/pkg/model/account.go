@@ -10,7 +10,7 @@ const (
 //go:generate contrib gen_gorm_mysql_repository -m account.go
 type Account struct {
 	Id         int64     `gorm:"column:id;primaryKey"`
-	UID        string    `gorm:"column:uid"`
+	Code       string    `gorm:"column:code"`
 	Name       string    `gorm:"column:name"`
 	Email      string    `gorm:"column:email"`
 	Status     string    `gorm:"column:status"`

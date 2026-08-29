@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package common.v1;
+
+option go_package = "github.com/linjunhao1997/idl/pb/common";
+option java_multiple_files = true;
+option java_package = "com.common.v1";
+
+import "buf/validate/validate.proto";
+
+// 分页信息（所有服务的列表响应复用）
+message Page {
+  int64 total = 1;         // 总记录数
+  int64 current_page = 2;  // 当前页码
+  int64 page_size = 3;     // 每页记录数
+  int64 total_pages = 4;   // 总页数
+}
+
+// 按 id 查询/操作的通用请求（Get/Update/Delete 等跨资源复用）
+message GetRequest {
+  int64 id = 1 [(buf.validate.field).required = true];
+}

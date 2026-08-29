@@ -2,18 +2,19 @@ syntax = "proto3";
 
 package iam.v1;
 
-option go_package = "iam.v1";
+option go_package = "github.com/linjunhao1997/idl/pb/iam;iam_v1";
 option java_multiple_files = true;
 option java_package = "com.iam.v1";
 
-import "iam/common.proto";
+import "common/common.proto";
 import "google/api/annotations.proto";
+import "google/protobuf/empty.proto";
 import "buf/validate/validate.proto";
 
 // 账号管理服务
 service AccountService {
-  // 创建账号
-  rpc CreateAccount(CreateAccountRequest) returns (StatusResponse) {
+  // 创建账号，返回创建出的账号（含 id）
+  rpc CreateAccount(CreateAccountRequest) returns (Account) {
     option (google.api.http) = {
       post: "/account/accounts"
       body: "*"
@@ -21,7 +22,7 @@ service AccountService {
   }
 
   // 获取账号信息
-  rpc GetAccount(GetRequest) returns (GetAccountResponse) {
+  rpc GetAccount(common.v1.GetRequest) returns (Account) {
     option (google.api.http) = {
       get: "/account/accounts/{id}"
     };
@@ -35,7 +36,7 @@ service AccountService {
   }
 
   // 修改账号
-  rpc UpdateAccount(UpdateAccountRequest) returns(StatusResponse) {
+  rpc UpdateAccount(UpdateAccountRequest) returns (google.protobuf.Empty) {
     option (google.api.http) = {
       patch: "/account/accounts/{id}"
       body: "*"
@@ -46,6 +47,7 @@ service AccountService {
 message CreateAccountRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
   string email = 2 [(buf.validate.field).string.email = true];
+  // 账号类型："0" 用户，"1" 系统
   string kind = 3 [(buf.validate.field).string = { in: ["0", "1"] }];
 }
 
@@ -55,15 +57,9 @@ message ListAccountsRequest {
   string id = 3;
 }
 
-message GetAccountResponse {
-  Status status = 1;
-  Account account = 2;
-}
-
 message ListAccountsResponse {
-  Status status = 1;
-  Page page = 2;
-  repeated Account accounts = 3;
+  common.v1.Page page = 1;
+  repeated Account accounts = 2;
 }
 
 message UpdateAccountRequest {
@@ -73,10 +69,11 @@ message UpdateAccountRequest {
 }
 
 
-// 用户详细信息
+// 账号信息
 message Account {
   string id = 1;
   string name = 2;
   string email = 3;
-  string kind_id = 4;
+  // 账号类型："0" 用户，"1" 系统
+  string kind = 4;
 }

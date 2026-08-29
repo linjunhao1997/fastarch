@@ -1,36 +1,24 @@
 package cmd
 
 import (
-	"fmt"
-	"os"
+	"github.com/linjunhao1997/contrib/pkg/app"
 
-	"github.com/spf13/cobra"
 	"iam-service/conf"
+	"iam-service/server"
 )
 
-var rootCmd = &cobra.Command{
-	Use:   "iam-service",
-	Short: "iam-service",
-	Long:  ``,
-}
-
+// Execute 是服务入口，组装通用启动引导与 iam-service 自己的子命令。
 func Execute() {
-	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-}
-
-func init() {
-	cobra.OnInitialize(initConfig)
-}
-
-func initConfig() {
-	cfg, err := conf.Load(configPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to load config: %s\n", err)
-		os.Exit(1)
-	}
-	grpcCfg = cfg
-	httpCfg = cfg
+	a := app.New[conf.Config]("iam-service",
+		app.WithConfigDefaults(map[string]any{
+			"grpc.addr":            "127.0.0.1",
+			"grpc.port":            9090,
+			"http.addr":            "127.0.0.1",
+			"http.port":            8080,
+			"jwt.expiration_hours": 24,
+		}),
+	)
+	a.AddCommand("grpc", "启动gRPC服务器", server.RunGrpcServer)
+	a.AddCommand("http", "启动HTTP服务器", server.RunHttpServer)
+	a.Execute()
 }

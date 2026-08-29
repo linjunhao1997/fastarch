@@ -88,7 +88,7 @@ export const routes =
         },
         {
           path: "authentication_management",
-          handle: {key:"authentication_mamagement", icon:<SecurityScanOutlined/>, label:"认证管理", breadcrumb: "认证管理" },
+          handle: {key:"authentication_management", icon:<SecurityScanOutlined/>, label:"认证管理", breadcrumb: "认证管理" },
           children: [
             {
               path: "authentication_policy_list",
@@ -115,14 +115,14 @@ export const routes =
             },
           ],
         },{
-          path: "authrization_management",
-          handle: { key:"authrization_management", icon: <KeyOutlined/>,label: "权限管理", breadcrumb: "权限管理" },
+          path: "authorization_management",
+          handle: { key:"authorization_management", icon: <KeyOutlined/>,label: "权限管理", breadcrumb: "权限管理" },
           children: [
             {
               path: "permission_list",
               handle: {
-                key: "permisson_list",
-                label: <Link to="/authrization_management/permission_list">权限列表</Link>,
+                key: "permission_list",
+                label: <Link to="/authorization_management/permission_list">权限列表</Link>,
                 breadcrumb: "权限列表",
               },
               element: <PermissionListPage />,
@@ -131,7 +131,7 @@ export const routes =
               path: "role_management",
               handle: {
                 key: "role_management",
-                label: <Link to="/authrization_management/role_management">角色管理</Link>,
+                label: <Link to="/authorization_management/role_management">角色管理</Link>,
                 breadcrumb: "角色管理",
 
               },
@@ -140,8 +140,8 @@ export const routes =
             {
               path: "permission_subscription",
               handle: {
-                key: "permisson_subcription",
-                label: <Link to="/authrization_management/permission_list">权限列表</Link>,
+                key: "permission_subscription",
+                label: <Link to="/authorization_management/permission_subscription">权限订阅</Link>,
                 breadcrumb: "权限订阅",
               },
               element: <PermissionSubscriptionPage />,

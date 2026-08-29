@@ -19,12 +19,10 @@ export default function EditAccountPage() {
   const fetchAccount = async () => {
     try {
       const response = await accountApi.get(parseInt(id || "0"));
-      if (response.status.code === "0000" && response.account) {
-        form.setFieldsValue({
-          name: response.account.name,
-          email: response.account.email,
-        });
-      }
+      form.setFieldsValue({
+        name: response.name,
+        email: response.email,
+      });
     } catch (error) {
       showNotification(error, "获取账号信息失败");
     } finally {

@@ -2,12 +2,12 @@ syntax = "proto3";
 
 package iam.v1;
 
-option go_package = "iam.v1";
+option go_package = "github.com/linjunhao1997/idl/pb/iam;iam_v1";
 option java_multiple_files = true;
 option java_package = "com.iam.v1";
 
-import "iam/common.proto";
 import "google/api/annotations.proto";
+import "buf/validate/validate.proto";
 
 // 认证服务
 service AuthenticationService {
@@ -22,8 +22,8 @@ service AuthenticationService {
 
 message PasswordAuthRequest {
   string username = 1;
-  string email = 2;
-  string password = 3;
+  string email = 2 [(buf.validate.field).string.email = true];
+  string password = 3 [(buf.validate.field).string.min_len = 1];
 }
 
 message PasswordAuthResponse {

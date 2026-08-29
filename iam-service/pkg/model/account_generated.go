@@ -1,14 +1,14 @@
 // Do not Edit Generated File.
-// Generated at: 2026-01-27 22:03:44
+// Generated at: 2026-08-29 22:01:23
 
 // Do not Edit Generated File.
-// Generated at: 2026-01-27 22:03:44
+// Generated at: 2026-08-29 22:01:23
 
 package model
 
 const (
 	AccountColumnId         = "id"
-	AccountColumnUID        = "uid"
+	AccountColumnCode       = "code"
 	AccountColumnName       = "name"
 	AccountColumnEmail      = "email"
 	AccountColumnStatus     = "status"

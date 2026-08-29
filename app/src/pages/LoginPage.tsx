@@ -2,13 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Form, Input, Button, Card, message, Flex, Alert } from "antd";
 import { useNavigate } from "react-router-dom";
 import { authApi } from "../api/iam";
-
-function getCookie(name: string): string | null {
-  const value = `; ${document.cookie}`;
-  const parts = value.split(`; ${name}=`);
-  if (parts.length === 2) return parts.pop()?.split(';').shift() || null;
-  return null;
-}
+import { getCookie } from "../api/request";
 
 function clearCookie(name: string): void {
   document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
@@ -40,7 +34,7 @@ export default function LoginPage() {
         throw new Error("登录响应为空，请稍后重试");
       }
 
-      const token = (response as any).accessToken || (response as any).access_token;
+      const token = response.accessToken;
       console.log("Token from response:", token);
 
       if (token && typeof token === 'string' && token.trim().length > 0) {

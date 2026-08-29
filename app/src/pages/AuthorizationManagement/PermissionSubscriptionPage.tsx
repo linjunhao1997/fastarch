@@ -17,9 +17,7 @@ export default function PermissionSubscriptionPage() {
     setLoading(true);
     try {
       const response = await subscriptionApi.list(1, 100);
-      if (response.status.code === "0000") {
-        setSubscriptions(response.subscriptions || []);
-      }
+      setSubscriptions(response.subscriptions || []);
     } catch (error) {
       showNotification(error, "获取订阅列表失败");
     } finally {
@@ -44,14 +42,14 @@ export default function PermissionSubscriptionPage() {
   };
 
   const filteredSubscriptions = subscriptions.filter((subscription) =>
-    !filters.name || subscription.applicant_name?.includes(filters.name)
+    !filters.name || subscription.applicantName?.includes(filters.name)
   );
 
   const columns = [
-    { title: "源应用", dataIndex: "source_application_code", key: "source_application_code" },
-    { title: "目标应用", dataIndex: "target_application_code", key: "target_application_code" },
-    { title: "申请人", dataIndex: "applicant_name", key: "applicant_name" },
-    { title: "审批人", dataIndex: "approver_name", key: "approver_name" },
+    { title: "源应用", dataIndex: "sourceApplicationCode", key: "sourceApplicationCode" },
+    { title: "目标应用", dataIndex: "targetApplicationCode", key: "targetApplicationCode" },
+    { title: "申请人", dataIndex: "applicantName", key: "applicantName" },
+    { title: "审批人", dataIndex: "approverName", key: "approverName" },
     { title: "状态", dataIndex: "status", key: "status" },
   ];
 
@@ -65,7 +63,7 @@ export default function PermissionSubscriptionPage() {
       <Table
         columns={columns}
         dataSource={filteredSubscriptions}
-        rowKey="source_application_code"
+        rowKey="sourceApplicationCode"
         loading={loading}
       />
     </div>

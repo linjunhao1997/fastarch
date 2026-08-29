@@ -17,9 +17,7 @@ export default function ApplicationListPage() {
     try {
       setLoading(true);
       const response = await applicationApi.list(1, 100);
-      if (response.status.code === "0000") {
-        setApplications(response.applications || []);
-      }
+      setApplications(response.applications || []);
     } catch (error) {
       showNotification(error, "获取应用列表失败");
     } finally {
@@ -54,8 +52,8 @@ export default function ApplicationListPage() {
   const columns = [
     { title: "ID", dataIndex: "id", key: "id" },
     { title: "名称", dataIndex: "name", key: "name" },
-    { title: "邮箱", dataIndex: "email", key: "email" },
-    { title: "状态", dataIndex: "status", key: "status" },
+    { title: "应用编码", dataIndex: "appCode", key: "appCode" },
+    { title: "状态", dataIndex: "enabledStatus", key: "enabledStatus" },
     {
       title: "操作",
       key: "action",

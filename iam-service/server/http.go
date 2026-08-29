@@ -2,41 +2,38 @@ package server
 
 import (
 	"context"
-	"log"
-	"log/slog"
-	"net/http"
+	"fmt"
 
-	"iam-service/conf"
-
-	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	"github.com/linjunhao1997/idl/lib/gwlib"
+	"github.com/linjunhao1997/contrib/pkg/server/httpserver"
 	iam_v1 "github.com/linjunhao1997/idl/pb/iam"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+
+	"iam-service/conf"
 )
 
-func RunHttpServer(cfg *conf.Config) {
-	dialOptions := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials()),
+// RunHttpServer 组装 grpc-gateway 反向代理并阻塞运行，ctx 取消时优雅退出。
+// 注意：gateway 只负责协议转换，业务服务由 grpc 子命令提供，需先启动 gRPC 服务。
+func RunHttpServer(ctx context.Context, cfg *conf.Config) error {
+	dialOptions := []grpc.DialOption{
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithDefaultServiceConfig(`{"loadBalancingPolicy": "round_robin"}`),
 	}
 
-	mux := runtime.NewServeMux(
-		runtime.WithIncomingHeaderMatcher(gwlib.IncomingHeaderMatcher),
-		runtime.WithOutgoingHeaderMatcher(gwlib.OutgoingHeaderMatcher),
-		runtime.WithMetadata(gwlib.WithMetadata))
+	mux := httpserver.NewMux()
 
-	if err := iam_v1.RegisterAccountServiceHandlerFromEndpoint(context.Background(), mux, cfg.Http.Endpoint, dialOptions); err != nil {
-		slog.Error("register account service handler from endpoint", "error", err)
+	if err := iam_v1.RegisterAccountServiceHandlerFromEndpoint(ctx, mux, cfg.Http.Endpoint, dialOptions); err != nil {
+		return fmt.Errorf("register account service handler: %w", err)
 	}
-	if err := iam_v1.RegisterAuthenticationServiceHandlerFromEndpoint(context.Background(), mux, cfg.Http.Endpoint, dialOptions); err != nil {
-		slog.Error("register authentication service handler from endpoint", "error", err)
+	if err := iam_v1.RegisterAuthenticationServiceHandlerFromEndpoint(ctx, mux, cfg.Http.Endpoint, dialOptions); err != nil {
+		return fmt.Errorf("register authentication service handler: %w", err)
 	}
-	if err := iam_v1.RegisterAuthorizationServiceHandlerFromEndpoint(context.Background(), mux, cfg.Http.Endpoint, dialOptions); err != nil {
-		slog.Error("register authorization service handler from endpoint", "error", err)
+	if err := iam_v1.RegisterAuthorizationServiceHandlerFromEndpoint(ctx, mux, cfg.Http.Endpoint, dialOptions); err != nil {
+		return fmt.Errorf("register authorization service handler: %w", err)
 	}
-	if err := iam_v1.RegisterApplicationServiceHandlerFromEndpoint(context.Background(), mux, cfg.Http.Endpoint, dialOptions); err != nil {
-		slog.Error("register application service handler from endpoint", "error", err)
+	if err := iam_v1.RegisterApplicationServiceHandlerFromEndpoint(ctx, mux, cfg.Http.Endpoint, dialOptions); err != nil {
+		return fmt.Errorf("register application service handler: %w", err)
 	}
-	slog.Info("http gateway server listening", "endpoint", cfg.Http.AddrWithPort())
-	log.Fatalf("failed serve: %s", http.ListenAndServe(cfg.Http.AddrWithPort(), mux))
+
+	return httpserver.Run(ctx, cfg.Http.AddrWithPort(), mux)
 }

@@ -17,12 +17,10 @@ export default function EditApplicationPage() {
       setLoading(true);
       try {
         const response = await applicationApi.get(parseInt(id));
-        if (response.status.code === "0000") {
-          form.setFieldsValue({
-            name: response.application?.name,
-            description: response.application?.description,
-          });
-        }
+        form.setFieldsValue({
+          name: response.name,
+          description: response.description,
+        });
       } catch (error) {
         showNotification(error, "获取应用信息失败");
       } finally {

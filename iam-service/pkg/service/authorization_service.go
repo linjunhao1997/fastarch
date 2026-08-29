@@ -10,9 +10,11 @@ import (
 	"iam-service/pkg/model"
 
 	"github.com/go-dev-frame/sponge/pkg/krand"
+	common_v1 "github.com/linjunhao1997/idl/pb/common"
 	iam_v1 "github.com/linjunhao1997/idl/pb/iam"
 	"github.com/redis/go-redis/v9"
 	"github.com/spf13/cast"
+	"google.golang.org/protobuf/types/known/emptypb"
 	"gorm.io/gorm"
 )
 
@@ -45,45 +47,50 @@ func (a AuthorizationService) CheckPermission(ctx context.Context, request *iam_
 	}, nil
 }
 
-func (a AuthorizationService) CreatePermission(ctx context.Context, request *iam_v1.CreatePermissionRequest) (*iam_v1.StatusResponse, error) {
+func permissionToPb(p model.Permission) *iam_v1.Permission {
+	return &iam_v1.Permission{
+		Id:             cast.ToString(p.Id),
+		Name:           p.Name,
+		ApplicationId:  p.ApplicationId,
+		PermissionCode: p.Code,
+		EnabledStatus:  boolToStatus(p.Disabled),
+	}
+}
+
+func roleToPb(r model.Role) *iam_v1.Role {
+	return &iam_v1.Role{
+		Id:            cast.ToString(r.Id),
+		Name:          r.Name,
+		ApplicationId: r.ApplicationId,
+		RoleCode:      r.Code,
+		EnabledStatus: boolToStatus(r.Disabled),
+	}
+}
+
+func (a AuthorizationService) CreatePermission(ctx context.Context, request *iam_v1.CreatePermissionRequest) (*iam_v1.Permission, error) {
 	pkId := krand.NewID()
 	permission := model.Permission{
-		Id:       pkId,
-		Name:     request.Name,
-		Code:     "",
-		Value:    request.Email,
-		Disabled: false,
+		Id:            pkId,
+		Name:          request.Name,
+		Code:          request.Code,
+		Value:         request.Value,
+		ApplicationId: request.ApplicationId,
+		Disabled:      false,
 	}
 	err := a.db.WithContext(ctx).Model(model.Permission{}).Create(&permission).Error
 	if err != nil {
 		return nil, err
 	}
-	return &iam_v1.StatusResponse{
-		Status: &iam_v1.Status{
-			Code:   constant.ResponseCodeSuccess,
-			DataId: cast.ToString(pkId),
-		},
-	}, nil
+	return permissionToPb(permission), nil
 }
 
-func (a AuthorizationService) GetPermission(ctx context.Context, request *iam_v1.GetRequest) (*iam_v1.GetPermissionResponse, error) {
+func (a AuthorizationService) GetPermission(ctx context.Context, request *common_v1.GetRequest) (*iam_v1.Permission, error) {
 	var permission model.Permission
 	err := a.db.WithContext(ctx).Where(model.PermissionColumnId, request.Id).First(&permission).Error
 	if err != nil {
 		return nil, err
 	}
-	return &iam_v1.GetPermissionResponse{
-		Status: &iam_v1.Status{
-			Code: constant.ResponseCodeSuccess,
-		},
-		Permission: &iam_v1.Permission{
-			Id:             cast.ToString(permission.Id),
-			Name:           permission.Name,
-			ApplicationId:  permission.ApplicationId,
-			PermissionCode: permission.Code,
-			EnabledStatus:  boolToStatus(permission.Disabled),
-		},
-	}, nil
+	return permissionToPb(permission), nil
 }
 
 func (a AuthorizationService) ListPermissions(ctx context.Context, request *iam_v1.ListPermissionsRequest) (*iam_v1.ListPermissionsResponse, error) {
@@ -96,24 +103,15 @@ func (a AuthorizationService) ListPermissions(ctx context.Context, request *iam_
 	}
 	permList := make([]*iam_v1.Permission, 0, len(permissions))
 	for _, p := range permissions {
-		permList = append(permList, &iam_v1.Permission{
-			Id:             cast.ToString(p.Id),
-			Name:           p.Name,
-			ApplicationId:  p.ApplicationId,
-			PermissionCode: p.Code,
-			EnabledStatus:  boolToStatus(p.Disabled),
-		})
+		permList = append(permList, permissionToPb(p))
 	}
 	return &iam_v1.ListPermissionsResponse{
-		Status: &iam_v1.Status{
-			Code: constant.ResponseCodeSuccess,
-		},
 		Permissions: permList,
 		Page:        helper.GetPage(request.CurrentPage, request.PageSize, count),
 	}, nil
 }
 
-func (a AuthorizationService) UpdatePermission(ctx context.Context, request *iam_v1.UpdatePermissionRequest) (*iam_v1.StatusResponse, error) {
+func (a AuthorizationService) UpdatePermission(ctx context.Context, request *iam_v1.UpdatePermissionRequest) (*emptypb.Empty, error) {
 	updates := map[string]interface{}{}
 	if len(request.Name) > 0 {
 		updates[model.PermissionColumnName] = request.Name
@@ -127,14 +125,10 @@ func (a AuthorizationService) UpdatePermission(ctx context.Context, request *iam
 	if result.Error != nil {
 		return nil, result.Error
 	}
-	return &iam_v1.StatusResponse{
-		Status: &iam_v1.Status{
-			Code: constant.ResponseCodeSuccess,
-		},
-	}, nil
+	return &emptypb.Empty{}, nil
 }
 
-func (a AuthorizationService) CreateRole(ctx context.Context, request *iam_v1.CreateRoleRequest) (*iam_v1.StatusResponse, error) {
+func (a AuthorizationService) CreateRole(ctx context.Context, request *iam_v1.CreateRoleRequest) (*iam_v1.Role, error) {
 	pkId := krand.NewID()
 	role := model.Role{
 		Id:       pkId,
@@ -146,32 +140,16 @@ func (a AuthorizationService) CreateRole(ctx context.Context, request *iam_v1.Cr
 	if err != nil {
 		return nil, err
 	}
-	return &iam_v1.StatusResponse{
-		Status: &iam_v1.Status{
-			Code:   constant.ResponseCodeSuccess,
-			DataId: cast.ToString(pkId),
-		},
-	}, nil
+	return roleToPb(role), nil
 }
 
-func (a AuthorizationService) GetRole(ctx context.Context, request *iam_v1.GetRequest) (*iam_v1.GetRoleResponse, error) {
+func (a AuthorizationService) GetRole(ctx context.Context, request *common_v1.GetRequest) (*iam_v1.Role, error) {
 	var role model.Role
 	err := a.db.WithContext(ctx).Where(model.RoleColumnId, request.Id).First(&role).Error
 	if err != nil {
 		return nil, err
 	}
-	return &iam_v1.GetRoleResponse{
-		Status: &iam_v1.Status{
-			Code: constant.ResponseCodeSuccess,
-		},
-		Role: &iam_v1.Role{
-			Id:            cast.ToString(role.Id),
-			Name:          role.Name,
-			ApplicationId: role.ApplicationId,
-			RoleCode:      role.Code,
-			EnabledStatus: boolToStatus(role.Disabled),
-		},
-	}, nil
+	return roleToPb(role), nil
 }
 
 func (a AuthorizationService) ListRoles(ctx context.Context, request *iam_v1.ListRolesRequest) (*iam_v1.ListRolesResponse, error) {
@@ -184,24 +162,15 @@ func (a AuthorizationService) ListRoles(ctx context.Context, request *iam_v1.Lis
 	}
 	roleList := make([]*iam_v1.Role, 0, len(roles))
 	for _, r := range roles {
-		roleList = append(roleList, &iam_v1.Role{
-			Id:            cast.ToString(r.Id),
-			Name:          r.Name,
-			ApplicationId: r.ApplicationId,
-			RoleCode:      r.Code,
-			EnabledStatus: boolToStatus(r.Disabled),
-		})
+		roleList = append(roleList, roleToPb(r))
 	}
 	return &iam_v1.ListRolesResponse{
-		Status: &iam_v1.Status{
-			Code: constant.ResponseCodeSuccess,
-		},
 		Roles: roleList,
 		Page:  helper.GetPage(request.CurrentPage, request.PageSize, count),
 	}, nil
 }
 
-func (a AuthorizationService) UpdateRole(ctx context.Context, request *iam_v1.UpdateRoleRequest) (*iam_v1.StatusResponse, error) {
+func (a AuthorizationService) UpdateRole(ctx context.Context, request *iam_v1.UpdateRoleRequest) (*emptypb.Empty, error) {
 	updates := map[string]interface{}{}
 	if len(request.Name) > 0 {
 		updates[model.RoleColumnName] = request.Name
@@ -215,45 +184,25 @@ func (a AuthorizationService) UpdateRole(ctx context.Context, request *iam_v1.Up
 	if result.Error != nil {
 		return nil, result.Error
 	}
-	return &iam_v1.StatusResponse{
-		Status: &iam_v1.Status{
-			Code: constant.ResponseCodeSuccess,
-		},
-	}, nil
+	return &emptypb.Empty{}, nil
 }
 
-func (a AuthorizationService) CreateSubscription(ctx context.Context, request *iam_v1.CreateSubscriptionRequest) (*iam_v1.StatusResponse, error) {
-	return &iam_v1.StatusResponse{
-		Status: &iam_v1.Status{
-			Code: constant.ResponseCodeSuccess,
-		},
-	}, nil
+func (a AuthorizationService) CreateSubscription(ctx context.Context, request *iam_v1.CreateSubscriptionRequest) (*iam_v1.Subscription, error) {
+	return &iam_v1.Subscription{}, nil
 }
 
-func (a AuthorizationService) GetSubscription(ctx context.Context, request *iam_v1.GetRequest) (*iam_v1.GetSubscriptionResponse, error) {
-	return &iam_v1.GetSubscriptionResponse{
-		Status: &iam_v1.Status{
-			Code: constant.ResponseCodeSuccess,
-		},
-		Subscription: &iam_v1.Subscription{},
-	}, nil
+func (a AuthorizationService) GetSubscription(ctx context.Context, request *common_v1.GetRequest) (*iam_v1.Subscription, error) {
+	return &iam_v1.Subscription{}, nil
 }
 
-func (a AuthorizationService) UpdateSubscription(ctx context.Context, request *iam_v1.UpdateSubscriptionRequest) (*iam_v1.StatusResponse, error) {
-	return &iam_v1.StatusResponse{
-		Status: &iam_v1.Status{
-			Code: constant.ResponseCodeSuccess,
-		},
-	}, nil
+func (a AuthorizationService) UpdateSubscription(ctx context.Context, request *iam_v1.UpdateSubscriptionRequest) (*emptypb.Empty, error) {
+	return &emptypb.Empty{}, nil
 }
 
-func (a AuthorizationService) ListSubscription(ctx context.Context, request *iam_v1.ListSubscriptionRequest) (*iam_v1.ListSubscriptionResponse, error) {
-	return &iam_v1.ListSubscriptionResponse{
-		Status: &iam_v1.Status{
-			Code: constant.ResponseCodeSuccess,
-		},
+func (a AuthorizationService) ListSubscriptions(ctx context.Context, request *iam_v1.ListSubscriptionsRequest) (*iam_v1.ListSubscriptionsResponse, error) {
+	return &iam_v1.ListSubscriptionsResponse{
 		Subscriptions: []*iam_v1.Subscription{},
-		Page:          &iam_v1.Page{},
+		Page:          &common_v1.Page{},
 	}, nil
 }
 

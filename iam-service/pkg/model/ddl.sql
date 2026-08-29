@@ -1,6 +1,6 @@
 CREATE TABLE `t_account` (
   `id` bigint NOT NULL AUTO_INCREMENT,
-  `uid` longtext,
+  `code` longtext,
   `name` longtext,
   `email` longtext,
   `status` longtext,

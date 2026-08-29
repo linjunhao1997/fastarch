@@ -17,9 +17,7 @@ export default function PermissionListPage() {
     setLoading(true);
     try {
       const response = await permissionApi.list(1, 100);
-      if (response.status.code === "0000") {
-        setPermissions(response.permissions || []);
-      }
+      setPermissions(response.permissions || []);
     } catch (error) {
       showNotification(error, "获取权限列表失败");
     } finally {
@@ -50,9 +48,9 @@ export default function PermissionListPage() {
   const columns = [
     { title: "ID", dataIndex: "id", key: "id" },
     { title: "权限名称", dataIndex: "name", key: "name" },
-    { title: "权限编码", dataIndex: "permission_code", key: "permission_code" },
-    { title: "所属应用", dataIndex: "application_id", key: "application_id" },
-    { title: "状态", dataIndex: "enabled_status", key: "enabled_status" },
+    { title: "权限编码", dataIndex: "permissionCode", key: "permissionCode" },
+    { title: "所属应用", dataIndex: "applicationId", key: "applicationId" },
+    { title: "状态", dataIndex: "enabledStatus", key: "enabledStatus" },
   ];
 
   return (

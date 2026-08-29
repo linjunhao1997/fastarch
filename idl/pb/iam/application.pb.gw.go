@@ -15,6 +15,7 @@ import (
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/utilities"
+	"github.com/linjunhao1997/idl/pb/common"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/grpclog"
@@ -66,7 +67,7 @@ func local_request_ApplicationService_CreateApplication_0(ctx context.Context, m
 }
 
 func request_ApplicationService_GetApplication_0(ctx context.Context, marshaler runtime.Marshaler, client ApplicationServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq GetRequest
+	var protoReq common.GetRequest
 	var metadata runtime.ServerMetadata
 
 	var (
@@ -92,7 +93,7 @@ func request_ApplicationService_GetApplication_0(ctx context.Context, marshaler 
 }
 
 func local_request_ApplicationService_GetApplication_0(ctx context.Context, marshaler runtime.Marshaler, server ApplicationServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq GetRequest
+	var protoReq common.GetRequest
 	var metadata runtime.ServerMetadata
 
 	var (

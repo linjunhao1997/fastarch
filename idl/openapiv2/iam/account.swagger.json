@@ -30,7 +30,7 @@
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/googlerpcStatus"
+              "$ref": "#/definitions/rpcStatus"
             }
           }
         },
@@ -61,19 +61,19 @@
         ]
       },
       "post": {
-        "summary": "创建账号",
+        "summary": "创建账号，返回创建出的账号（含 id）",
         "operationId": "AccountService_CreateAccount",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/v1StatusResponse"
+              "$ref": "#/definitions/v1Account"
             }
           },
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/googlerpcStatus"
+              "$ref": "#/definitions/rpcStatus"
             }
           }
         },
@@ -100,13 +100,13 @@
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/v1GetAccountResponse"
+              "$ref": "#/definitions/v1Account"
             }
           },
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/googlerpcStatus"
+              "$ref": "#/definitions/rpcStatus"
             }
           }
         },
@@ -130,13 +130,14 @@
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/v1StatusResponse"
+              "type": "object",
+              "properties": {}
             }
           },
           "default": {
             "description": "An unexpected error response.",
             "schema": {
-              "$ref": "#/definitions/googlerpcStatus"
+              "$ref": "#/definitions/rpcStatus"
             }
           }
         },
@@ -172,7 +173,16 @@
     }
   },
   "definitions": {
-    "googlerpcStatus": {
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "rpcStatus": {
       "type": "object",
       "properties": {
         "code": {
@@ -191,29 +201,6 @@
         }
       }
     },
-    "iamv1Status": {
-      "type": "object",
-      "properties": {
-        "code": {
-          "type": "string"
-        },
-        "dataId": {
-          "type": "string"
-        },
-        "message": {
-          "type": "string"
-        }
-      }
-    },
-    "protobufAny": {
-      "type": "object",
-      "properties": {
-        "@type": {
-          "type": "string"
-        }
-      },
-      "additionalProperties": {}
-    },
     "v1Account": {
       "type": "object",
       "properties": {
@@ -226,11 +213,12 @@
         "email": {
           "type": "string"
         },
-        "kindId": {
-          "type": "string"
+        "kind": {
+          "type": "string",
+          "title": "账号类型：\"0\" 用户，\"1\" 系统"
         }
       },
-      "title": "用户详细信息"
+      "title": "账号信息"
     },
     "v1CreateAccountRequest": {
       "type": "object",
@@ -242,27 +230,14 @@
           "type": "string"
         },
         "kind": {
-          "type": "string"
-        }
-      }
-    },
-    "v1GetAccountResponse": {
-      "type": "object",
-      "properties": {
-        "status": {
-          "$ref": "#/definitions/iamv1Status"
-        },
-        "account": {
-          "$ref": "#/definitions/v1Account"
+          "type": "string",
+          "title": "账号类型：\"0\" 用户，\"1\" 系统"
         }
       }
     },
     "v1ListAccountsResponse": {
       "type": "object",
       "properties": {
-        "status": {
-          "$ref": "#/definitions/iamv1Status"
-        },
         "page": {
           "$ref": "#/definitions/v1Page"
         },
@@ -298,15 +273,8 @@
           "format": "int64",
           "title": "总页数"
         }
-      }
-    },
-    "v1StatusResponse": {
-      "type": "object",
-      "properties": {
-        "status": {
-          "$ref": "#/definitions/iamv1Status"
-        }
-      }
+      },
+      "title": "分页信息（所有服务的列表响应复用）"
     }
   }
 }

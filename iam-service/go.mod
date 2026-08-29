@@ -5,15 +5,18 @@ go 1.23.12
 require (
 	github.com/go-dev-frame/sponge v1.14.0
 	github.com/golang-jwt/jwt/v5 v5.2.2
-	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.1
 	github.com/linjunhao1997/idl v0.0.0
 	github.com/redis/go-redis/v9 v9.7.0
 	github.com/spf13/cast v1.10.0
-	github.com/spf13/cobra v1.9.1
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.62.0
 	google.golang.org/grpc v1.73.0
-	gorm.io/driver/mysql v1.6.0
 	gorm.io/gorm v1.30.0
+)
+
+require (
+	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.1 // indirect
+	github.com/spf13/cobra v1.9.1 // indirect
+	gorm.io/driver/mysql v1.6.0 // indirect
 )
 
 require (
@@ -34,6 +37,7 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
+	github.com/linjunhao1997/contrib v0.0.0
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/sagikazarmark/locafero v0.11.0 // indirect
 	github.com/sourcegraph/conc v0.3.1-0.20240121214520-5f936abd7ae8 // indirect
@@ -57,3 +61,4 @@ require (
 )
 
 replace github.com/linjunhao1997/idl => ../idl
+replace github.com/linjunhao1997/contrib => ../contrib

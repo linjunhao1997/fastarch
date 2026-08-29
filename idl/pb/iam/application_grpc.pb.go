@@ -8,9 +8,11 @@ package iam_v1
 
 import (
 	context "context"
+	common "github.com/linjunhao1997/idl/pb/common"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -29,14 +31,14 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ApplicationServiceClient interface {
-	// 创建应用
-	CreateApplication(ctx context.Context, in *CreateApplicationRequest, opts ...grpc.CallOption) (*StatusResponse, error)
+	// 创建应用，返回创建出的应用（含 id）
+	CreateApplication(ctx context.Context, in *CreateApplicationRequest, opts ...grpc.CallOption) (*Application, error)
 	// 获取应用信息
-	GetApplication(ctx context.Context, in *GetRequest, opts ...grpc.CallOption) (*GetApplicationResponse, error)
+	GetApplication(ctx context.Context, in *common.GetRequest, opts ...grpc.CallOption) (*Application, error)
 	// 获取应用列表
 	ListApplications(ctx context.Context, in *ListApplicationsRequest, opts ...grpc.CallOption) (*ListApplicationsResponse, error)
 	// 修改应用信息
-	UpdateApplication(ctx context.Context, in *UpdateApplicationRequest, opts ...grpc.CallOption) (*StatusResponse, error)
+	UpdateApplication(ctx context.Context, in *UpdateApplicationRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
 
 type applicationServiceClient struct {
@@ -47,8 +49,8 @@ func NewApplicationServiceClient(cc grpc.ClientConnInterface) ApplicationService
 	return &applicationServiceClient{cc}
 }
 
-func (c *applicationServiceClient) CreateApplication(ctx context.Context, in *CreateApplicationRequest, opts ...grpc.CallOption) (*StatusResponse, error) {
-	out := new(StatusResponse)
+func (c *applicationServiceClient) CreateApplication(ctx context.Context, in *CreateApplicationRequest, opts ...grpc.CallOption) (*Application, error) {
+	out := new(Application)
 	err := c.cc.Invoke(ctx, ApplicationService_CreateApplication_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -56,8 +58,8 @@ func (c *applicationServiceClient) CreateApplication(ctx context.Context, in *Cr
 	return out, nil
 }
 
-func (c *applicationServiceClient) GetApplication(ctx context.Context, in *GetRequest, opts ...grpc.CallOption) (*GetApplicationResponse, error) {
-	out := new(GetApplicationResponse)
+func (c *applicationServiceClient) GetApplication(ctx context.Context, in *common.GetRequest, opts ...grpc.CallOption) (*Application, error) {
+	out := new(Application)
 	err := c.cc.Invoke(ctx, ApplicationService_GetApplication_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -74,8 +76,8 @@ func (c *applicationServiceClient) ListApplications(ctx context.Context, in *Lis
 	return out, nil
 }
 
-func (c *applicationServiceClient) UpdateApplication(ctx context.Context, in *UpdateApplicationRequest, opts ...grpc.CallOption) (*StatusResponse, error) {
-	out := new(StatusResponse)
+func (c *applicationServiceClient) UpdateApplication(ctx context.Context, in *UpdateApplicationRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, ApplicationService_UpdateApplication_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -87,30 +89,30 @@ func (c *applicationServiceClient) UpdateApplication(ctx context.Context, in *Up
 // All implementations should embed UnimplementedApplicationServiceServer
 // for forward compatibility
 type ApplicationServiceServer interface {
-	// 创建应用
-	CreateApplication(context.Context, *CreateApplicationRequest) (*StatusResponse, error)
+	// 创建应用，返回创建出的应用（含 id）
+	CreateApplication(context.Context, *CreateApplicationRequest) (*Application, error)
 	// 获取应用信息
-	GetApplication(context.Context, *GetRequest) (*GetApplicationResponse, error)
+	GetApplication(context.Context, *common.GetRequest) (*Application, error)
 	// 获取应用列表
 	ListApplications(context.Context, *ListApplicationsRequest) (*ListApplicationsResponse, error)
 	// 修改应用信息
-	UpdateApplication(context.Context, *UpdateApplicationRequest) (*StatusResponse, error)
+	UpdateApplication(context.Context, *UpdateApplicationRequest) (*emptypb.Empty, error)
 }
 
 // UnimplementedApplicationServiceServer should be embedded to have forward compatible implementations.
 type UnimplementedApplicationServiceServer struct {
 }
 
-func (UnimplementedApplicationServiceServer) CreateApplication(context.Context, *CreateApplicationRequest) (*StatusResponse, error) {
+func (UnimplementedApplicationServiceServer) CreateApplication(context.Context, *CreateApplicationRequest) (*Application, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateApplication not implemented")
 }
-func (UnimplementedApplicationServiceServer) GetApplication(context.Context, *GetRequest) (*GetApplicationResponse, error) {
+func (UnimplementedApplicationServiceServer) GetApplication(context.Context, *common.GetRequest) (*Application, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetApplication not implemented")
 }
 func (UnimplementedApplicationServiceServer) ListApplications(context.Context, *ListApplicationsRequest) (*ListApplicationsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListApplications not implemented")
 }
-func (UnimplementedApplicationServiceServer) UpdateApplication(context.Context, *UpdateApplicationRequest) (*StatusResponse, error) {
+func (UnimplementedApplicationServiceServer) UpdateApplication(context.Context, *UpdateApplicationRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateApplication not implemented")
 }
 
@@ -144,7 +146,7 @@ func _ApplicationService_CreateApplication_Handler(srv interface{}, ctx context.
 }
 
 func _ApplicationService_GetApplication_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetRequest)
+	in := new(common.GetRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -156,7 +158,7 @@ func _ApplicationService_GetApplication_Handler(srv interface{}, ctx context.Con
 		FullMethod: ApplicationService_GetApplication_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ApplicationServiceServer).GetApplication(ctx, req.(*GetRequest))
+		return srv.(ApplicationServiceServer).GetApplication(ctx, req.(*common.GetRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
