@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Flex, Input, Button, Table, Modal, Select } from "antd";
+import { Flex, Input, Button, Table, Modal, Select, message } from "antd";
 import { useNavigate } from "react-router";
 import { accountApi } from "../../api/iam";
 import { roleApi } from "../../api/iam";
@@ -58,7 +58,7 @@ export default function AccountListPage() {
             value={selectedRoleCodes}
             onChange={setSelectedRoleCodes}
           />
-          <p style={{ marginTop: 12 }}>绑定变更将在该账号下次登录后生效。</p>
+          <p style={{ marginTop: 12 }}>保存后权限变更立即生效，无需重新登录。</p>
         </div>
       ),
       onOk: async () => {
@@ -68,6 +68,7 @@ export default function AccountListPage() {
         const removedRoleCodeList = [...previous].filter(code => !selected.has(code));
         try {
           await accountApi.updateRoles(account.id, { addedRoleCodeList, removedRoleCodeList });
+          message.success("权限变更已生效");
           await fetchAccounts();
         } catch (error) {
           showNotification(error, "绑定角色失败");

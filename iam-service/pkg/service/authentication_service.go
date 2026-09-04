@@ -54,32 +54,23 @@ func (a AuthenticationService) PasswordAuth(ctx context.Context, request *iam_v1
 		return nil, err
 	}
 
-	codeDict := make(map[string]struct{})
 	isAdmin := false
 	for _, role := range account.RoleList {
 		if role.Code == "admin" {
 			isAdmin = true
 			break
 		}
-		for _, permission := range role.PermissionList {
-			codeDict[role.Application.Name+":"+permission.Code] = struct{}{}
-		}
 	}
-	if isAdmin {
-		codeDict[constant.ApplicationCode+":admin"] = struct{}{}
-	}
-	var codes []string
-	for code := range codeDict {
-		codes = append(codes, code)
-	}
+	// 权限并集计算与读穿回源共用同一实现（research.md D6-②）
+	codes := collectAccountPermissionCodes(account)
 	jsonData, err := json.Marshal(codes)
 	if err != nil {
 		return nil, err
 	}
-	duration := 30 * time.Minute
-	expirationTime := time.Now().Add(duration)
+	const jwtDuration = 30 * time.Minute
+	expirationTime := time.Now().Add(jwtDuration)
 
-	if err = a.rdb.Set(ctx, constant.GetAccountPermissionKey(account.Id), jsonData, duration).Err(); err != nil {
+	if err = a.rdb.Set(ctx, constant.GetAccountPermissionKey(account.Id), jsonData, constant.AccountPermissionSnapshotTTL).Err(); err != nil {
 		return nil, err
 	}
 	jwtStr, err := auth.GenerateJWT(auth.ClaimsParam{

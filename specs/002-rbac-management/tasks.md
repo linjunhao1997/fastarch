@@ -174,18 +174,18 @@
 
 **⚠️ CRITICAL**: T039 端到端验证必须在本 Phase 完成后执行；后端任务（T043–T049）完成前不得交付"立即生效"语义
 
-- [ ] T040 [P] `iam-service/go.mod`：引入 `github.com/alicebob/miniredis/v2`（dev 依赖），`go mod tidy` 确认可解析（research.md D8 v2）
-- [ ] T041 [P] `idl/lib/grpclib/logging_interceptor.go`（新建）：`LoggingUnaryServerInterceptor`——slog 记录每个已完成 RPC 的结构化字段 `method`、`grpc_code`、`business_code`（实现 `BusinessError` 接口的错误透出业务码）、`duration_ms`、`trace_id`；成功 Info 级、错误 Warn 级（research.md D13-①）
-- [ ] T042 `idl/lib/grpclib/response_interceptor.go`：`TraceIDInterceptor` 在 metadata 无 trace-id 时生成（krand）并写入 response header；`contrib/pkg/server/grpcserver/server.go` 默认拦截器链调整为 Recovery → TraceID → Logging → Validation → ErrorDetails（依赖 T041，research.md D13-①）
-- [ ] T043 [P] `iam-service/pkg/constant/cache_key.go`：权限快照 TTL 常量由 30min 调整为 5min（登录写入与读穿回源写回共用该常量）（research.md D6-③）
-- [ ] T044 ⚠️（先写，确认 FAIL）[P] `iam-service/pkg/service/account_service_test.go` 与 `authorization_service_test.go`：以 miniredis 构造 rdb 追加用例——① UpdateAccountRoles 成功后目标账号 `account:<id>:permissions` 键被删除；② UpdateRole 权限集合变更后所有绑定账号的键被删除；③ 读穿回源（空快照下校验后快照按 DB 权限并集重建、TTL≈5min）；④ 重复绑定无重复行（依赖 T040/T043，research.md D8 v2）
-- [ ] T045 `iam-service/pkg/auth/auth_interceptor.go`：缓存未命中（`redis.Nil`）改为读穿回源——经可注入的回源函数（含 auth 域测试）从 DB 重建快照（写回 TTL 按 T043 常量）后继续校验；Redis 其他故障 fail-closed 返回可理解错误并 slog 记录 account_id/method/底层错误（依赖 T043/T044，research.md D6-②/D12）
-- [ ] T046 `iam-service/pkg/service/authorization_service.go` CheckPermission：与 T045 共用回源逻辑，缓存未命中读穿重建（依赖 T045，research.md D6-②）
-- [ ] T047 `iam-service/pkg/service/account_service.go` UpdateAccountRoles：事务提交成功后删除目标账号的权限快照键；删除失败仅记日志不回滚绑定（快照为派生数据，TTL 兜底）（依赖 T043，research.md D6-①）
-- [ ] T048 `iam-service/pkg/service/authorization_service.go` UpdateRole（权限集合增减或禁用变更）与 DeleteRole（级联清关联）：提交后查询 `t_r_account_role` 中绑定该角色的全部账号 id，逐一删除其权限快照键（依赖 T043，research.md D6-①）
-- [ ] T049 `iam-service/pkg/service/account_service.go` 与 `authorization_service.go`：错误路径返回前 slog 记录操作语义 + 关键上下文（account/role/permission id、提交编码集合）+ 底层错误（SQL/Redis 错误仅入日志，不透出客户端）（依赖 T041，research.md D13-②）
-- [ ] T050 [P] `app/src/pages/AccountManagement/AccountListPage.tsx` 绑定弹窗提示文案改为"权限变更已生效"（T031 修订，D6 v2）；`EditRolePage.tsx` 权限配置保存成功提示同样调整为"权限变更已生效"（research.md D10 v2）
-- [ ] T051 `cd iam-service && go vet ./... && go test ./pkg/service/... && go build ./...` 全绿；`cd contrib && go build ./...`、`cd idl && go build ./...` 通过（依赖 T041–T050）
+- [X] T040 [P] `iam-service/go.mod`：引入 `github.com/alicebob/miniredis/v2`（dev 依赖），`go mod tidy` 确认可解析（research.md D8 v2）
+- [X] T041 [P] `idl/lib/grpclib/logging_interceptor.go`（新建）：`LoggingUnaryServerInterceptor`——slog 记录每个已完成 RPC 的结构化字段 `method`、`grpc_code`、`business_code`（实现 `BusinessError` 接口的错误透出业务码）、`duration_ms`、`trace_id`；成功 Info 级、错误 Warn 级（research.md D13-①）
+- [X] T042 `idl/lib/grpclib/response_interceptor.go`：`TraceIDInterceptor` 在 metadata 无 trace-id 时生成（krand）并写入 response header；`contrib/pkg/server/grpcserver/server.go` 默认拦截器链调整为 Recovery → TraceID → Logging → Validation → ErrorDetails（依赖 T041，research.md D13-①）
+- [X] T043 [P] `iam-service/pkg/constant/cache_key.go`：权限快照 TTL 常量由 30min 调整为 5min（登录写入与读穿回源写回共用该常量）（research.md D6-③）
+- [X] T044 ⚠️（先写，确认 FAIL）[P] `iam-service/pkg/service/account_service_test.go` 与 `authorization_service_test.go`：以 miniredis 构造 rdb 追加用例——① UpdateAccountRoles 成功后目标账号 `account:<id>:permissions` 键被删除；② UpdateRole 权限集合变更后所有绑定账号的键被删除；③ 读穿回源（空快照下校验后快照按 DB 权限并集重建、TTL≈5min）；④ 重复绑定无重复行（依赖 T040/T043，research.md D8 v2）
+- [X] T045 `iam-service/pkg/auth/auth_interceptor.go`：缓存未命中（`redis.Nil`）改为读穿回源——经可注入的回源函数（含 auth 域测试）从 DB 重建快照（写回 TTL 按 T043 常量）后继续校验；Redis 其他故障 fail-closed 返回可理解错误并 slog 记录 account_id/method/底层错误（依赖 T043/T044，research.md D6-②/D12）
+- [X] T046 `iam-service/pkg/service/authorization_service.go` CheckPermission：与 T045 共用回源逻辑，缓存未命中读穿重建（依赖 T045，research.md D6-②）
+- [X] T047 `iam-service/pkg/service/account_service.go` UpdateAccountRoles：事务提交成功后删除目标账号的权限快照键；删除失败仅记日志不回滚绑定（快照为派生数据，TTL 兜底）（依赖 T043，research.md D6-①）
+- [X] T048 `iam-service/pkg/service/authorization_service.go` UpdateRole（权限集合增减或禁用变更）与 DeleteRole（级联清关联）：提交后查询 `t_r_account_role` 中绑定该角色的全部账号 id，逐一删除其权限快照键（依赖 T043，research.md D6-①）
+- [X] T049 `iam-service/pkg/service/account_service.go` 与 `authorization_service.go`：错误路径返回前 slog 记录操作语义 + 关键上下文（account/role/permission id、提交编码集合）+ 底层错误（SQL/Redis 错误仅入日志，不透出客户端）（依赖 T041，research.md D13-②）
+- [X] T050 [P] `app/src/pages/AccountManagement/AccountListPage.tsx` 绑定弹窗提示文案改为"权限变更已生效"（T031 修订，D6 v2）；`EditRolePage.tsx` 权限配置保存成功提示同样调整为"权限变更已生效"（research.md D10 v2）
+- [X] T051 `cd iam-service && go vet ./... && go test ./pkg/service/... && go build ./...` 全绿；`cd contrib && go build ./...`、`cd idl && go build ./...` 通过（依赖 T041–T050）
 
 **Checkpoint**: 绑定/权限变更立即生效、Redis 故障可降级、日志可诊断——T039 可执行
 

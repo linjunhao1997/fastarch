@@ -4,21 +4,25 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"log/slog"
 	"time"
 
 	"github.com/go-dev-frame/sponge/pkg/krand"
 	common_v1 "github.com/linjunhao1997/idl/pb/common"
 	iam_v1 "github.com/linjunhao1997/idl/pb/iam"
+	"github.com/redis/go-redis/v9"
 	"github.com/spf13/cast"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"gorm.io/gorm"
 
+	"iam-service/pkg/constant"
 	"iam-service/pkg/helper"
 	"iam-service/pkg/model"
 )
 
 type AccountService struct {
-	db *gorm.DB
+	db  *gorm.DB
+	rdb *redis.Client
 }
 
 var _ iam_v1.AccountServiceServer = (*AccountService)(nil)
@@ -105,9 +109,11 @@ func (service *AccountService) UpdateAccount(ctx context.Context, request *iam_v
 				Where(model.AccountColumnId+" <> ?", request.Id).
 				Count(&count).Error
 			if err != nil {
+				slog.Warn("check email uniqueness failed", "account_id", request.Id, "email", request.Email, "error", err)
 				return nil, err
 			}
 			if count > 0 {
+				slog.Warn("update account rejected: email duplicated", "account_id", request.Id, "email", request.Email)
 				return nil, ErrEmailDuplicated
 			}
 		}
@@ -137,16 +143,30 @@ func (service *AccountService) UpdateAccount(ctx context.Context, request *iam_v
 		Where(model.AccountColumnVersion, request.Version).
 		Updates(updates)
 	if result.Error != nil {
+		slog.Warn("update account failed", "account_id", request.Id, "version", request.Version, "error", result.Error)
 		return nil, result.Error
 	}
 	if result.RowsAffected == 0 {
+		slog.Warn("update account rejected: version conflict", "account_id", request.Id, "version", request.Version)
 		return nil, ErrUpdateAccountBusy
 	}
 	return &emptypb.Empty{}, nil
 }
 
-func NewAccountService(db *gorm.DB) iam_v1.AccountServiceServer {
-	return &AccountService{db: db}
+func NewAccountService(db *gorm.DB, rdb *redis.Client) iam_v1.AccountServiceServer {
+	return &AccountService{db: db, rdb: rdb}
+}
+
+// invalidateAccountPermissionSnapshot 删除账号的权限快照键，使绑定变更立即生效
+// （research.md D6-①）。快照为派生数据：删除失败仅记日志，由短 TTL 兜底。
+func (service *AccountService) invalidateAccountPermissionSnapshot(ctx context.Context, accountId int64) {
+	if service.rdb == nil {
+		return
+	}
+	if err := service.rdb.Del(ctx, constant.GetAccountPermissionKey(accountId)).Err(); err != nil {
+		slog.Warn("invalidate account permission snapshot failed",
+			"account_id", accountId, "error", err)
+	}
 }
 
 func (service *AccountService) UpdateAccountRoles(ctx context.Context, request *iam_v1.UpdateAccountRolesRequest) (*emptypb.Empty, error) {
@@ -167,6 +187,8 @@ func (service *AccountService) UpdateAccountRoles(ctx context.Context, request *
 		}
 		for _, code := range request.AddedRoleCodeList {
 			if _, ok := roleByCode[code]; !ok {
+				slog.Warn("bind roles rejected: role code not found",
+					"account_id", request.AccountId, "added_role_codes", request.AddedRoleCodeList)
 				return nil, ErrRoleNotFound
 			}
 		}
@@ -177,6 +199,7 @@ func (service *AccountService) UpdateAccountRoles(ctx context.Context, request *
 		Where(model.AccountColumnId, request.AccountId).
 		First(&account).Error
 	if err != nil {
+		slog.Warn("get account for role binding failed", "account_id", request.AccountId, "error", err)
 		return nil, err
 	}
 
@@ -208,8 +231,15 @@ func (service *AccountService) UpdateAccountRoles(ctx context.Context, request *
 		return nil
 	})
 	if err != nil {
+		slog.Warn("commit role binding failed",
+			"account_id", request.AccountId,
+			"added_role_codes", request.AddedRoleCodeList,
+			"removed_role_codes", request.RemovedRoleCodeList,
+			"error", err)
 		return nil, err
 	}
+	// 绑定变更立即生效：失效目标账号的权限快照（research.md D6-①）
+	service.invalidateAccountPermissionSnapshot(ctx, request.AccountId)
 	return &emptypb.Empty{}, nil
 }
 
@@ -219,9 +249,11 @@ func (service *AccountService) DeleteAccount(ctx context.Context, request *iam_v
 		Where(model.RAccountRoleColumnAccountId, request.Id).
 		Count(&count).Error
 	if err != nil {
+		slog.Warn("check account role bindings failed", "account_id", request.Id, "error", err)
 		return nil, err
 	}
 	if count > 0 {
+		slog.Warn("delete account rejected: bound by roles", "account_id", request.Id, "binding_count", count)
 		return nil, ErrAccountReferenced
 	}
 
@@ -229,9 +261,11 @@ func (service *AccountService) DeleteAccount(ctx context.Context, request *iam_v
 		Where(model.AccountColumnId, request.Id).
 		Delete(model.Account{})
 	if result.Error != nil {
+		slog.Warn("delete account failed", "account_id", request.Id, "error", result.Error)
 		return nil, result.Error
 	}
 	if result.RowsAffected == 0 {
+		slog.Warn("delete account rejected: account not found", "account_id", request.Id)
 		return nil, gorm.ErrRecordNotFound
 	}
 	return &emptypb.Empty{}, nil
@@ -263,6 +297,7 @@ func (service *AccountService) CreateAccount(ctx context.Context, request *iam_v
 		return tx.Model(model.Account{}).Create(&account).Error
 	})
 	if err != nil {
+		slog.Warn("create account failed", "email", request.Email, "error", err)
 		return nil, err
 	}
 

@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"log/slog"
 
 	"iam-service/pkg/auth"
 	"iam-service/pkg/constant"
@@ -14,6 +16,8 @@ import (
 	iam_v1 "github.com/linjunhao1997/idl/pb/iam"
 	"github.com/redis/go-redis/v9"
 	"github.com/spf13/cast"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"gorm.io/gorm"
 )
@@ -24,14 +28,24 @@ type AuthorizationService struct {
 }
 
 func (a AuthorizationService) CheckPermission(ctx context.Context, request *iam_v1.CheckPermissionRequest) (*iam_v1.CheckPermissionResponse, error) {
-	str, err := a.rdb.Get(ctx, constant.GetAccountPermissionKey(auth.GetAccountId(ctx))).Result()
-	if err != nil {
-		return nil, err
-	}
-
+	accountId := auth.GetAccountId(ctx)
+	str, err := a.rdb.Get(ctx, constant.GetAccountPermissionKey(accountId)).Result()
 	var permCodes []string
-	if err = json.Unmarshal([]byte(str), &permCodes); err != nil {
-		return nil, err
+	if err != nil {
+		if !errors.Is(err, redis.Nil) {
+			// Redis 其他故障 fail-closed，底层错误仅入日志（research.md D12/D13）
+			slog.Error("get permission snapshot from redis failed", "account_id", accountId, "error", err)
+			return nil, status.Error(codes.FailedPrecondition, "权限校验服务暂时不可用，请稍后重试")
+		}
+		// 缓存未命中：读穿回源（与 auth 拦截器共用回源逻辑，research.md D6-②）
+		permCodes, err = auth.LoadPermissionSnapshot(ctx, a.rdb, accountId, NewPermissionSnapshotLoader(a.db))
+		if err != nil {
+			slog.Error("rebuild permission snapshot from db failed", "account_id", accountId, "error", err)
+			return nil, status.Error(codes.FailedPrecondition, "权限校验服务暂时不可用，请稍后重试")
+		}
+	} else if err = json.Unmarshal([]byte(str), &permCodes); err != nil {
+		slog.Error("unmarshal permission snapshot failed", "account_id", accountId, "error", err)
+		return nil, status.Error(codes.FailedPrecondition, "权限校验服务暂时不可用，请稍后重试")
 	}
 
 	for _, perm := range permCodes {
@@ -100,6 +114,7 @@ func (a AuthorizationService) CreatePermission(ctx context.Context, request *iam
 		return tx.Model(model.Permission{}).Create(&permission).Error
 	})
 	if err != nil {
+		slog.Warn("create permission failed", "permission_code", request.Code, "error", err)
 		return nil, err
 	}
 	return permissionToPb(permission), nil
@@ -153,6 +168,7 @@ func (a AuthorizationService) UpdatePermission(ctx context.Context, request *iam
 		Where(model.PermissionColumnVersion, request.Version).
 		Updates(updates)
 	if result.Error != nil {
+		slog.Warn("update permission failed", "permission_id", request.Id, "version", request.Version, "error", result.Error)
 		return nil, result.Error
 	}
 	if result.RowsAffected == 0 {
@@ -160,11 +176,14 @@ func (a AuthorizationService) UpdatePermission(ctx context.Context, request *iam
 		if err := a.db.WithContext(ctx).Model(model.Permission{}).
 			Where(model.PermissionColumnId, request.Id).
 			Count(&count).Error; err != nil {
+			slog.Warn("check permission existence failed", "permission_id", request.Id, "error", err)
 			return nil, err
 		}
 		if count == 0 {
+			slog.Warn("update permission rejected: permission not found", "permission_id", request.Id)
 			return nil, gorm.ErrRecordNotFound
 		}
+		slog.Warn("update permission rejected: version conflict", "permission_id", request.Id, "version", request.Version)
 		return nil, ErrUpdatePermissionBusy
 	}
 	return &emptypb.Empty{}, nil
@@ -191,6 +210,7 @@ func (a AuthorizationService) CreateRole(ctx context.Context, request *iam_v1.Cr
 		return tx.Model(model.Role{}).Create(&role).Error
 	})
 	if err != nil {
+		slog.Warn("create role failed", "role_code", request.RoleCode, "error", err)
 		return nil, err
 	}
 	return roleToPb(role), nil
@@ -238,7 +258,37 @@ func (a AuthorizationService) UpdateRole(ctx context.Context, request *iam_v1.Up
 		updates[model.RoleColumnDisabled] = statusToBool(request.EnabledStatus)
 	}
 	updates[model.RoleColumnVersion] = gorm.Expr(model.RoleColumnVersion + " + 1")
-	return a.updateRoleInTransaction(ctx, request, updates)
+	resp, err := a.updateRoleInTransaction(ctx, request, updates)
+	if err != nil {
+		return nil, err
+	}
+	// 权限集合增减或禁用状态变更立即生效：失效绑定账号的权限快照（research.md D6-①）
+	if len(request.AddedPermissionCodeList) > 0 || len(request.RemovedPermissionCodeList) > 0 || len(request.EnabledStatus) > 0 {
+		a.invalidateRoleAccountsSnapshot(ctx, request.Id)
+	}
+	return resp, nil
+}
+
+// invalidateRoleAccountsSnapshot 删除绑定该角色的全部账号的权限快照键（research.md D6-①）。
+// 快照为派生数据：删除失败仅记日志，由短 TTL 兜底，不影响已提交的业务变更。
+func (a AuthorizationService) invalidateRoleAccountsSnapshot(ctx context.Context, roleId int64) {
+	if a.rdb == nil {
+		return
+	}
+	var accountIds []int64
+	err := a.db.WithContext(ctx).Model(model.RAccountRole{}).
+		Where(model.RAccountRoleColumnRoleId, roleId).
+		Pluck(model.RAccountRoleColumnAccountId, &accountIds).Error
+	if err != nil {
+		slog.Warn("query role bound accounts failed", "role_id", roleId, "error", err)
+		return
+	}
+	for _, accountId := range accountIds {
+		if err := a.rdb.Del(ctx, constant.GetAccountPermissionKey(accountId)).Err(); err != nil {
+			slog.Warn("invalidate account permission snapshot failed",
+				"account_id", accountId, "role_id", roleId, "error", err)
+		}
+	}
 }
 
 func (a AuthorizationService) updateRoleInTransaction(ctx context.Context, request *iam_v1.UpdateRoleRequest, updates map[string]interface{}) (*emptypb.Empty, error) {
@@ -294,6 +344,15 @@ func (a AuthorizationService) updateRoleInTransaction(ctx context.Context, reque
 		return nil
 	})
 	if err != nil {
+		if errors.Is(err, ErrPermissionNotFound) {
+			slog.Warn("update role rejected: permission code not found",
+				"role_id", request.Id,
+				"added_permission_codes", request.AddedPermissionCodeList,
+				"removed_permission_codes", request.RemovedPermissionCodeList)
+		} else {
+			slog.Warn("commit role update failed",
+				"role_id", request.Id, "version", request.Version, "error", err)
+		}
 		return nil, err
 	}
 	return &emptypb.Empty{}, nil
@@ -305,9 +364,11 @@ func (a AuthorizationService) DeletePermission(ctx context.Context, request *iam
 		Where("permission_id = ?", request.Id).
 		Count(&count).Error
 	if err != nil {
+		slog.Warn("check permission references failed", "permission_id", request.Id, "error", err)
 		return nil, err
 	}
 	if count > 0 {
+		slog.Warn("delete permission rejected: referenced by roles", "permission_id", request.Id, "reference_count", count)
 		return nil, ErrPermissionReferenced
 	}
 
@@ -315,9 +376,11 @@ func (a AuthorizationService) DeletePermission(ctx context.Context, request *iam
 		Where(model.PermissionColumnId, request.Id).
 		Delete(model.Permission{})
 	if result.Error != nil {
+		slog.Warn("delete permission failed", "permission_id", request.Id, "error", result.Error)
 		return nil, result.Error
 	}
 	if result.RowsAffected == 0 {
+		slog.Warn("delete permission rejected: permission not found", "permission_id", request.Id)
 		return nil, gorm.ErrRecordNotFound
 	}
 	return &emptypb.Empty{}, nil
@@ -329,9 +392,11 @@ func (a AuthorizationService) DeleteRole(ctx context.Context, request *iam_v1.De
 		Where(model.RAccountRoleColumnRoleId, request.Id).
 		Count(&count).Error
 	if err != nil {
+		slog.Warn("check role bindings failed", "role_id", request.Id, "error", err)
 		return nil, err
 	}
 	if count > 0 {
+		slog.Warn("delete role rejected: bound by accounts", "role_id", request.Id, "binding_count", count)
 		return nil, ErrRoleReferenced
 	}
 
@@ -349,8 +414,11 @@ func (a AuthorizationService) DeleteRole(ctx context.Context, request *iam_v1.De
 		return nil
 	})
 	if err != nil {
+		slog.Warn("delete role failed", "role_id", request.Id, "error", err)
 		return nil, err
 	}
+	// 级联清除权限关联立即生效：失效（残余）绑定账号的权限快照（research.md D6-①）
+	a.invalidateRoleAccountsSnapshot(ctx, request.Id)
 	return &emptypb.Empty{}, nil
 }
 

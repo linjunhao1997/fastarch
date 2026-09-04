@@ -22,19 +22,6 @@ import (
 func RunGrpcServer(ctx context.Context, cfg *conf.Config) error {
 	rdb := cache.NewRedis(cfg.Redis.Addr)
 
-	srv, err := grpcserver.New(cfg.GRpc.AddrWithPort(),
-		grpcserver.WithDefaultInterceptors(),
-		grpcserver.WithErrorDomain(cfg.App.Name),
-		grpcserver.WithGormErrorMapping(),
-		grpcserver.WithServerOptions(
-			grpc.ChainUnaryInterceptor(auth.Interceptor(rdb)),
-			grpc.StatsHandler(otelgrpc.NewClientHandler()),
-		),
-	)
-	if err != nil {
-		return fmt.Errorf("init grpc server: %w", err)
-	}
-
 	db, err := database.NewMySQL(cfg.Database.DSN)
 	if err != nil {
 		return fmt.Errorf("connect mysql: %w", err)
@@ -43,9 +30,23 @@ func RunGrpcServer(ctx context.Context, cfg *conf.Config) error {
 		return fmt.Errorf("auto migrate: %w", err)
 	}
 
+	srv, err := grpcserver.New(cfg.GRpc.AddrWithPort(),
+		grpcserver.WithDefaultInterceptors(),
+		grpcserver.WithErrorDomain(cfg.App.Name),
+		grpcserver.WithGormErrorMapping(),
+		grpcserver.WithServerOptions(
+			// 权限快照读穿回源函数注入鉴权拦截器（research.md D6-②）
+			grpc.ChainUnaryInterceptor(auth.Interceptor(rdb, service.NewPermissionSnapshotLoader(db))),
+			grpc.StatsHandler(otelgrpc.NewClientHandler()),
+		),
+	)
+	if err != nil {
+		return fmt.Errorf("init grpc server: %w", err)
+	}
+
 	s := srv.Grpc()
 	iam_v1.RegisterAuthenticationServiceServer(s, service.NewAuthenticationService(db, rdb))
-	iam_v1.RegisterAccountServiceServer(s, service.NewAccountService(db))
+	iam_v1.RegisterAccountServiceServer(s, service.NewAccountService(db, rdb))
 	iam_v1.RegisterAuthorizationServiceServer(s, service.NewAuthorizationService(db, rdb))
 	iam_v1.RegisterApplicationServiceServer(s, service.NewApplicationService(db))
 

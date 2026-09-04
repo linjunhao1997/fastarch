@@ -48,7 +48,8 @@ func WithListener(lis net.Listener) Option {
 }
 
 // WithDefaultInterceptors 启用默认拦截器链：
-// unary: Recovery -> Validation -> ErrorDetails -> 业务拦截器；stream: Recovery。
+// unary: Recovery -> TraceID -> Logging -> Validation -> ErrorDetails -> 业务拦截器；
+// stream: Recovery。
 func WithDefaultInterceptors() Option {
 	return func(o *options) {
 		o.defaultInterceptors = true
@@ -82,6 +83,8 @@ func New(addr string, opts ...Option) (*Server, error) {
 	if o.defaultInterceptors {
 		unaryChain := []grpc.UnaryServerInterceptor{
 			grpclib.RecoveryUnaryServerInterceptor,
+			grpclib.TraceIDInterceptor,
+			grpclib.LoggingUnaryServerInterceptor,
 			grpclib.ValidationUnaryServerInterceptor,
 		}
 		if o.errorDomain != "" {

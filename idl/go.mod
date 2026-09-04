@@ -5,6 +5,7 @@ go 1.23.12
 require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.7-20250717185734-6c6e0d3c608e.1
 	buf.build/go/protovalidate v0.14.0
+	github.com/go-dev-frame/sponge v1.16.1
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.2
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.1
 	google.golang.org/genproto/googleapis/api v0.0.0-20250811230008-5f3141c8851a
@@ -20,6 +21,6 @@ require (
 	github.com/stoewer/go-strcase v1.3.0 // indirect
 	golang.org/x/exp v0.0.0-20240325151524-a685a6edb6d8 // indirect
 	golang.org/x/net v0.38.0 // indirect
-	golang.org/x/sys v0.31.0 // indirect
+	golang.org/x/sys v0.34.0 // indirect
 	golang.org/x/text v0.26.0 // indirect
 )
