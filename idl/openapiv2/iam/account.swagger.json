@@ -320,6 +320,25 @@
         "version": {
           "type": "string",
           "format": "int64"
+        },
+        "createdBy": {
+          "type": "string",
+          "description": "创建人（账号 id）",
+          "title": "审计字段（只读回传，由服务端注入；请求消息不含此类字段，宪法 XII）"
+        },
+        "updatedBy": {
+          "type": "string",
+          "title": "修改人（账号 id）"
+        },
+        "createTime": {
+          "type": "string",
+          "format": "date-time",
+          "title": "创建时间"
+        },
+        "updateTime": {
+          "type": "string",
+          "format": "date-time",
+          "title": "修改时间"
         }
       },
       "title": "账号信息"
