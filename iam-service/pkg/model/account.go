@@ -12,7 +12,7 @@ type Account struct {
 	Id         int64     `gorm:"column:id;primaryKey"`
 	Code       string    `gorm:"column:code"`
 	Name       string    `gorm:"column:name"`
-	Email      string    `gorm:"column:email;uniqueIndex"`
+	Email      string    `gorm:"column:email;size:255;uniqueIndex"`
 	Status     string    `gorm:"column:status"`
 	Salt       string    `gorm:"column:salt"`
 	Password   string    `gorm:"column:password"`

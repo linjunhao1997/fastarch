@@ -9,7 +9,7 @@ const (
 type Role struct {
 	Id             int64         `gorm:"column:id;primaryKey"`
 	Name           string        `gorm:"column:name"`
-	Code           string        `gorm:"column:code;uniqueIndex"`
+	Code           string        `gorm:"column:code;size:255;uniqueIndex"`
 	Description    string        `gorm:"column:description"`
 	ApplicationId  int64         `gorm:"column:application_id"`
 	Disabled       bool          `gorm:"column:disabled"`

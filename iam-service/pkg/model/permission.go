@@ -5,7 +5,7 @@ type Permission struct {
 	Id            int64       `gorm:"column:id;primaryKey"`
 	Name          string      `gorm:"column:name"`
 	kind          string      `gorm:"column:kind"`
-	Code          string      `gorm:"column:code;uniqueIndex"`
+	Code          string      `gorm:"column:code;size:255;uniqueIndex"`
 	Value         string      `gorm:"column:value"`
 	Description   string      `gorm:"column:description"`
 	ApplicationId int64       `gorm:"column:application_id"`
