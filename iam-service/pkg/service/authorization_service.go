@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"time"
 
 	"iam-service/pkg/auth"
 	"iam-service/pkg/constant"
@@ -19,6 +20,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"gorm.io/gorm"
 )
 
@@ -69,6 +71,10 @@ func permissionToPb(p model.Permission) *iam_v1.Permission {
 		PermissionCode: p.Code,
 		EnabledStatus:  boolToStatus(p.Disabled),
 		Version:        p.Version,
+		CreatedBy:      cast.ToString(p.CreatedBy),
+		UpdatedBy:      cast.ToString(p.UpdatedBy),
+		CreateTime:     timestamppb.New(p.CreateTime),
+		UpdateTime:     timestamppb.New(p.UpdateTime),
 	}
 }
 
@@ -80,6 +86,10 @@ func roleToPb(r model.Role) *iam_v1.Role {
 		RoleCode:      r.Code,
 		EnabledStatus: boolToStatus(r.Disabled),
 		Version:       r.Version,
+		CreatedBy:     cast.ToString(r.CreatedBy),
+		UpdatedBy:     cast.ToString(r.UpdatedBy),
+		CreateTime:    timestamppb.New(r.CreateTime),
+		UpdateTime:    timestamppb.New(r.UpdateTime),
 		PermissionCodeList: func() []string {
 			codes := make([]string, 0, len(r.PermissionList))
 			for _, permission := range r.PermissionList {
@@ -92,6 +102,9 @@ func roleToPb(r model.Role) *iam_v1.Role {
 
 func (a AuthorizationService) CreatePermission(ctx context.Context, request *iam_v1.CreatePermissionRequest) (*iam_v1.Permission, error) {
 	pkId := krand.NewID()
+	now := time.Now()
+	// 审计字段服务端注入：created_by/updated_by 取认证上下文操作者，无认证上下文时 0（research.md D16）
+	operator := auth.GetAccountId(ctx)
 	permission := model.Permission{
 		Id:            pkId,
 		Name:          request.Name,
@@ -100,6 +113,10 @@ func (a AuthorizationService) CreatePermission(ctx context.Context, request *iam
 		Description:   request.Description,
 		ApplicationId: request.ApplicationId,
 		Disabled:      false,
+		CreateTime:    now,
+		UpdateTime:    now,
+		CreatedBy:     operator,
+		UpdatedBy:     operator,
 	}
 	err := a.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var count int64
@@ -159,6 +176,9 @@ func (a AuthorizationService) UpdatePermission(ctx context.Context, request *iam
 	if len(request.EnabledStatus) > 0 {
 		updates[model.PermissionColumnDisabled] = statusToBool(request.EnabledStatus)
 	}
+	updates[model.PermissionColumnUpdateTime] = time.Now()
+	// 审计字段服务端注入：仅更新修改人与修改时间（research.md D16，宪法 XII）
+	updates[model.PermissionColumnUpdatedBy] = auth.GetAccountId(ctx)
 	updates[model.PermissionColumnVersion] = gorm.Expr(model.PermissionColumnVersion + " + 1")
 	if len(updates) == 0 {
 		return &emptypb.Empty{}, nil
@@ -191,11 +211,18 @@ func (a AuthorizationService) UpdatePermission(ctx context.Context, request *iam
 
 func (a AuthorizationService) CreateRole(ctx context.Context, request *iam_v1.CreateRoleRequest) (*iam_v1.Role, error) {
 	pkId := krand.NewID()
+	now := time.Now()
+	// 审计字段服务端注入：created_by/updated_by 取认证上下文操作者，无认证上下文时 0（research.md D16）
+	operator := auth.GetAccountId(ctx)
 	role := model.Role{
-		Id:       pkId,
-		Name:     request.Name,
-		Code:     request.RoleCode,
-		Disabled: false,
+		Id:         pkId,
+		Name:       request.Name,
+		Code:       request.RoleCode,
+		Disabled:   false,
+		CreateTime: now,
+		UpdateTime: now,
+		CreatedBy:  operator,
+		UpdatedBy:  operator,
 	}
 	err := a.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var count int64
@@ -257,6 +284,9 @@ func (a AuthorizationService) UpdateRole(ctx context.Context, request *iam_v1.Up
 	if len(request.EnabledStatus) > 0 {
 		updates[model.RoleColumnDisabled] = statusToBool(request.EnabledStatus)
 	}
+	updates[model.RoleColumnUpdateTime] = time.Now()
+	// 审计字段服务端注入：仅更新修改人与修改时间（research.md D16，宪法 XII）
+	updates[model.RoleColumnUpdatedBy] = auth.GetAccountId(ctx)
 	updates[model.RoleColumnVersion] = gorm.Expr(model.RoleColumnVersion + " + 1")
 	resp, err := a.updateRoleInTransaction(ctx, request, updates)
 	if err != nil {

@@ -21,6 +21,8 @@ type Account struct {
 	Kind       string    `gorm:"column:kind"`
 	CreateTime time.Time `gorm:"column:create_time"`
 	UpdateTime time.Time `gorm:"column:update_time"`
+	CreatedBy  int64     `gorm:"column:created_by"`
+	UpdatedBy  int64     `gorm:"column:updated_by"`
 	Version    int64     `gorm:"column:version"`
 	RoleList   []*Role   `gorm:"many2many:t_r_account_role;joinForeignKey:account_id;joinReferences:role_id"`
 }

@@ -1,8 +1,8 @@
 // Do not Edit Generated File.
-// Generated at: 2026-08-29 22:01:23
+// Generated at: 2026-09-05 03:54:20
 
 // Do not Edit Generated File.
-// Generated at: 2026-08-29 22:01:23
+// Generated at: 2026-09-05 03:54:20
 
 package model
 
@@ -19,6 +19,8 @@ const (
 	AccountColumnKind       = "kind"
 	AccountColumnCreateTime = "create_time"
 	AccountColumnUpdateTime = "update_time"
+	AccountColumnCreatedBy  = "created_by"
+	AccountColumnUpdatedBy  = "updated_by"
 	AccountColumnVersion    = "version"
 )
 const (

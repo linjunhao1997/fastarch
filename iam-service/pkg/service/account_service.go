@@ -13,8 +13,10 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/spf13/cast"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"gorm.io/gorm"
 
+	"iam-service/pkg/auth"
 	"iam-service/pkg/constant"
 	"iam-service/pkg/helper"
 	"iam-service/pkg/model"
@@ -29,11 +31,15 @@ var _ iam_v1.AccountServiceServer = (*AccountService)(nil)
 
 func accountToPb(a model.Account) *iam_v1.Account {
 	return &iam_v1.Account{
-		Id:      cast.ToString(a.Id),
-		Name:    a.Name,
-		Email:   a.Email,
-		Kind:    a.Kind,
-		Version: a.Version,
+		Id:         cast.ToString(a.Id),
+		Name:       a.Name,
+		Email:      a.Email,
+		Kind:       a.Kind,
+		Version:    a.Version,
+		CreatedBy:  cast.ToString(a.CreatedBy),
+		UpdatedBy:  cast.ToString(a.UpdatedBy),
+		CreateTime: timestamppb.New(a.CreateTime),
+		UpdateTime: timestamppb.New(a.UpdateTime),
 		RoleCodeList: func() []string {
 			codes := make([]string, 0, len(a.RoleList))
 			for _, role := range a.RoleList {
@@ -137,6 +143,8 @@ func (service *AccountService) UpdateAccount(ctx context.Context, request *iam_v
 		return &emptypb.Empty{}, nil
 	}
 	updates[model.AccountColumnUpdateTime] = time.Now()
+	// 审计字段服务端注入：仅更新修改人与修改时间（research.md D16，宪法 XII）
+	updates[model.AccountColumnUpdatedBy] = auth.GetAccountId(ctx)
 	updates[model.AccountColumnVersion] = account.Version + 1
 	result := service.db.WithContext(ctx).Model(model.Account{}).
 		Where(model.AccountColumnId, request.Id).
@@ -274,6 +282,8 @@ func (service *AccountService) DeleteAccount(ctx context.Context, request *iam_v
 func (service *AccountService) CreateAccount(ctx context.Context, request *iam_v1.CreateAccountRequest) (*iam_v1.Account, error) {
 	pkId := krand.NewID()
 	now := time.Now()
+	// 审计字段服务端注入：created_by/updated_by 取认证上下文操作者，无认证上下文时 0（research.md D16）
+	operator := auth.GetAccountId(ctx)
 	account := model.Account{
 		Id:         pkId,
 		Name:       request.Name,
@@ -281,6 +291,8 @@ func (service *AccountService) CreateAccount(ctx context.Context, request *iam_v
 		Kind:       request.Kind,
 		CreateTime: now,
 		UpdateTime: now,
+		CreatedBy:  operator,
+		UpdatedBy:  operator,
 		Version:    1,
 	}
 	err := service.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {

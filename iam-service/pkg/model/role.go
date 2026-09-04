@@ -1,5 +1,7 @@
 package model
 
+import "time"
+
 const (
 	RoleRoot  = "0000"
 	RoleAdmin = "1000"
@@ -13,6 +15,10 @@ type Role struct {
 	Description    string        `gorm:"column:description"`
 	ApplicationId  int64         `gorm:"column:application_id"`
 	Disabled       bool          `gorm:"column:disabled"`
+	CreateTime     time.Time     `gorm:"column:create_time"`
+	UpdateTime     time.Time     `gorm:"column:update_time"`
+	CreatedBy      int64         `gorm:"column:created_by"`
+	UpdatedBy      int64         `gorm:"column:updated_by"`
 	Version        int64         `gorm:"column:version;default:1"`
 	Application    Application   `gorm:"foreignKey:application_id;references:id"`
 	PermissionList []*Permission `gorm:"many2many:t_r_role_permission;joinForeignKey:role_id;joinReferences:permission_id"`
