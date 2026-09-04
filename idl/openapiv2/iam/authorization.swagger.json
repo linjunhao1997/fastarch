@@ -150,6 +150,36 @@
           "AuthorizationService"
         ]
       },
+      "delete": {
+        "operationId": "AuthorizationService_DeletePermission",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "int64"
+          }
+        ],
+        "tags": [
+          "AuthorizationService"
+        ]
+      },
       "patch": {
         "summary": "修改权限信息",
         "operationId": "AuthorizationService_UpdatePermission",
@@ -188,6 +218,10 @@
                 },
                 "enabledStatus": {
                   "type": "string"
+                },
+                "version": {
+                  "type": "string",
+                  "format": "int64"
                 }
               }
             }
@@ -299,6 +333,36 @@
           "AuthorizationService"
         ]
       },
+      "delete": {
+        "operationId": "AuthorizationService_DeleteRole",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "int64"
+          }
+        ],
+        "tags": [
+          "AuthorizationService"
+        ]
+      },
       "patch": {
         "summary": "修改角色信息",
         "operationId": "AuthorizationService_UpdateRole",
@@ -350,6 +414,10 @@
                   "items": {
                     "type": "string"
                   }
+                },
+                "version": {
+                  "type": "string",
+                  "format": "int64"
                 }
               }
             }
@@ -703,6 +771,10 @@
         },
         "enabledStatus": {
           "type": "string"
+        },
+        "version": {
+          "type": "string",
+          "format": "int64"
         }
       },
       "title": "权限信息"
@@ -725,6 +797,16 @@
         },
         "enabledStatus": {
           "type": "string"
+        },
+        "permissionCodeList": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "version": {
+          "type": "string",
+          "format": "int64"
         }
       },
       "title": "角色信息"

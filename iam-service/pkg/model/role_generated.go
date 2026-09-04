@@ -10,4 +10,5 @@ const (
 	RoleColumnDescription   = "description"
 	RoleColumnApplicationId = "application_id"
 	RoleColumnDisabled      = "disabled"
+	RoleColumnVersion       = "version"
 )

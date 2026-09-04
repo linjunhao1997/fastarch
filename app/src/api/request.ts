@@ -1,6 +1,13 @@
+export class UnauthorizedError extends Error {
+  constructor() {
+    super('请重新登录');
+    this.name = 'UnauthorizedError';
+  }
+}
+
 export interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
-  body?: any;
+  body?: unknown;
   headers?: Record<string, string>;
   skipToken?: boolean;
 }
@@ -32,7 +39,7 @@ export async function request<T>(endpoint: string, options: RequestOptions = {})
     credentials: 'include',
   });
 
-  let data: any = {};
+  let data: unknown = {};
   try {
     data = await response.json();
   } catch (e) {
@@ -42,12 +49,17 @@ export async function request<T>(endpoint: string, options: RequestOptions = {})
   // 错误统一走 HTTP 状态码：grpc-gateway 把 gRPC 错误转成非 2xx，
   // body 形如 {"code":<grpc状态码>,"message":"...","details":[ErrorInfo...]}
   if (!response.ok) {
+    if (response.status === 401) {
+      throw new UnauthorizedError();
+    }
+
     let errorMessage = `HTTP ${response.status} Error`;
-    if (data) {
-      if (data.message) {
-        errorMessage = data.message;
-      } else if (data.error) {
-        errorMessage = data.error;
+    if (data && typeof data === 'object') {
+      const errorData = data as { message?: unknown; error?: unknown };
+      if (typeof errorData.message === 'string') {
+        errorMessage = errorData.message;
+      } else if (typeof errorData.error === 'string') {
+        errorMessage = errorData.error;
       }
     }
     throw new Error(errorMessage);

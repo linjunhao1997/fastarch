@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Form, Input, Button, message } from "antd";
 import { useNavigate, useParams } from "react-router";
 import { applicationApi } from "../../api/iam";
@@ -16,7 +16,7 @@ export default function EditApplicationPage() {
       if (!id) return;
       setLoading(true);
       try {
-        const response = await applicationApi.get(parseInt(id));
+        const response = await applicationApi.get(id);
         form.setFieldsValue({
           name: response.name,
           description: response.description,
@@ -34,7 +34,7 @@ export default function EditApplicationPage() {
     if (!id) return;
     setLoading(true);
     try {
-      await applicationApi.update(parseInt(id), values);
+      await applicationApi.update(id, values);
       message.success("应用更新成功");
       navigate('/application_management/application_list');
     } catch (error) {

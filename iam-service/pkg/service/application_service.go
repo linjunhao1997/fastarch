@@ -104,5 +104,37 @@ func (s *ApplicationService) UpdateApplication(ctx context.Context, request *iam
 	if result.Error != nil {
 		return nil, result.Error
 	}
+	if result.RowsAffected == 0 {
+		return nil, gorm.ErrRecordNotFound
+	}
+	return &emptypb.Empty{}, nil
+}
+
+func (s *ApplicationService) DeleteApplication(ctx context.Context, request *iam_v1.DeleteApplicationRequest) (*emptypb.Empty, error) {
+	var roleCount int64
+	err := s.db.WithContext(ctx).Model(model.Role{}).
+		Where(model.RoleColumnApplicationId, request.Id).
+		Count(&roleCount).Error
+	if err != nil {
+		return nil, err
+	}
+	var permissionCount int64
+	err = s.db.WithContext(ctx).Model(model.Permission{}).
+		Where(model.PermissionColumnApplicationId, request.Id).
+		Count(&permissionCount).Error
+	if err != nil {
+		return nil, err
+	}
+	if roleCount > 0 || permissionCount > 0 {
+		return nil, ErrApplicationReferenced
+	}
+
+	result := s.db.WithContext(ctx).Where(model.ApplicationColumnId, request.Id).Delete(model.Application{})
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return nil, gorm.ErrRecordNotFound
+	}
 	return &emptypb.Empty{}, nil
 }

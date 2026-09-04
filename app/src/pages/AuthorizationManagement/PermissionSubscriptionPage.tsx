@@ -1,14 +1,13 @@
-import React, { useState, useEffect } from "react";
-import { Flex, Input, Button, Table, message } from "antd";
-import { useNavigate } from "react-router";
+import { useState, useEffect } from "react";
+import { Flex, Input, Button, Table } from "antd";
 import { subscriptionApi } from "../../api/iam";
 import { useApiErrorNotification } from "../../hooks/useApiError";
+import type { Subscription } from "../../api/iam";
 
 const { Search } = Input;
 
 export default function PermissionSubscriptionPage() {
-  const navigate = useNavigate();
-  const [subscriptions, setSubscriptions] = useState<any[]>([]);
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [loading, setLoading] = useState(false);
   const [filters, setFilters] = useState({ name: "" });
   const showNotification = useApiErrorNotification();
@@ -37,10 +36,6 @@ export default function PermissionSubscriptionPage() {
     setFilters({ name: "" });
   };
 
-  const handleCreateSubscription = () => {
-    navigate('/authorization_management/subscription_create');
-  };
-
   const filteredSubscriptions = subscriptions.filter((subscription) =>
     !filters.name || subscription.applicantName?.includes(filters.name)
   );
@@ -58,12 +53,12 @@ export default function PermissionSubscriptionPage() {
       <Flex gap={16} style={{ marginBottom: 16 }}>
         <Search placeholder="搜索申请人" onSearch={handleSearch} style={{ width: 200 }} />
         <Button onClick={handleReset}>重置</Button>
-        <Button type="primary" onClick={handleCreateSubscription}>创建订阅</Button>
+        <Button type="primary" disabled title="订阅创建接口尚未实现">创建订阅</Button>
       </Flex>
       <Table
         columns={columns}
         dataSource={filteredSubscriptions}
-        rowKey="sourceApplicationCode"
+      rowKey="id"
         loading={loading}
       />
     </div>

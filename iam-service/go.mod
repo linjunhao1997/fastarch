@@ -3,6 +3,7 @@ module iam-service
 go 1.23.12
 
 require (
+	github.com/glebarez/sqlite v1.11.0
 	github.com/go-dev-frame/sponge v1.14.0
 	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/linjunhao1997/idl v0.0.0
@@ -14,9 +15,18 @@ require (
 )
 
 require (
+	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/glebarez/go-sqlite v1.21.2 // indirect
+	github.com/google/uuid v1.6.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.1 // indirect
+	github.com/mattn/go-isatty v0.0.20 // indirect
+	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/spf13/cobra v1.9.1 // indirect
 	gorm.io/driver/mysql v1.6.0 // indirect
+	modernc.org/libc v1.22.5 // indirect
+	modernc.org/mathutil v1.5.0 // indirect
+	modernc.org/memory v1.5.0 // indirect
+	modernc.org/sqlite v1.23.1 // indirect
 )
 
 require (
@@ -57,8 +67,9 @@ require (
 	golang.org/x/text v0.28.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250811230008-5f3141c8851a // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250804133106-a7a43d27e69b // indirect
-	google.golang.org/protobuf v1.36.7 // indirect
+	google.golang.org/protobuf v1.36.7
 )
 
 replace github.com/linjunhao1997/idl => ../idl
+
 replace github.com/linjunhao1997/contrib => ../contrib

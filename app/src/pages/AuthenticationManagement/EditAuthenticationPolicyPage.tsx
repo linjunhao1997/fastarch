@@ -1,6 +1,6 @@
 // AuthenticationPolicyEditPage.jsx
 import React, { useState, useEffect } from "react";
-import { Form, Input, Button, message, Flex, Card, Spin, Select } from "antd";
+import { Form, Input, Button, message, Flex, Card, Spin } from "antd";
 import { useNavigate, useParams } from "react-router-dom";
 
 export default function EditAuthenticationPolicyPage() {
@@ -9,7 +9,6 @@ export default function EditAuthenticationPolicyPage() {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [policyData, setPolicyData] = useState(null);
   const [policyTypes, setPolicyTypes] = useState([]);
 
   // 模拟获取认证策略类型
@@ -47,7 +46,6 @@ export default function EditAuthenticationPolicyPage() {
     const policy = policyList.find(p => p.id === parseInt(id));
     
     if (policy) {
-      setPolicyData(policy);
       form.setFieldsValue(policy);
       setLoading(false);
     } else {

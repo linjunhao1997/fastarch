@@ -5,7 +5,6 @@ import {
   MenuFoldOutlined,
   UserOutlined,
 } from "@ant-design/icons";
-import { MenuItems } from "../routers";
 import { Outlet } from "react-router";
 import AutoBreadcrumb from "../components/AutoBreadcrumb";
 import { convertRoutesToMenuItems, routes } from "../routers/router";

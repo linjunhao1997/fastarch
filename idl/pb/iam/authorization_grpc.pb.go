@@ -25,10 +25,12 @@ const (
 	AuthorizationService_GetPermission_FullMethodName      = "/iam.v1.AuthorizationService/GetPermission"
 	AuthorizationService_ListPermissions_FullMethodName    = "/iam.v1.AuthorizationService/ListPermissions"
 	AuthorizationService_UpdatePermission_FullMethodName   = "/iam.v1.AuthorizationService/UpdatePermission"
+	AuthorizationService_DeletePermission_FullMethodName   = "/iam.v1.AuthorizationService/DeletePermission"
 	AuthorizationService_CreateRole_FullMethodName         = "/iam.v1.AuthorizationService/CreateRole"
 	AuthorizationService_GetRole_FullMethodName            = "/iam.v1.AuthorizationService/GetRole"
 	AuthorizationService_ListRoles_FullMethodName          = "/iam.v1.AuthorizationService/ListRoles"
 	AuthorizationService_UpdateRole_FullMethodName         = "/iam.v1.AuthorizationService/UpdateRole"
+	AuthorizationService_DeleteRole_FullMethodName         = "/iam.v1.AuthorizationService/DeleteRole"
 	AuthorizationService_CreateSubscription_FullMethodName = "/iam.v1.AuthorizationService/CreateSubscription"
 	AuthorizationService_GetSubscription_FullMethodName    = "/iam.v1.AuthorizationService/GetSubscription"
 	AuthorizationService_UpdateSubscription_FullMethodName = "/iam.v1.AuthorizationService/UpdateSubscription"
@@ -48,6 +50,7 @@ type AuthorizationServiceClient interface {
 	ListPermissions(ctx context.Context, in *ListPermissionsRequest, opts ...grpc.CallOption) (*ListPermissionsResponse, error)
 	// 修改权限信息
 	UpdatePermission(ctx context.Context, in *UpdatePermissionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	DeletePermission(ctx context.Context, in *DeletePermissionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// 创建角色，返回创建出的角色（含 id）
 	CreateRole(ctx context.Context, in *CreateRoleRequest, opts ...grpc.CallOption) (*Role, error)
 	// 获取角色信息
@@ -56,6 +59,7 @@ type AuthorizationServiceClient interface {
 	ListRoles(ctx context.Context, in *ListRolesRequest, opts ...grpc.CallOption) (*ListRolesResponse, error)
 	// 修改角色信息
 	UpdateRole(ctx context.Context, in *UpdateRoleRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	DeleteRole(ctx context.Context, in *DeleteRoleRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// 申请权限，返回创建出的申请记录（含 id）
 	CreateSubscription(ctx context.Context, in *CreateSubscriptionRequest, opts ...grpc.CallOption) (*Subscription, error)
 	// 申请记录详情
@@ -112,6 +116,15 @@ func (c *authorizationServiceClient) UpdatePermission(ctx context.Context, in *U
 	return out, nil
 }
 
+func (c *authorizationServiceClient) DeletePermission(ctx context.Context, in *DeletePermissionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, AuthorizationService_DeletePermission_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *authorizationServiceClient) CreateRole(ctx context.Context, in *CreateRoleRequest, opts ...grpc.CallOption) (*Role, error) {
 	out := new(Role)
 	err := c.cc.Invoke(ctx, AuthorizationService_CreateRole_FullMethodName, in, out, opts...)
@@ -142,6 +155,15 @@ func (c *authorizationServiceClient) ListRoles(ctx context.Context, in *ListRole
 func (c *authorizationServiceClient) UpdateRole(ctx context.Context, in *UpdateRoleRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, AuthorizationService_UpdateRole_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authorizationServiceClient) DeleteRole(ctx context.Context, in *DeleteRoleRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, AuthorizationService_DeleteRole_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -205,6 +227,7 @@ type AuthorizationServiceServer interface {
 	ListPermissions(context.Context, *ListPermissionsRequest) (*ListPermissionsResponse, error)
 	// 修改权限信息
 	UpdatePermission(context.Context, *UpdatePermissionRequest) (*emptypb.Empty, error)
+	DeletePermission(context.Context, *DeletePermissionRequest) (*emptypb.Empty, error)
 	// 创建角色，返回创建出的角色（含 id）
 	CreateRole(context.Context, *CreateRoleRequest) (*Role, error)
 	// 获取角色信息
@@ -213,6 +236,7 @@ type AuthorizationServiceServer interface {
 	ListRoles(context.Context, *ListRolesRequest) (*ListRolesResponse, error)
 	// 修改角色信息
 	UpdateRole(context.Context, *UpdateRoleRequest) (*emptypb.Empty, error)
+	DeleteRole(context.Context, *DeleteRoleRequest) (*emptypb.Empty, error)
 	// 申请权限，返回创建出的申请记录（含 id）
 	CreateSubscription(context.Context, *CreateSubscriptionRequest) (*Subscription, error)
 	// 申请记录详情
@@ -241,6 +265,9 @@ func (UnimplementedAuthorizationServiceServer) ListPermissions(context.Context, 
 func (UnimplementedAuthorizationServiceServer) UpdatePermission(context.Context, *UpdatePermissionRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdatePermission not implemented")
 }
+func (UnimplementedAuthorizationServiceServer) DeletePermission(context.Context, *DeletePermissionRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeletePermission not implemented")
+}
 func (UnimplementedAuthorizationServiceServer) CreateRole(context.Context, *CreateRoleRequest) (*Role, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateRole not implemented")
 }
@@ -252,6 +279,9 @@ func (UnimplementedAuthorizationServiceServer) ListRoles(context.Context, *ListR
 }
 func (UnimplementedAuthorizationServiceServer) UpdateRole(context.Context, *UpdateRoleRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateRole not implemented")
+}
+func (UnimplementedAuthorizationServiceServer) DeleteRole(context.Context, *DeleteRoleRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteRole not implemented")
 }
 func (UnimplementedAuthorizationServiceServer) CreateSubscription(context.Context, *CreateSubscriptionRequest) (*Subscription, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateSubscription not implemented")
@@ -352,6 +382,24 @@ func _AuthorizationService_UpdatePermission_Handler(srv interface{}, ctx context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AuthorizationService_DeletePermission_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeletePermissionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthorizationServiceServer).DeletePermission(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthorizationService_DeletePermission_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthorizationServiceServer).DeletePermission(ctx, req.(*DeletePermissionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AuthorizationService_CreateRole_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CreateRoleRequest)
 	if err := dec(in); err != nil {
@@ -420,6 +468,24 @@ func _AuthorizationService_UpdateRole_Handler(srv interface{}, ctx context.Conte
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AuthorizationServiceServer).UpdateRole(ctx, req.(*UpdateRoleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthorizationService_DeleteRole_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteRoleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthorizationServiceServer).DeleteRole(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthorizationService_DeleteRole_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthorizationServiceServer).DeleteRole(ctx, req.(*DeleteRoleRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -538,6 +604,10 @@ var AuthorizationService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _AuthorizationService_UpdatePermission_Handler,
 		},
 		{
+			MethodName: "DeletePermission",
+			Handler:    _AuthorizationService_DeletePermission_Handler,
+		},
+		{
 			MethodName: "CreateRole",
 			Handler:    _AuthorizationService_CreateRole_Handler,
 		},
@@ -552,6 +622,10 @@ var AuthorizationService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UpdateRole",
 			Handler:    _AuthorizationService_UpdateRole_Handler,
+		},
+		{
+			MethodName: "DeleteRole",
+			Handler:    _AuthorizationService_DeleteRole_Handler,
 		},
 		{
 			MethodName: "CreateSubscription",

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Form, Input, Button, Card, message } from "antd";
 import { useNavigate, useParams } from "react-router-dom";
 import { accountApi } from "../../api/iam";
@@ -11,6 +11,7 @@ export default function EditAccountPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const showNotification = useApiErrorNotification();
+  const [version, setVersion] = useState<number>(0);
 
   useEffect(() => {
     fetchAccount();
@@ -18,11 +19,12 @@ export default function EditAccountPage() {
 
   const fetchAccount = async () => {
     try {
-      const response = await accountApi.get(parseInt(id || "0"));
+      const response = await accountApi.get(id || "");
       form.setFieldsValue({
         name: response.name,
         email: response.email,
       });
+      setVersion(response.version);
     } catch (error) {
       showNotification(error, "获取账号信息失败");
     } finally {
@@ -33,7 +35,7 @@ export default function EditAccountPage() {
   const onFinish = async (values: { name?: string; email?: string }) => {
     setSubmitting(true);
     try {
-      await accountApi.update(parseInt(id || "0"), values);
+      await accountApi.update(id || "", { ...values, version });
       message.success("账号更新成功");
       navigate('/account_management/account_list');
     } catch (error) {
@@ -42,10 +44,6 @@ export default function EditAccountPage() {
       setSubmitting(false);
     }
   };
-
-  if (loading) {
-    return <div>加载中...</div>;
-  }
 
   return (
     <div>
@@ -71,11 +69,15 @@ export default function EditAccountPage() {
               { type: "email", message: "请输入有效的邮箱格式!" }
             ]}
           >
-            <Input placeholder="请输入邮箱" />
-          </Form.Item>
+          <Input placeholder="请输入邮箱" />
+        </Form.Item>
+
+        <Form.Item label="版本" name="version" hidden initialValue={version}>
+          <Input />
+        </Form.Item>
 
           <Form.Item>
-            <Button type="primary" htmlType="submit" loading={submitting}>
+            <Button type="primary" htmlType="submit" loading={submitting} disabled={loading}>
               更新
             </Button>
             <Button style={{ marginLeft: 8 }} onClick={() => navigate('/account_management/account_list')}>

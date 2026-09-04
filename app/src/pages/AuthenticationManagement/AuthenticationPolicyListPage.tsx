@@ -1,6 +1,6 @@
 // AuthenticationPolicyListPage.jsx
 import React, { useState, useEffect } from "react";
-import { Table, Card, Button, message, Spin, Modal, Form, Select, Input, Tabs } from "antd";
+import { Table, Card, Button, message, Modal, Tabs } from "antd";
 import { PlusOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 
@@ -8,23 +8,11 @@ const { TabPane } = Tabs;
 
 export default function AuthenticationPolicyListPage() {
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(true);
   const [ssoPolicies, setSsoPolicies] = useState([]);
   const [mfaPolicies, setMfaPolicies] = useState([]);
   const [otpPolicies, setOtpPolicies] = useState([]);
-  const [policyTypes, setPolicyTypes] = useState([]);
   const [activeTab, setActiveTab] = useState("sso");
 
-  // 模拟获取认证策略类型
-  useEffect(() => {
-    // 实际中应该调用API获取
-    setPolicyTypes([
-      { id: "sso", name: "单点登录认证" },
-      { id: "mfa", name: "多重身份认证" },
-      { id: "otp", name: "一次性密码认证" }
-    ]);
-    setLoading(false);
-  }, []);
 
   // 模拟获取各类型认证策略
   useEffect(() => {
@@ -162,14 +150,6 @@ export default function AuthenticationPolicyListPage() {
       ),
     },
   ];
-
-  if (loading) {
-    return (
-      <div style={{ padding: "24px" }}>
-        <Spin size="large" tip="加载中..." />
-      </div>
-    );
-  }
 
   // 根据当前选中的标签页显示不同的表格
   const renderTableByTab = () => {

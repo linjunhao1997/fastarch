@@ -5,7 +5,9 @@ export interface Account {
   id: string;
   name: string;
   email: string;
-  kindId: string;
+  kind: string;
+  roleCodeList: string[];
+  version: number;
 }
 
 export interface Application {
@@ -16,28 +18,31 @@ export interface Application {
   enabledStatus: string;
 }
 
-interface Permission {
+export interface Permission {
   id: string;
   name: string;
   applicationId: number;
   permissionCode: string;
   enabledStatus: string;
+  version: number;
 }
 
-interface Role {
+export interface Role {
   id: string;
   name: string;
   applicationId: number;
   roleCode: string;
   enabledStatus: string;
+  permissionCodeList: string[];
+  version: number;
 }
 
-interface Subscription {
-  id: number;
-  sourceApplicationCode: number;
-  targetApplicationCode: number;
-  roleCodeList: number;
-  permissionCodeList: number;
+export interface Subscription {
+  id: string;
+  sourceApplicationCode: string;
+  targetApplicationCode: string;
+  roleCodeList: string[];
+  permissionCodeList: string[];
   applicantId: number;
   approverId: number;
   applicantName: string;
@@ -80,44 +85,59 @@ export const authApi = {
 };
 
 export const permissionApi = {
-  create: (data: { application_id: number; name: string; code: string; value: string; description: string }) =>
+  create: (data: { applicationId: number; name: string; code: string; value: string; description: string }) =>
     request<Permission>('/authorization/permissions', { method: 'POST', body: data }),
 
-  get: (id: number) =>
+  get: (id: string) =>
     request<Permission>(`/authorization/permissions/${id}`),
 
   list: (current_page: number = 1, page_size: number = 10) =>
     request<ListPermissionsResponse>(`/authorization/permissions?current_page=${current_page}&page_size=${page_size}`),
 
-  update: (id: number, data: { name?: string; enabled_status?: string }) =>
+  update: (id: string, data: { name?: string; enabledStatus?: string; version: number }) =>
     request<void>('/authorization/permissions', { method: 'PATCH', body: { id, ...data } }),
+
+  delete: (id: string) =>
+    request<void>(`/authorization/permissions/${id}`, { method: 'DELETE' }),
 };
 
 export const roleApi = {
-  create: (data: { name: string; role_code: string }) =>
+  create: (data: { name: string; roleCode: string }) =>
     request<Role>('/authorization/roles', { method: 'POST', body: data }),
 
-  get: (id: number) =>
+  get: (id: string) =>
     request<Role>(`/authorization/roles/${id}`),
 
   list: (current_page: number = 1, page_size: number = 10) =>
     request<ListRolesResponse>(`/authorization/roles?current_page=${current_page}&page_size=${page_size}`),
 
-  update: (id: number, data: { name?: string; enabled_status?: string; added_permission_code_list?: number[]; removed_permission_code_list?: number[] }) =>
+  update: (
+    id: string,
+    data: {
+      name?: string;
+      enabledStatus?: string;
+      addedPermissionCodeList?: string[];
+      removedPermissionCodeList?: string[];
+      version: number;
+    },
+  ) =>
     request<void>(`/authorization/roles/${id}`, { method: 'PATCH', body: { id, ...data } }),
+
+  delete: (id: string) =>
+    request<void>(`/authorization/roles/${id}`, { method: 'DELETE' }),
 };
 
 export const subscriptionApi = {
-  create: (data: { role_code_list: number; permission_code_list: number }) =>
+  create: (data: { roleCodeList: string[]; permissionCodeList: string[] }) =>
     request<Subscription>('/authorization/subscriptions', { method: 'POST', body: data }),
 
-  get: (id: number) =>
-    request<Subscription>(`/authorization/subscription/${id}`),
+  get: (id: string) =>
+    request<Subscription>(`/authorization/subscriptions/${id}`),
 
   list: (current_page: number = 1, page_size: number = 10) =>
     request<ListSubscriptionResponse>(`/authorization/subscriptions?current_page=${current_page}&page_size=${page_size}`),
 
-  update: (id: number, data: { role_code_list: number; permission_code_list: number }) =>
+  update: (id: string, data: { roleCodeList: string[]; permissionCodeList: string[] }) =>
     request<void>(`/authorization/subscriptions/${id}`, { method: 'PATCH', body: { id, ...data } }),
 };
 
@@ -128,23 +148,34 @@ export const accountApi = {
   list: (current_page: number = 1, page_size: number = 10) =>
     request<ListAccountsResponse>(`/account/accounts?current_page=${current_page}&page_size=${page_size}`),
 
-  get: (id: number) =>
+  get: (id: string) =>
     request<Account>(`/account/accounts/${id}`),
 
-  update: (id: number, data: { name?: string; email?: string }) =>
+  update: (id: string, data: { name?: string; email?: string; version: number }) =>
     request<void>(`/account/accounts/${id}`, { method: 'PATCH', body: { id, ...data } }),
+
+  updateRoles: (
+    accountId: string,
+    data: { addedRoleCodeList: string[]; removedRoleCodeList: string[] },
+  ) => request<void>(`/account/accounts/${accountId}/roles`, { method: 'PATCH', body: { accountId, ...data } }),
+
+  delete: (id: string) =>
+    request<void>(`/account/accounts/${id}`, { method: 'DELETE' }),
 };
 
 export const applicationApi = {
   create: (data: { name: string; description?: string }) =>
     request<Application>('/application/applications', { method: 'POST', body: data }),
 
-  get: (id: number) =>
+  get: (id: string) =>
     request<Application>(`/application/applications/${id}`),
 
   list: (current_page: number = 1, page_size: number = 10) =>
     request<ListApplicationsResponse>(`/application/applications?current_page=${current_page}&page_size=${page_size}`),
 
-  update: (id: number, data: { name?: string; description?: string; enabled_status?: string }) =>
+  update: (id: string, data: { name?: string; description?: string; enabledStatus?: string }) =>
     request<void>(`/application/applications/${id}`, { method: 'PATCH', body: { id, ...data } }),
+
+  delete: (id: string) =>
+    request<void>(`/application/applications/${id}`, { method: 'DELETE' }),
 };

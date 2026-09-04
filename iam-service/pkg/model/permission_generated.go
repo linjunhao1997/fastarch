@@ -12,4 +12,5 @@ const (
 	PermissionColumnDescription   = "description"
 	PermissionColumnApplicationId = "application_id"
 	PermissionColumnDisabled      = "disabled"
+	PermissionColumnVersion       = "version"
 )

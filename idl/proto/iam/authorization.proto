@@ -44,6 +44,12 @@ service AuthorizationService {
     };
   }
 
+  rpc DeletePermission(DeletePermissionRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/authorization/permissions/{id}"
+    };
+  }
+
   // 创建角色，返回创建出的角色（含 id）
   rpc CreateRole(CreateRoleRequest) returns (Role) {
     option (google.api.http) = {
@@ -71,6 +77,12 @@ service AuthorizationService {
     option (google.api.http) = {
       patch: "/authorization/roles/{id}"
       body: "*"
+    };
+  }
+
+  rpc DeleteRole(DeleteRoleRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/authorization/roles/{id}"
     };
   }
 
@@ -150,6 +162,7 @@ message UpdatePermissionRequest {
   int64 id = 1 [(buf.validate.field).required = true];
   string name = 2;
   string enabled_status = 3;
+  int64 version = 4 [(buf.validate.field).required = true];
 }
 
 message UpdateRoleRequest {
@@ -159,6 +172,15 @@ message UpdateRoleRequest {
   // 本次新增/移除的权限编码
   repeated string added_permission_code_list = 4;
   repeated string removed_permission_code_list = 5;
+  int64 version = 6 [(buf.validate.field).required = true];
+}
+
+message DeletePermissionRequest {
+  int64 id = 1 [(buf.validate.field).required = true];
+}
+
+message DeleteRoleRequest {
+  int64 id = 1 [(buf.validate.field).required = true];
 }
 
 message CreateSubscriptionRequest {
@@ -189,6 +211,7 @@ message Permission {
   int64 application_id = 3;
   string permission_code = 4;
   string enabled_status = 5;
+  int64 version = 6;
 }
 
 // 角色信息
@@ -198,6 +221,8 @@ message Role {
   int64 application_id = 3;
   string role_code = 4;
   string enabled_status = 5;
+  repeated string permission_code_list = 6;
+  int64 version = 7;
 }
 
 // 权限申请记录

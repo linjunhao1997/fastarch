@@ -1,14 +1,15 @@
-import React, { useState, useEffect } from "react";
-import { Flex, Input, Button, Table, message } from "antd";
+import { useState, useEffect } from "react";
+import { Flex, Input, Button, Table, Modal } from "antd";
 import { useNavigate } from "react-router";
 import { roleApi } from "../../api/iam";
 import { useApiErrorNotification } from "../../hooks/useApiError";
+import type { Role } from "../../api/iam";
 
 const { Search } = Input;
 
 export default function RoleManagementPage() {
   const navigate = useNavigate();
-  const [roles, setRoles] = useState<any[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(false);
   const [filters, setFilters] = useState({ name: "" });
   const showNotification = useApiErrorNotification();
@@ -41,6 +42,26 @@ export default function RoleManagementPage() {
     navigate('/authorization_management/role_create');
   };
 
+  const handleEditRole = (roleId: string) => {
+    navigate(`/authorization_management/role_edit/${roleId}`);
+  };
+
+  const handleDeleteRole = (role: Role) => {
+    Modal.confirm({
+      title: "删除角色",
+      content: `确定删除角色 ${role.name} 吗？`,
+      onOk: async () => {
+        try {
+          await roleApi.delete(role.id);
+          await fetchRoles();
+        } catch (error) {
+          showNotification(error, "删除角色失败");
+          throw error;
+        }
+      },
+    });
+  };
+
   const filteredRoles = roles.filter((role) =>
     !filters.name || role.name?.includes(filters.name)
   );
@@ -51,6 +72,16 @@ export default function RoleManagementPage() {
     { title: "角色编码", dataIndex: "roleCode", key: "roleCode" },
     { title: "所属应用", dataIndex: "applicationId", key: "applicationId" },
     { title: "状态", dataIndex: "enabledStatus", key: "enabledStatus" },
+    {
+      title: "操作",
+      key: "action",
+      render: (_: unknown, record: Role) => (
+        <Flex gap={0}>
+          <Button type="link" onClick={() => handleEditRole(record.id)}>编辑</Button>
+          <Button type="link" danger onClick={() => handleDeleteRole(record)}>删除</Button>
+        </Flex>
+      ),
+    },
   ];
 
   return (

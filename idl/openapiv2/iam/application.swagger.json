@@ -117,6 +117,37 @@
           "ApplicationService"
         ]
       },
+      "delete": {
+        "summary": "删除应用（仅当未被授权数据引用时可删除）",
+        "operationId": "ApplicationService_DeleteApplication",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "int64"
+          }
+        ],
+        "tags": [
+          "ApplicationService"
+        ]
+      },
       "patch": {
         "summary": "修改应用信息",
         "operationId": "ApplicationService_UpdateApplication",

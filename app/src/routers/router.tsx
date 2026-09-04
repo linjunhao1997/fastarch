@@ -1,4 +1,5 @@
 import { Link, createBrowserRouter } from "react-router-dom";
+import type { RouteObject } from "react-router-dom";
 import IndexPage from "../pages/IndexPage";
 import LoginPage from "../pages/LoginPage";
 import AccountListPage from "../pages/AccountManagement/AccountListPage";
@@ -11,13 +12,17 @@ import AuthenticationPolicyListPage from "../pages/AuthenticationManagement/Auth
 import CreateAuthenticationPolicyPage from "../pages/AuthenticationManagement/CreateAuthenticationPolicyPage";
 import EditAuthenticationPolicyPage from "../pages/AuthenticationManagement/EditAuthenticationPolicyPage";
 import PermissionListPage from "../pages/AuthorizationManagement/PermissionListPage";
+import CreatePermissionPage from "../pages/AuthorizationManagement/CreatePermissionPage";
+import EditPermissionPage from "../pages/AuthorizationManagement/EditPermissionPage";
 import RoleManagementPage from "../pages/AuthorizationManagement/RoleManagementPage";
+import CreateRolePage from "../pages/AuthorizationManagement/CreateRolePage";
+import EditRolePage from "../pages/AuthorizationManagement/EditRolePage";
 import PermissionSubscriptionPage from "../pages/AuthorizationManagement/PermissionSubscriptionPage";
 import AuthWrapper from "../components/AuthWrapper";
 import { AppstoreOutlined, KeyOutlined, SafetyOutlined, SecurityScanOutlined, UserSwitchOutlined } from "@ant-design/icons";
 
 
-export const routes =
+export const routes: RouteObject[] =
 [
     {
       path: "/login",
@@ -128,6 +133,16 @@ export const routes =
               element: <PermissionListPage />,
             },
             {
+              path: "permission_create",
+              handle: { breadcrumb: "创建权限" },
+              element: <CreatePermissionPage />,
+            },
+            {
+              path: "permission_edit/:id",
+              handle: { breadcrumb: "编辑权限" },
+              element: <EditPermissionPage />,
+            },
+            {
               path: "role_management",
               handle: {
                 key: "role_management",
@@ -136,6 +151,16 @@ export const routes =
 
               },
               element: <RoleManagementPage />,
+            },
+            {
+              path: "role_create",
+              handle: { breadcrumb: "创建角色" },
+              element: <CreateRolePage />,
+            },
+            {
+              path: "role_edit/:id",
+              handle: { breadcrumb: "编辑角色" },
+              element: <EditRolePage />,
             },
             {
               path: "permission_subscription",
@@ -160,7 +185,7 @@ export const router = createBrowserRouter(routes);
  * @param {Array} routes 路由配置数组
  * @returns {Array} Ant Design的MenuItems数组
  */
-export const convertRoutesToMenuItems = (routes) => {
+export const convertRoutesToMenuItems = (routes: RouteObject[]) => {
     return routes
       .map(route => {
         // 使用handle.key作为key，如果没有则使用path
@@ -197,6 +222,5 @@ export const convertRoutesToMenuItems = (routes) => {
         return null;
       })
       // 过滤掉返回值为null的项
-      .filter(item => item !== null);
+      .filter((item): item is NonNullable<typeof item> => item !== null);
   };
-  

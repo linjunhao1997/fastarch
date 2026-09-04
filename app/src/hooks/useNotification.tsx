@@ -2,7 +2,7 @@ import { notification } from "antd";
 import React, { createContext, useContext, useCallback, ReactNode } from "react";
 
 interface NotificationContextType {
-  showError: (message: string, description?: string) => void;
+  showError: (message: ReactNode, description?: ReactNode, onClick?: () => void) => void;
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
@@ -10,12 +10,13 @@ const NotificationContext = createContext<NotificationContextType | undefined>(u
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const [api, contextHolder] = notification.useNotification();
 
-  const showError = useCallback((message: string, description?: string) => {
+  const showError = useCallback((message: ReactNode, description?: ReactNode, onClick?: () => void) => {
     api.error({
       message: message,
       description: description,
       duration: 5,
       placement: "topRight",
+      onClick,
     });
   }, [api]);
 

@@ -4,6 +4,10 @@ import { useNotification } from "./useNotification";
 
 export function handleApiError(error: unknown, defaultMessage: string): void {
   console.error("API Error:", error);
+  if (error instanceof Error && error.name === "UnauthorizedError") {
+    return;
+  }
+
   let errorMessage = defaultMessage;
 
   if (error instanceof Error) {
@@ -11,7 +15,7 @@ export function handleApiError(error: unknown, defaultMessage: string): void {
   } else if (typeof error === "string") {
     errorMessage = error;
   } else if (error && typeof error === "object" && "message" in error) {
-    errorMessage = String((error as any).message) || defaultMessage;
+    errorMessage = String((error as { message?: unknown }).message) || defaultMessage;
   }
 
   message.error(errorMessage);
@@ -19,6 +23,10 @@ export function handleApiError(error: unknown, defaultMessage: string): void {
 
 export function getApiErrorAlert(error: unknown, defaultMessage: string): React.ReactNode {
   console.error("API Error:", error);
+  if (error instanceof Error && error.name === "UnauthorizedError") {
+    return null;
+  }
+
   let errorMessage = defaultMessage;
 
   if (error instanceof Error) {
@@ -26,7 +34,7 @@ export function getApiErrorAlert(error: unknown, defaultMessage: string): React.
   } else if (typeof error === "string") {
     errorMessage = error;
   } else if (error && typeof error === "object" && "message" in error) {
-    errorMessage = String((error as any).message) || defaultMessage;
+    errorMessage = String((error as { message?: unknown }).message) || defaultMessage;
   }
 
   return (
@@ -45,6 +53,13 @@ export function useApiErrorNotification() {
 
   const showNotification = useCallback((error: unknown, defaultMessage: string) => {
     console.error("[useApiErrorNotification] API Error:", error);
+    if (error instanceof Error && error.name === "UnauthorizedError") {
+      showError("请重新登录", "点击前往登录页", () => {
+        window.location.replace("/login");
+      });
+      return;
+    }
+
     let errorMessage = defaultMessage;
 
     if (error instanceof Error) {
@@ -52,7 +67,7 @@ export function useApiErrorNotification() {
     } else if (typeof error === "string") {
       errorMessage = error;
     } else if (error && typeof error === "object" && "message" in error) {
-      errorMessage = String((error as any).message) || defaultMessage;
+      errorMessage = String((error as { message?: unknown }).message) || defaultMessage;
     }
 
     console.log("[useApiErrorNotification] Showing notification:", errorMessage);
@@ -65,6 +80,10 @@ export function useApiErrorNotification() {
 
 export function showApiErrorNotification(error: unknown, defaultMessage: string): void {
   console.error("[showApiErrorNotification] API Error:", error);
+  if (error instanceof Error && error.name === "UnauthorizedError") {
+    return;
+  }
+
   let errorMessage = defaultMessage;
 
   if (error instanceof Error) {
@@ -72,7 +91,7 @@ export function showApiErrorNotification(error: unknown, defaultMessage: string)
   } else if (typeof error === "string") {
     errorMessage = error;
   } else if (error && typeof error === "object" && "message" in error) {
-    errorMessage = String((error as any).message) || defaultMessage;
+    errorMessage = String((error as { message?: unknown }).message) || defaultMessage;
   }
 
   console.log("[showApiErrorNotification] Showing notification:", errorMessage);

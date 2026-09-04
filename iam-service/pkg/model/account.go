@@ -12,7 +12,7 @@ type Account struct {
 	Id         int64     `gorm:"column:id;primaryKey"`
 	Code       string    `gorm:"column:code"`
 	Name       string    `gorm:"column:name"`
-	Email      string    `gorm:"column:email"`
+	Email      string    `gorm:"column:email;uniqueIndex"`
 	Status     string    `gorm:"column:status"`
 	Salt       string    `gorm:"column:salt"`
 	Password   string    `gorm:"column:password"`
@@ -31,8 +31,8 @@ func (a *Account) TableName() string {
 
 type RAccountRole struct {
 	Id        int64 `gorm:"column:id;primaryKey"`
-	AccountId int64 `gorm:"column:account_id"`
-	RoleId    int64 `gorm:"column:role_id"`
+	AccountId int64 `gorm:"column:account_id;uniqueIndex:uk_r_account_role_account_role"`
+	RoleId    int64 `gorm:"column:role_id;uniqueIndex:uk_r_account_role_account_role"`
 }
 
 func (a *RAccountRole) TableName() string {

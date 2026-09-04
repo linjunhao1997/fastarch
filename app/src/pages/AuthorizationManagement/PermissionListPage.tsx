@@ -1,14 +1,15 @@
-import React, { useState, useEffect } from "react";
-import { Flex, Input, Button, Table, message } from "antd";
+import { useState, useEffect } from "react";
+import { Flex, Input, Button, Table, Modal } from "antd";
 import { useNavigate } from "react-router";
 import { permissionApi } from "../../api/iam";
 import { useApiErrorNotification } from "../../hooks/useApiError";
+import type { Permission } from "../../api/iam";
 
 const { Search } = Input;
 
 export default function PermissionListPage() {
   const navigate = useNavigate();
-  const [permissions, setPermissions] = useState<any[]>([]);
+  const [permissions, setPermissions] = useState<Permission[]>([]);
   const [loading, setLoading] = useState(false);
   const [filters, setFilters] = useState({ name: "" });
   const showNotification = useApiErrorNotification();
@@ -41,6 +42,26 @@ export default function PermissionListPage() {
     navigate('/authorization_management/permission_create');
   };
 
+  const handleEditPermission = (permissionId: string) => {
+    navigate(`/authorization_management/permission_edit/${permissionId}`);
+  };
+
+  const handleDeletePermission = (permission: Permission) => {
+    Modal.confirm({
+      title: "删除权限",
+      content: `确定删除权限 ${permission.name} 吗？`,
+      onOk: async () => {
+        try {
+          await permissionApi.delete(permission.id);
+          await fetchPermissions();
+        } catch (error) {
+          showNotification(error, "删除权限失败");
+          throw error;
+        }
+      },
+    });
+  };
+
   const filteredPermissions = permissions.filter((permission) =>
     !filters.name || permission.name?.includes(filters.name)
   );
@@ -51,6 +72,16 @@ export default function PermissionListPage() {
     { title: "权限编码", dataIndex: "permissionCode", key: "permissionCode" },
     { title: "所属应用", dataIndex: "applicationId", key: "applicationId" },
     { title: "状态", dataIndex: "enabledStatus", key: "enabledStatus" },
+    {
+      title: "操作",
+      key: "action",
+      render: (_: unknown, record: Permission) => (
+        <Flex gap={0}>
+          <Button type="link" onClick={() => handleEditPermission(record.id)}>编辑</Button>
+          <Button type="link" danger onClick={() => handleDeletePermission(record)}>删除</Button>
+        </Flex>
+      ),
+    },
   ];
 
   return (

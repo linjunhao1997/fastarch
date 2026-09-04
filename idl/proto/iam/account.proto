@@ -42,6 +42,19 @@ service AccountService {
       body: "*"
     };
   }
+
+  rpc DeleteAccount(DeleteAccountRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/account/accounts/{id}"
+    };
+  }
+
+  rpc UpdateAccountRoles(UpdateAccountRolesRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      patch: "/account/accounts/{account_id}/roles"
+      body: "*"
+    };
+  }
 }
 
 message CreateAccountRequest {
@@ -66,6 +79,19 @@ message UpdateAccountRequest {
   int64 id = 1 [(buf.validate.field).required = true];
   string status = 2;
   string password = 3;
+  string name = 4;
+  string email = 5;
+  int64 version = 6 [(buf.validate.field).required = true];
+}
+
+message UpdateAccountRolesRequest {
+  int64 account_id = 1 [(buf.validate.field).required = true];
+  repeated string added_role_code_list = 2;
+  repeated string removed_role_code_list = 3;
+}
+
+message DeleteAccountRequest {
+  int64 id = 1 [(buf.validate.field).required = true];
 }
 
 
@@ -76,4 +102,6 @@ message Account {
   string email = 3;
   // 账号类型："0" 用户，"1" 系统
   string kind = 4;
+  repeated string role_code_list = 5;
+  int64 version = 6;
 }

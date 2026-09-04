@@ -46,6 +46,17 @@ func NewErrorWithCode(code string, grpcCode codes.Code, err error) *Error {
 }
 
 var (
-	ErrInvalidAccountPassword = NewErrorWithCode("1001001", codes.Unauthenticated, errors.New("invalid account password"))
-	ErrUpdateAccountBusy      = NewErrorWithCode("1001002", codes.FailedPrecondition, errors.New("update account busy"))
+	ErrInvalidAccountPassword   = NewErrorWithCode("1001001", codes.Unauthenticated, errors.New("invalid account password"))
+	ErrUpdateAccountBusy        = NewErrorWithCode("1001002", codes.FailedPrecondition, errors.New("update account busy"))
+	ErrApplicationReferenced    = NewErrorWithCode("1001003", codes.FailedPrecondition, errors.New("应用已被引用，请先解除引用"))
+	ErrEmailDuplicated          = NewErrorWithCode("1001004", codes.AlreadyExists, errors.New("邮箱已被占用"))
+	ErrRoleCodeDuplicated       = NewErrorWithCode("1001005", codes.AlreadyExists, errors.New("角色编码已被占用"))
+	ErrPermissionCodeDuplicated = NewErrorWithCode("1001006", codes.AlreadyExists, errors.New("权限编码已被占用"))
+	ErrAccountReferenced        = NewErrorWithCode("1001007", codes.FailedPrecondition, errors.New("账号已被绑定角色，请先解除绑定"))
+	ErrRoleReferenced           = NewErrorWithCode("1001008", codes.FailedPrecondition, errors.New("角色已被账号绑定，请先解除绑定"))
+	ErrPermissionReferenced     = NewErrorWithCode("1001009", codes.FailedPrecondition, errors.New("权限已被角色引用，请先解除引用"))
+	ErrRoleNotFound             = NewErrorWithCode("1001010", codes.InvalidArgument, errors.New("角色编码不存在"))
+	ErrPermissionNotFound       = NewErrorWithCode("1001011", codes.InvalidArgument, errors.New("权限编码不存在"))
+	ErrUpdateRoleBusy           = NewErrorWithCode("1001012", codes.FailedPrecondition, errors.New("角色已被他人修改，请刷新后重试"))
+	ErrUpdatePermissionBusy     = NewErrorWithCode("1001013", codes.FailedPrecondition, errors.New("权限已被他人修改，请刷新后重试"))
 )

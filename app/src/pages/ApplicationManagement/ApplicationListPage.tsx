@@ -1,14 +1,15 @@
-import React, { useState, useEffect } from "react";
-import { Flex, Input, Button, Table, message } from "antd";
+import { useState, useEffect } from "react";
+import { Flex, Input, Button, Table, Modal, message } from "antd";
 import { useNavigate } from "react-router";
 import { applicationApi } from "../../api/iam";
 import { useApiErrorNotification } from "../../hooks/useApiError";
+import type { Application } from "../../api/iam";
 
 const { Search } = Input;
 
 export default function ApplicationListPage() {
   const navigate = useNavigate();
-  const [applications, setApplications] = useState<any[]>([]);
+  const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(false);
   const [filters, setFilters] = useState({ name: "" });
   const showNotification = useApiErrorNotification();
@@ -41,8 +42,25 @@ export default function ApplicationListPage() {
     navigate('/application_management/create_application');
   };
 
-  const handleEditApplication = (appId: number) => {
+  const handleEditApplication = (appId: string) => {
     navigate(`/application_management/edit_application/${appId}`);
+  };
+
+  const handleDeleteApplication = (appId: string) => {
+    Modal.confirm({
+      title: "确认删除",
+      content: "确定要删除此应用吗？删除后不可恢复。",
+      onOk: async () => {
+        try {
+          await applicationApi.delete(appId);
+          message.success("删除成功");
+          await fetchApplications();
+        } catch (error) {
+          showNotification(error, "删除应用失败");
+          throw error;
+        }
+      },
+    });
   };
 
   const filteredApplications = applications.filter((app) =>
@@ -57,10 +75,15 @@ export default function ApplicationListPage() {
     {
       title: "操作",
       key: "action",
-      render: (_: any, record: any) => (
-        <Button type="link" onClick={() => handleEditApplication(record.id)}>
-          编辑
-        </Button>
+      render: (_: unknown, record: Application) => (
+        <Flex gap={8}>
+          <Button type="link" onClick={() => handleEditApplication(record.id)}>
+            编辑
+          </Button>
+          <Button type="link" danger onClick={() => handleDeleteApplication(record.id)}>
+            删除
+          </Button>
+        </Flex>
       ),
     },
   ];
