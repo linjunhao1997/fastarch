@@ -14,9 +14,11 @@ Phase 1 产出。日期：2026-09-05
 | email | string | **新增 uniqueIndex** | 唯一（FR-2），登录凭证（FR-4，密码不在本特性范围） |
 | name / kind / status / salt / password / ak / sk | — | 不变 | kind：`0`=用户 / `1`=系统 |
 | version | int64 | **改用** | 乐观锁已存在，改为客户端携带（D4） |
+| create_time / update_time | time.Time | 已有 | 审计时间戳（D16：service 层注入，响应回传） |
+| created_by / updated_by | int64 | **新增列** | 操作者账号 id，取 `auth.GetAccountId(ctx)`（D16） |
 | RoleList | []*Role | 不变 | many2many → `t_r_account_role`（joinForeignKey: account_id） |
 
-> 契约层 `Account { id, name, email, kind, role_code_list(新增) }`；status/salt/password 等敏感与内部字段不出契约（FR-4）。
+> 契约层 `Account { id, name, email, kind, role_code_list(新增), version, created_by/updated_by/create_time/update_time(新增·v4 只读回传) }`；status/salt/password 等敏感与内部字段不出契约（FR-4）。
 
 ### Role（角色）— 既有实体，表 `t_role`（`pkg/model/role.go`）
 
@@ -26,9 +28,11 @@ Phase 1 产出。日期：2026-09-05
 | code | string | **新增 uniqueIndex** | 角色编码，全局唯一（FR-6），**创建后不可变**（契约 Update 无此字段，已满足） |
 | name / description / application_id / disabled | — | 不变 | 展示字段可修改 |
 | version | int64 | **新增列** | 乐观锁（创建置 1，每次更新 +1，D4） |
+| create_time / update_time | time.Time | **新增列** | 审计时间戳（D16） |
+| created_by / updated_by | int64 | **新增列** | 操作者账号 id（D16） |
 | PermissionList | []*Permission | 不变 | many2many → `t_r_role_permission`（joinForeignKey: role_id） |
 
-> 契约层 `Role { id, name, role_code, enabled_status, permission_code_list(新增) }`。
+> 契约层 `Role { id, name, role_code, enabled_status, permission_code_list(新增), version, created_by/updated_by/create_time/update_time(新增·v4 只读回传) }`。
 
 ### Permission（权限）— 既有实体，表 `t_permission`（`pkg/model/permission.go`）
 
@@ -38,8 +42,16 @@ Phase 1 产出。日期：2026-09-05
 | code | string | **新增 uniqueIndex** | 权限编码，全局唯一（FR-10），**创建后不可变**（US3 场景 4：被引用也不得改码；契约层已满足） |
 | name / value / description / application_id / disabled / kind | — | 不变 | name 可修改（US3 场景 3） |
 | version | int64 | **新增列** | 乐观锁（D4） |
+| create_time / update_time | time.Time | **新增列** | 审计时间戳（D16） |
+| created_by / updated_by | int64 | **新增列** | 操作者账号 id（D16） |
 
-> 契约层 `Permission { id, name, application_id, permission_code, enabled_status }`。
+> 契约层 `Permission { id, name, application_id, permission_code, enabled_status, version, created_by/updated_by/create_time/update_time(新增·v4 只读回传) }`。
+
+### 审计字段规则（D16，宪法 XII）
+
+- 赋值责任归后端：Create 注入 create_time/update_time/created_by/updated_by；Update 仅注入 update_time/updated_by；created_by/create_time 任何更新路径不可改写
+- 操作者取 `auth.GetAccountId(ctx)`（无认证上下文时 0）
+- 契约请求消息不含审计字段；响应消息只读回传；前端列表只读展示，创建/编辑表单无审计输入项
 
 ## 关联表（引用事实的单一来源，FR-15）
 
@@ -98,3 +110,4 @@ Account ──< t_r_account_role >── Role ──< t_r_role_permission >─�
 | 列表翻页稳定 | Edge Case 1 | List 查询 `ORDER BY id ASC`（D11） |
 | 绑定/权限变更立即生效 | Edge Case 4 / FR-15 | 提交后主动失效权限快照 + 拦截器读穿重建 + TTL 5min 兜底（D6 v2） |
 | Redis 故障不级联、错误日志可诊断 | 宪法 X | 读穿降级、fail-closed 明确报错、Logging/TraceID 拦截器 + service 层结构化日志（D12/D13） |
+| 审计字段服务端注入、请求体不含、响应只读回传 | 宪法 XII / D16 | service 层显式赋值（Create 四项 / Update 两项）+ 契约响应消息回传 + 前端只读列 |

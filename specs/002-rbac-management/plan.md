@@ -6,7 +6,7 @@
 
 ## Summary
 
-RBAC 三域的**目标态**补齐：① 契约与实现为 Account / Role / Permission 新增 Delete RPC（引用约束：被绑定/被引用即拒绝，角色删除级联清除权限关联）；② 新增账号-角色绑定管理 `UpdateAccountRoles`（批量绑定/解绑、幂等、校验角色存在），`Account` 契约回带 `role_code_list`；③ 补齐唯一性（邮箱 / 角色编码 / 权限编码：service 层查重 + DB 唯一索引）；④ 乐观锁（version）从 Account 扩展至 Role / Permission（FR-18）；⑤ 修复既有 `UpdateRole` 早退 bug（仅传权限变更列表时被静默跳过）并对未知权限码显式拒绝；⑥ 前端：三个列表页补删除（二次确认）、EditRolePage 补权限配置、账号列表新增"绑定角色"弹窗。绑定/角色权限变更**立即生效**（v2：主动失效 + 读穿回源 + 短 TTL，见 research.md D6 v2——v1"下次登录生效"裁决与 spec 冲突已纠正）；⑦ 宪法 v1.2.0 原则 X 落地：鉴权链路 Redis 故障降级读穿 DB（D12）、contrib 新增结构化日志拦截器并接线 trace-id（D13）。
+RBAC 三域的**目标态**补齐：① 契约与实现为 Account / Role / Permission 新增 Delete RPC（引用约束：被绑定/被引用即拒绝，角色删除级联清除权限关联）；② 新增账号-角色绑定管理 `UpdateAccountRoles`（批量绑定/解绑、幂等、校验角色存在），`Account` 契约回带 `role_code_list`；③ 补齐唯一性（邮箱 / 角色编码 / 权限编码：service 层查重 + DB 唯一索引）；④ 乐观锁（version）从 Account 扩展至 Role / Permission（FR-18）；⑤ 修复既有 `UpdateRole` 早退 bug（仅传权限变更列表时被静默跳过）并对未知权限码显式拒绝；⑥ 前端：三个列表页补删除（二次确认）、EditRolePage 补权限配置、账号列表新增"绑定角色"弹窗。绑定/角色权限变更**立即生效**（v2：主动失效 + 读穿回源 + 短 TTL，见 research.md D6 v2——v1"下次登录生效"裁决与 spec 冲突已纠正）；⑦ 宪法 v1.2.0 原则 X 落地：鉴权链路 Redis 故障降级读穿 DB（D12）、contrib 新增结构化日志拦截器并接线 trace-id（D13）；⑧ 宪法 v1.4.0 原则 XI/XII 落地：菜单源唯一化（删除静态 MenuItems 死代码及其死链接/死菜单项，修复用户反馈的"角色管理菜单模块缺失"）、用户下拉菜单死入口处置、`permissionApi.update` URL 对齐契约、账号列表补角色绑定列展示（D14/D15）；⑨ 审计字段标准化与响应回传（用户补充，D16）：模型层统一 created_by/updated_by/create_time/update_time 四件套、service 层注入（操作者取 `auth.GetAccountId(ctx)`）、契约响应消息只读回传、前端列表只读展示——请求体不含审计字段。
 
 ## Technical Context
 
@@ -44,8 +44,10 @@ RBAC 三域的**目标态**补齐：① 契约与实现为 Account / Role / Perm
 | VIII. 技术裁决权 | ✅ 通过 — 沿用 buf/grpc-gateway/GORM/Redis/antd 既有技术路线，无新增平行技术体系（日志沿用 contrib 统一的 log/slog，D13） |
 | IX. 文档语言裁决 | ✅ 通过 — 本特性全部文档使用团队主语言中文 |
 | X. 分布式韧性，日志即线索（v1.2.0 新增） | ⚠️ 设计后满足 — ① 高可用：服务无状态（状态在 JWT+Redis+MySQL）、Redis 故障降级读穿 DB（D12/D6-②），消除现状"快照过期即全体非 admin 鉴权失败"的级联缺陷；② 分布式并发：D2 唯一索引 + D4 乐观锁 + D7 事务幂等已闭合；③ 异常日志清晰：D13 新增 Logging/TraceID 拦截器（method/code/业务码/duration/trace_id）+ service 层错误路径结构化日志（底层错误仅入日志不透出客户端）。全部转化为强制设计约束 D6 v2/D12/D13 |
+| XI. 交互完整，入口即行动（v1.3.0 新增） | ⚠️ 现状缺口，设计后满足 — 用户反馈"角色管理菜单模块缺失"；勘察发现双菜单源（router 派生 + `routers/index.tsx` 静态 MenuItems 死代码，后者含 `/authrization_management/*` 拼写死链接与"部门架构/岗位角色"死菜单项）及 IndexPage 用户下拉三个死入口（个人中心/系统设置/退出登录）。处置（D14）：菜单源唯一化为路由派生、删除死代码与死菜单项、退出登录实装、无功能入口移除；菜单可达性纳入 quickstart 步骤 5 验收 |
+| XII. 前后端契约对齐，全量暴露与最小提交（v1.4.0 新增） | ⚠️ 现状缺口，设计后满足 — 逐项对照契约接口与前端调用（D15）：`permissionApi.update` URL 缺 `{id}` 路径段 → 修复；`Account.role_code_list` 已回填但列表未展示 → 补"绑定角色"列；CheckPermission 为服务间调用豁免；审计字段（用户补充 D16）：模型层三域不统一（Account 仅时间戳、Role/Permission 全无）→ 统一四件套并由 service 层注入、契约响应消息只读回传、前端列表只读展示；请求消息与前端请求体不含审计字段 → 原则 XII 完整闭合 |
 
-**结论**：无阻断性违规；⚠️ 项均已转化为本特性的强制设计约束（D4/D5、D8、D6 v2/D12/D13）。
+**结论**：无阻断性违规；⚠️ 项均已转化为本特性的强制设计约束（D4/D5、D8、D6 v2/D12/D13、D14/D15）。
 
 ## Project Structure
 
@@ -67,21 +69,21 @@ specs/002-rbac-management/
 
 ```text
 idl/
-├── proto/iam/account.proto          # [修改] 新增 DeleteAccount / UpdateAccountRoles RPC；Account 增加 role_code_list；UpdateAccountRequest 增加 version
-├── proto/iam/authorization.proto    # [修改] 新增 DeleteRole / DeletePermission RPC；Role 增加 permission_code_list；UpdateRoleRequest / UpdatePermissionRequest 增加 version
+├── proto/iam/account.proto          # [修改] 新增 DeleteAccount / UpdateAccountRoles RPC；Account 增加 role_code_list；UpdateAccountRequest 增加 version；Account 增加 created_by/updated_by/create_time/update_time 只读回传（D16）
+├── proto/iam/authorization.proto    # [修改] 新增 DeleteRole / DeletePermission RPC；Role 增加 permission_code_list；UpdateRoleRequest / UpdatePermissionRequest 增加 version；CheckPermission 注释注明服务间调用豁免（D15）；Role/Permission 增加审计字段只读回传（D16）
 ├── pb/iam/                          # [生成] protoc.sh 重新生成
 └── openapiv2/iam/                   # [生成] swagger 同步更新
 
 iam-service/
-├── pkg/model/account.go             # [修改] email 唯一索引；RAccountRole 补 (account_id, role_id) 唯一索引并纳入迁移清单
-├── pkg/model/role.go                # [修改] code 唯一索引；新增 version 列
-├── pkg/model/permission.go          # [修改] code 唯一索引；新增 version 列
+├── pkg/model/account.go             # [修改] email 唯一索引；RAccountRole 补 (account_id, role_id) 唯一索引并纳入迁移清单；新增 created_by/updated_by 列（D16）
+├── pkg/model/role.go                # [修改] code 唯一索引；新增 version 列；新增 create_time/update_time/created_by/updated_by 列（D16）
+├── pkg/model/permission.go          # [修改] code 唯一索引；新增 version 列；新增 create_time/update_time/created_by/updated_by 列（D16）
 ├── pkg/auth/auth_interceptor.go     # [修改] 缓存未命中（redis.Nil）读穿回源：DB 重建权限快照后继续校验（D6-②/D12）；Redis 其他故障 fail-closed + 结构化日志
 ├── pkg/constant/cache_key.go        # [修改] 权限快照 TTL 常量（30min → 5min，D6-③）
-├── pkg/service/account_service.go            # [修改] 邮箱查重；DeleteAccount（引用约束）；UpdateAccountRoles（绑定/解绑、幂等、角色存在校验、提交后失效权限快照）；UpdateAccount 改用客户端 version
-├── pkg/service/account_service_test.go       # [新增] service 层测试（含缓存失效，miniredis）
-├── pkg/service/authorization_service.go      # [修改] 编码查重；DeleteRole（引用约束+级联清权限关联）/ DeletePermission（引用约束）；修复 UpdateRole 早退 bug；未知权限码拒绝；乐观锁；权限集合变更后失效绑定账号快照；CheckPermission 读穿回源；错误路径结构化日志
-├── pkg/service/authorization_service_test.go # [新增] service 层测试（含早退 bug 回归、缓存失效用例）
+├── pkg/service/account_service.go            # [修改] 邮箱查重；DeleteAccount（引用约束）；UpdateAccountRoles（绑定/解绑、幂等、角色存在校验、提交后失效权限快照）；UpdateAccount 改用客户端 version；Create/Update 注入审计字段（D16）
+├── pkg/service/account_service_test.go       # [新增] service 层测试（含缓存失效，miniredis；审计字段注入断言，D16）
+├── pkg/service/authorization_service.go      # [修改] 编码查重；DeleteRole（引用约束+级联清权限关联）/ DeletePermission（引用约束）；修复 UpdateRole 早退 bug；未知权限码拒绝；乐观锁；权限集合变更后失效绑定账号快照；CheckPermission 读穿回源；错误路径结构化日志；Create/Update 注入审计字段（D16）
+├── pkg/service/authorization_service_test.go # [新增] service 层测试（含早退 bug 回归、缓存失效用例、审计字段注入断言，D16）
 └── pkg/service/service_error.go              # [修改] 新增 RBAC 域业务错误码（唯一性 / 引用 / 不存在 / 并发冲突）
 
 idl/ & contrib/
@@ -90,10 +92,13 @@ idl/ & contrib/
 └── contrib/pkg/server/grpcserver/server.go   # [修改] 默认拦截器链调整为 Recovery → TraceID → Logging → Validation → ErrorDetails（D13）
 
 app/src/
-├── api/iam.ts                                             # [修改] accountApi 增 delete/updateRoles；roleApi/permissionApi 增 delete；update 系列携带 version
-├── pages/AccountManagement/AccountListPage.tsx            # [修改] 删除按钮（二次确认）+ "绑定角色"弹窗（多选角色 → 增/减增量提交）
-├── pages/AuthorizationManagement/RoleManagementPage.tsx   # [修改] 删除按钮（二次确认）
-├── pages/AuthorizationManagement/PermissionListPage.tsx   # [修改] 删除按钮（二次确认）
+├── api/iam.ts                                             # [修改] accountApi 增 delete/updateRoles；roleApi/permissionApi 增 delete；update 系列携带 version；permissionApi.update URL 修正为 /authorization/permissions/{id}（D15）；三个 interface 增审计只读字段（D16）
+├── routers/index.tsx                                      # [删除] 静态 MenuItems 死代码（含 /authrization_management/* 死链接与"部门架构/岗位角色"死菜单项），菜单源唯一化为路由派生（D14）
+├── routers/router.tsx                                     # [修改] 菜单派生元数据核对：每组入口 label/路由可达，无功能菜单项不注册（D14）
+├── pages/IndexPage.tsx                                    # [修改] 用户下拉菜单死入口处置："退出登录"实装（清令牌跳 /login），"个人中心/系统设置"移除（D14）
+├── pages/AccountManagement/AccountListPage.tsx            # [修改] 删除按钮（二次确认）+ "绑定角色"弹窗（多选角色 → 增/减增量提交）+ 列表补"绑定角色"列（role_code_list 展示，D15）+ 审计只读列（D16）
+├── pages/AuthorizationManagement/RoleManagementPage.tsx   # [修改] 删除按钮（二次确认）+ 审计只读列（D16）
+├── pages/AuthorizationManagement/PermissionListPage.tsx   # [修改] 删除按钮（二次确认）+ 审计只读列（D16）
 └── pages/AuthorizationManagement/EditRolePage.tsx         # [修改] 权限配置区块（当前权限回显 + 批量增/减，提交增量列表）
 ```
 

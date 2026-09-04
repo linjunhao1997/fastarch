@@ -1,6 +1,6 @@
 # Research: RBAC 基础管理（002）
 
-Phase 0 产出。逐项消解 Technical Context 与 spec 中的决策点。日期：2026-09-05（v2：按宪法 v1.2.0 原则 X 复核，重写 D6、新增 D12/D13）
+Phase 0 产出。逐项消解 Technical Context 与 spec 中的决策点。日期：2026-09-05（v2：按宪法 v1.2.0 原则 X 复核，重写 D6、新增 D12/D13；v3：按宪法 v1.4.0 原则 XI/XII 复核，新增 D14/D15；v4：应用户补充，新增 D16 审计字段标准化）
 
 > 现状勘察结论（本文件决策的依据）：Account/Role/Permission 均无 Delete RPC；邮箱/角色编码/权限编码无唯一性检查也无 DB 唯一索引；`t_r_account_role` 关联表与 GORM 关联已存在但无任何 API 与 UI；`UpdateRole` 存在早退 bug（仅传权限变更列表时被静默跳过）；登录时权限快照写入 Redis（TTL 30 分钟）且无失效机制；auth 拦截器缓存未命中时直接返回原始 Redis 错误（快照过期或 Redis 重启即全体非 admin 请求鉴权失败，无回源、无结构化日志）；Account 已有 version 乐观锁（但 version 未随请求携带），Role/Permission 无并发防护。
 
@@ -207,3 +207,86 @@ authorization.proto 对称新增 `DeleteRole`（DELETE `/authorization/roles/{id
 **Rationale**: spec Edge Case 要求翻页"稳定且不重复、不遗漏"；无序分页在 MySQL 下不保证稳定，id 单调递增（krand 趋势递增）是最廉价且无歧义的稳定键。
 
 **Alternatives considered**: 按 create_time 排序：同秒创建顺序不稳定，仍需 id 作次级键，直接以 id 为主键更简。
+
+---
+
+## D14: 前端导航完整性与单一菜单源（宪法 v1.4.0 原则 XI）
+
+**现状勘察**：前端存在**两套菜单源**——
+1. 实际渲染源：`IndexPage.tsx` 经 `convertRoutesToMenuItems(routes)` 从 `routers/router.tsx` 派生菜单；`role_management` 路由（`/authorization_management/role_management` → `RoleManagementPage`）已存在且 handle.label 齐备；
+2. 死代码源：`routers/index.tsx` 静态 `MenuItems` 未被任何组件引用，其中含拼写错误死链接（`/authrization_management/*`，少一个 `o`，指向不存在的路由）与两个无链接死菜单项（"部门架构""岗位角色"）。
+
+用户反馈"RBAC 缺少角色管理菜单页面模块"与上述现状吻合：双菜单源并存 + 死链接使导航可达性不可靠。另勘察出 `IndexPage.tsx` 用户下拉菜单三个死入口（"个人中心""系统设置""退出登录"均无 onClick）。
+
+**Decision**:
+1. **菜单源唯一化**：删除 `routers/index.tsx` 的静态 `MenuItems`（死代码），菜单仅由 `routers/router.tsx` 的路由配置派生——路由与菜单单一数据源，杜绝再次出现"菜单有、路由无"或"路由有、菜单无"的漂移（宪法 XI + V）；
+2. **入口可达性验证**：菜单中"账号管理 / 认证管理 / 权限管理（含角色管理）/ 应用管理"每组入口必须可点击并落到真实页面组件，以 quickstart 步骤 5 逐项验收；
+3. **死菜单项处置**："部门架构""岗位角色"无对应功能实现，按宪法 XI"未实现的入口必须隐藏"直接移除，不得保留假入口；
+4. **用户下拉菜单**：'退出登录' 实装（清除本地令牌并跳转 `/login`）；"个人中心""系统设置"无对应页面，移除，不得以死项示人。
+
+**Rationale**: 宪法 XI 要求每个可见入口必须实际触发动作，死链接与死菜单项视为交付缺陷；菜单由路由派生是消除两源漂移的结构性解法，且不引入新机制（router.tsx 已具备 handle 元数据）。
+
+**Alternatives considered**:
+- 修正静态 MenuItems 拼写并维护两套菜单：治标不治本，两源漂移仍会复发，否决；
+- 保留"部门架构/岗位角色"并加"开发中"提示：本特性范围内无对应 spec 能力，保留即违反宪法 XI 的"不得以假入口误导"，否决；
+- 个人中心/系统设置以 `message.info('未开放')` 提示代替移除：同样构成可见但无真实行为的入口，否决。
+
+---
+
+## D15: 前后端契约对齐修复（宪法 v1.4.0 原则 XII）
+
+**现状勘察**（对照 `idl/proto/iam/*.proto` 全量 HTTP 接口与 `app/src/api/iam.ts`、各页面列配置）：
+
+| 契约接口 | 前端使用 | 结论 |
+| --- | --- | --- |
+| Account: Create/Get/List/Update/Delete/UpdateAccountRoles | accountApi 全覆盖 | ✅ |
+| Role: Create/Get/List/Update/Delete | roleApi 全覆盖 | ✅ |
+| Permission: Create/Get/List/Update/Delete | permissionApi 全覆盖，但 `update` PATCH 到 `/authorization/permissions`（**缺 `{id}` 路径段**，契约为 `/authorization/permissions/{id}`） | ❌ 修复 |
+| Subscription: Create/Get/List/Update | subscriptionApi 全覆盖 | ✅ |
+| CheckPermission | 服务间鉴权调用，非管理界面能力 | 豁免（契约注明调用方为各 xxx-service） |
+
+字段对齐：
+- **契约无审计字段**：`Account` / `Role` / `Permission` 消息均不含 created_by / updated_by / create_time / update_time，创建与修改请求体天然不含审计字段——宪法 XII"审计字段不进请求体、不在表单出现"在契约层已满足，无需改动；
+- **展示缺口**：`Account.role_code_list` 已回填但账号列表页未展示（FR-1 要求绑定状态可见），须在列表补"绑定角色"列；
+- Role / Permission 列表已展示契约全部业务字段（id、name、编码、applicationId、enabledStatus）。
+
+**Decision**:
+1. 修正 `permissionApi.update` 请求 URL 为 `/authorization/permissions/${id}`（与契约一致，id 不再重复塞入 body）；
+2. 账号列表补"绑定角色"列（渲染 `role_code_list` 标签；同时作为"按绑定状态筛选"的数据基础）；
+3. `Account` / `Role` / `Permission` 列表列集合与契约业务字段一一核对为验收项，纳入 quickstart 步骤 5；
+4. `CheckPermission` 在契约注释中注明其调用方为后端服务间鉴权，不纳入管理界面功能核对范围。
+
+**Rationale**: 宪法 XII 将后端契约视为前端能力完备性清单：未使用的接口即前端功能未实现，未展示的字段即展示缺口。修复收敛在 `api/iam.ts` 与列表页列配置，无范围膨胀。
+
+**Alternatives considered**:
+- 接受 `/authorization/permissions`（body 带 id）作为别名：破坏契约唯一权威，绕过路径参数校验，否决；
+- 为审计字段（create_time 等）在列表只读展示而扩展契约：本特性 spec 未要求审计可见性，扩契约属范围膨胀，否决（如需，另行立项）。
+
+> **v4 修订说明**：D15 原裁决"审计字段不扩契约"基于当时 spec 范围；应用户明确补充要求"检查后端模型是否有审计字段，并需要在响应中返回"，本版新增 D16，推翻上条 Alternatives 中的"不扩契约"结论——审计字段扩展纳入本特性范围（仍是只读回传，不进请求体，与宪法 XII 完全一致）。
+
+---
+
+## D16: 审计字段标准化与响应回传（用户补充要求，宪法 v1.4.0 原则 XII）
+
+**现状勘察**：
+- **模型层**：`t_account`（model/account.go）已有 `CreateTime` / `UpdateTime`，**无**操作者字段；`t_role`（role.go）与 `t_permission`（permission.go）**完全没有任何审计字段**——三域不统一；
+- **契约层**：`Account` / `Role` / `Permission` 消息均无审计字段，前端无从展示；
+- **操作者身份**：auth 拦截器已将 account_id 写入 context（`context.WithValue(ctx, contextAccountId, accountId)`），`auth/common.go` 提供按 ctx 读取的 getter——服务端注入操作者**无需新增基础设施**。
+
+**Decision**:
+1. **模型层统一审计四件套**（GORM AutoMigrate 自动补列）：
+   - `Account`：补 `CreatedBy int64`（column:created_by）、`UpdatedBy int64`（column:updated_by）；保留既有 CreateTime/UpdateTime；
+   - `Role` / `Permission`：补 `CreateTime time.Time`、`UpdateTime time.Time`、`CreatedBy int64`、`UpdatedBy int64`，命名与 tag 与 Account 完全一致；
+2. **service 层服务端注入**（赋值责任归后端，客户端请求体不出现审计字段）：
+   - Create：填 create_time / update_time（当前时间）与 created_by / updated_by（`auth.GetAccountId(ctx)`，无认证上下文时 0）；
+   - Update：仅填 update_time / updated_by；created_by / create_time 不可被任何更新路径改写；
+3. **契约层只读回传**：`Account` / `Role` / `Permission` 三个**响应**消息各增 `string created_by`、`string updated_by`（账号 id 字符串化，与 `Account.id` 呈现一致）、`google.protobuf.Timestamp create_time`、`update_time`（grpc-gateway JSON 自动渲染 RFC3339）；**请求消息不含任何审计字段**；
+4. **前端只读展示**：三个列表页补"创建人 / 创建时间 / 修改人 / 修改时间"只读列；创建/编辑表单不含审计输入项，请求体不含审计字段（`api/iam.ts` 类型与调用同步）；
+5. **测试锁定**：service 测试断言 Create/Update 后审计字段注入正确（含"更新不改写 created_by/create_time"回归）。
+
+**Rationale**: 用户明确要求审计字段在响应中返回；现状三域模型不一致是缺陷而非现状合理性；操作者上下文已存在，注入成本仅限 service 层显式赋值；只读回传形态与宪法 XII"审计字段由后端权威生成、如需展示仅只读"完全对齐。
+
+**Alternatives considered**:
+- GORM autoCreateTime/autoUpdateTime 自动时间戳：只覆盖时间不覆盖操作者，且隐式行为不利测试断言，显式赋值语义最清，否决；
+- 回传操作者姓名而非 id：需在写路径/读路径联查账号名，成本与耦合上升；回传 id 与 `Account.id` 呈现一致，前端如需名称展示另行立项，否决；
+- 仅补齐 Role/Permission 时间字段、不动操作者：三域仍不统一，且不满足"返回操作者"诉求，否决。

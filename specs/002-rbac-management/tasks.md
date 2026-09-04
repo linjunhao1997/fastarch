@@ -2,7 +2,7 @@
 
 **Input**: Design documents from `/specs/002-rbac-management/`
 
-**Prerequisites**: plan.md ✅（v2） | spec.md ✅ | research.md ✅（v2：D6 修订、D12/D13 新增） | data-model.md ✅（v2） | contracts/ ✅（account-service.proto、authorization-service.proto） | quickstart.md ✅（v2）
+**Prerequisites**: plan.md ✅（v4） | spec.md ✅ | research.md ✅（v4：D6 修订、D12/D13、D14/D15、D16 新增） | data-model.md ✅（v4） | contracts/ ✅（account-service.proto、authorization-service.proto，v4 含审计字段） | quickstart.md ✅（v4）
 
 **Tests**: 宪法 VII 与 plan.md 将测试列为**强制约束**——每个 US 阶段先写测试（跑出 FAIL）再实现。
 
@@ -164,7 +164,7 @@
 
 - [X] T037 [P] `cd iam-service && go vet ./... && go test ./pkg/service/...` 全绿；`go build ./...` 无警告
 - [X] T038 [P] `cd app && npm run lint`（及类型检查）通过；确认无 `any` 引入（宪法 I）
-- [ ] T039 按 `specs/002-rbac-management/quickstart.md` 完成端到端验证（步骤 1–5 全部场景 + 步骤 4.3 生效时机/读穿回源/Redis 故障场景 + 步骤 5.6/5.7），记录结果；重点核对：存量唯一索引迁移成功、早退 bug 回归、绑定变更立即生效（不重新登录）、读穿回源快照重建、Redis 故障 fail-closed 明确报错、日志含 trace_id/业务码、三类引用约束拒绝提示（依赖 Phase 9 完成）
+- [ ] T039 按 `specs/002-rbac-management/quickstart.md` 完成端到端验证（步骤 1–5 全部场景 + 步骤 4.3 生效时机/读穿回源/Redis 故障场景 + 步骤 5.0 导航完整性 / 5.6 生效即时性 / 5.7 日志可诊断 / 5.8 契约对齐抽检），记录结果；重点核对：存量唯一索引迁移成功、早退 bug 回归、绑定变更立即生效（不重新登录）、读穿回源快照重建、Redis 故障 fail-closed 明确报错、日志含 trace_id/业务码、三类引用约束拒绝提示、角色管理菜单可达、审计字段只读回传且请求体不含（依赖 Phase 9/10/11 完成）
 
 ---
 
@@ -191,6 +191,38 @@
 
 ---
 
+## Phase 10: v3 修订 — 导航完整性与契约对齐（宪法 v1.4.0 原则 XI/XII）
+
+**Purpose**: 落地 research.md D14（菜单源唯一化、死入口处置，修复用户反馈的"角色管理菜单模块缺失"）与 D15（契约对齐修复）
+
+- [X] T052 [P] 删除 `app/src/routers/index.tsx`（静态 MenuItems 死代码：含 `/authrization_management/*` 拼写死链接与"部门架构/岗位角色"死菜单项）；删除前 `grep -rn "from \"../routers\"\|from \"./routers/index\"\|routers/index" app/src/` 确认无其他引用（research.md D14）
+- [X] T053 [P] `app/src/routers/router.tsx`：核对菜单派生元数据——"账号管理 / 认证管理 / 权限管理（权限列表、角色管理、权限订阅）/ 应用管理"每组入口 handle.label 与路由路径一致且可达；确认无对应功能的路由项不注册（research.md D14）
+- [X] T054 [P] `app/src/pages/IndexPage.tsx`：用户下拉菜单处置——"退出登录"实装（清除本地令牌/存储并 `navigate("/login")`）；移除"个人中心""系统设置"死项（research.md D14）
+- [X] T055 [P] `app/src/api/iam.ts`：`permissionApi.update` 请求 URL 由 `/authorization/permissions` 修正为 `/authorization/permissions/${id}`（与契约路径参数一致，id 不再重复塞入 body）（research.md D15）
+- [X] T056 [P] `app/src/pages/AccountManagement/AccountListPage.tsx`：列表补"绑定角色"列——渲染 `roleCodeList` 为标签（Tag 列表，空值显示"—"）（research.md D15）
+
+**Checkpoint**: 菜单无死项、角色管理入口可达、permissionApi.update 实际发出 `PATCH /authorization/permissions/{id}`、账号列表可见绑定角色
+
+---
+
+## Phase 11: v4 修订 — 审计字段标准化与响应回传（用户补充要求，research.md D16）
+
+**Purpose**: 后端模型统一审计四件套（created_by/updated_by/create_time/update_time），service 层服务端注入，契约响应消息只读回传，前端列表只读展示；请求消息与前端请求体不含审计字段（宪法 XII）
+
+**⚠️ CRITICAL**: T058（契约合入与生成）阻塞 T060–T063；T059（模型）阻塞 T061
+
+- [X] T057 [P] 同步契约增量设计产物：[contracts/account-service.proto](../002-rbac-management/contracts/account-service.proto) 与 [contracts/authorization-service.proto](../002-rbac-management/contracts/authorization-service.proto) 的 `Account` / `Role` / `Permission` 消息补 `created_by` / `updated_by`（string，账号 id）、`create_time` / `update_time`（google.protobuf.Timestamp）只读回传字段及 timestamp import（已完成于本轮，实施时核对与 `idl/proto/iam/` 的字段号对齐即可）（research.md D16）
+- [X] T058 `idl/proto/iam/account.proto` 与 `authorization.proto`：`Account` / `Role` / `Permission` 响应消息按 T057 字段号增补审计字段（import `google/protobuf/timestamp.proto`）；运行 `cd idl/proto && ./protoc.sh` 重新生成；`cd iam-service && go build ./...`（research.md D16；依赖 T057）
+- [X] T059 [P] `iam-service/pkg/model/account.go`：新增 `CreatedBy int64`（column:created_by）、`UpdatedBy int64`（column:updated_by）；`iam-service/pkg/model/role.go` 与 `permission.go`：新增 `CreateTime time.Time`（column:create_time）、`UpdateTime time.Time`（column:update_time）、`CreatedBy`、`UpdatedBy`，命名与 tag 和 Account 完全一致；启动 `go run . grpc` 验证 AutoMigrate 落库（research.md D16）
+- [X] T060 ⚠️（先写，确认 FAIL）[P] `iam-service/pkg/service/account_service_test.go` 与 `authorization_service_test.go`：追加审计字段用例——Create 后 create_time/update_time 非零且 created_by/updated_by = 注入的操作者 id；Update 后 update_time/updated_by 更新而 **created_by/create_time 保持不变**（回归锁定）（research.md D16；依赖 T058/T059）
+- [X] T061 `iam-service/pkg/service/account_service.go` 与 `authorization_service.go`：CreateXxx 注入四项审计字段、UpdateXxx 仅注入 update_time/updated_by（操作者取 `auth.GetAccountId(ctx)`，无认证上下文时 0；显式赋值，不用 GORM autoCreateTime）；Get/List 响应回填审计字段（时间转 google.protobuf.Timestamp）（research.md D16；依赖 T058/T059/T060）
+- [X] T062 [P] `app/src/api/iam.ts`：`Account` / `Role` / `Permission` interface 增 `createdBy` / `updatedBy`（string）、`createTime` / `updateTime`（string，RFC3339）只读字段；三个列表页（`AccountListPage.tsx` / `RoleManagementPage.tsx` / `PermissionListPage.tsx`）补"创建人 / 创建时间 / 修改人 / 修改时间"只读列；核对创建/编辑表单无审计输入项、update/create 请求体不含审计字段（research.md D15/D16；依赖 T058）
+- [X] T063 `cd iam-service && go vet ./... && go test ./pkg/service/... && go build ./...` 全绿；`cd app && npm run lint` 通过（依赖 T052–T062）
+
+**Checkpoint**: 菜单与契约对齐完成、审计字段服务端注入并只读回传——T039 可执行
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -201,7 +233,9 @@
   - US4 的 T031（绑定弹窗选项来自 roleApi.list）在运行时依赖角色数据存在，但**代码层面不依赖 US2**
   - US5 的引用约束测试（T032）用到绑定关系，**实现顺序建议在 US4 之后**（或同分支后合并验证）
 - **v2 修订 (Phase 9)**: 依赖 Phase 3–7（T044–T048 在既有 UpdateAccountRoles/UpdateRole/DeleteRole 实现之上叠加缓存失效与读穿逻辑）；T041–T043、T050 与既有实现无依赖可先行
-- **Polish (Phase 8)**: T037/T038 可与 Phase 9 并行；**T039 依赖 Phase 9 完成**
+- **v3 修订 (Phase 10)**: 无后端依赖（纯前端），可与 Phase 9 并行实施
+- **v4 修订 (Phase 11)**: T057 先行（设计产物同步）；T058 依赖 T057；T059 独立可并行；T060 依赖 T058+T059；T061 依赖 T058/T059/T060；T062 依赖 T058；模型新增列（T059）导致 T058 生成代码在 T059 前可能因 service 回填缺列编译不完整，属预期——按序执行
+- **Polish (Phase 8)**: T037/T038 可与 Phase 9/10/11 并行；**T039 依赖 Phase 9/10/11 全部完成**
 
 ### Within Each User Story
 
@@ -231,6 +265,13 @@ Task: "go.mod 引入 miniredis（T040）"
 Task: "grpclib 新增 Logging 拦截器（T041）"
 Task: "cache_key.go TTL 调整（T043）"
 Task: "前端提示文案调整（T050）"
+
+# Phase 10 全部可并行（互不依赖、纯前端不同文件）：
+Task: "删除 routers/index.tsx 死代码（T052）"
+Task: "router.tsx 菜单元数据核对（T053）"
+Task: "IndexPage 用户菜单实装退出登录（T054）"
+Task: "permissionApi.update URL 修正（T055）"
+Task: "账号列表绑定角色列（T056）"
 ```
 
 ## Implementation Strategy
@@ -254,4 +295,5 @@ Task: "前端提示文案调整（T050）"
 - 每个任务或逻辑组完成后提交一次
 - 在任意 Checkpoint 停下均可独立验证当前故事
 - **v2 修订背景**：宪法 v1.2.0 新增原则 X（分布式韧性），绑定/角色权限变更生效时机由 v1 的"下次登录生效"纠正为"立即生效"（research.md D6 v2），并新增高可用基线（D12）与结构化错误日志（D13）；Phase 1–8 的 [X] 为 v1 实施进度标记，Phase 9 为全部待办
-- 同一文件内的 Phase 9 任务（T047/T049 均在 account_service.go、T046/T048/T049 均在 authorization_service.go）按序执行，不并行
+- **v3/v4 修订背景**：宪法 v1.4.0 新增原则 XI（交互完整，入口即行动）与 XII（前后端契约对齐），对应 Phase 10（D14/D15：菜单源唯一化、死入口处置、permissionApi URL 修正、绑定角色列）；用户补充要求审计字段标准化并在响应中返回，对应 Phase 11（D16：模型四件套、service 注入、契约只读回传、前端只读列）——Phase 9–11 均为待办，[X] 仅标记 Phase 1–9 的已完成项
+- 同一文件内的 Phase 9 任务（T047/T049 均在 account_service.go、T046/T048/T049 均在 authorization_service.go）按序执行，不并行；Phase 11 的 T061（两 service 文件注入审计字段）与 Phase 9 已完成项叠加时按现状代码增量修改

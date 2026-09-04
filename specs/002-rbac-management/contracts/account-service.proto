@@ -13,6 +13,7 @@ option java_package = "com.iam.v1";
 import "common/common.proto";
 import "google/api/annotations.proto";
 import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
 import "buf/validate/validate.proto";
 
 // 账号管理服务
@@ -114,4 +115,10 @@ message Account {
   string kind = 4;
   // 【新增】当前绑定的角色编码列表（Get/List 回填；绑定关系可查询，FR-12）
   repeated string role_code_list = 5;
+  // 【新增·v4】审计字段（只读回传，由服务端注入；请求消息不含此类字段，宪法 XII）
+  int64 version = 6;
+  string created_by = 7;                     // 创建人（账号 id）
+  string updated_by = 8;                     // 修改人（账号 id）
+  google.protobuf.Timestamp create_time = 9; // 创建时间
+  google.protobuf.Timestamp update_time = 10; // 修改时间
 }

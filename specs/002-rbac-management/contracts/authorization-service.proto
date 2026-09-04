@@ -13,6 +13,7 @@ option java_package = "com.iam.v1";
 import "common/common.proto";
 import "google/api/annotations.proto";
 import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
 import "buf/validate/validate.proto";
 
 // 授权管理服务
@@ -163,6 +164,13 @@ message Permission {
   int64 application_id = 3;
   string permission_code = 4;
   string enabled_status = 5;
+  // 【新增】乐观锁版本号
+  int64 version = 6;
+  // 【新增·v4】审计字段（只读回传，由服务端注入；请求消息不含此类字段，宪法 XII）
+  string created_by = 7;                       // 创建人（账号 id）
+  string updated_by = 8;                       // 修改人（账号 id）
+  google.protobuf.Timestamp create_time = 9;   // 创建时间
+  google.protobuf.Timestamp update_time = 10;  // 修改时间
 }
 
 // 角色信息
@@ -174,4 +182,11 @@ message Role {
   string enabled_status = 5;
   // 【新增】当前关联的权限编码列表（Get 回填，供编辑页回显；FR-7 配套）
   repeated string permission_code_list = 6;
+  // 【新增】乐观锁版本号
+  int64 version = 7;
+  // 【新增·v4】审计字段（只读回传，由服务端注入；请求消息不含此类字段，宪法 XII）
+  string created_by = 8;                       // 创建人（账号 id）
+  string updated_by = 9;                       // 修改人（账号 id）
+  google.protobuf.Timestamp create_time = 10;  // 创建时间
+  google.protobuf.Timestamp update_time = 11;  // 修改时间
 }
