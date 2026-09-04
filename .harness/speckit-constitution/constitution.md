@@ -1,16 +1,16 @@
 <!--
 == Sync Impact Report ==
-Version change: 1.0.0 → 1.1.0
+Version change: 1.1.0 → 1.2.0
 Modified principles: none (titles unchanged)
 Added sections:
-  - 项目结构与仓库约束 (Repository Structure Constraints)
+  - 原则 X：分布式韧性，日志即线索（Distributed Resilience & Diagnosable Failure）
 Removed sections: none
 Follow-up TODOs: none
-Amendment: v1.1.0 — 补充仓库目录职责与后端服务命名规则（app / xxx-service / contrib / idl）
+Amendment: v1.2.0 — 新增原则 X：后端服务必须满足分布式高可用、正确处理分布式并发、异常日志清晰可诊断
 -->
 
 # Universal AI-Driven Engineering Constitution
-**Constitution v1.1.0（Tool-Agnostic · Project-Agnostic）**
+**Constitution v1.2.0（Tool-Agnostic · Project-Agnostic）**
 
 > **权威声明（Source of Truth）**
 > 本文件定义 AI 与人类在软件工程中的协作治理原则，
@@ -161,6 +161,33 @@ Amendment: v1.1.0 — 补充仓库目录职责与后端服务命名规则（app 
 > 当 AI 工具未明确指定输出语言时，
 > **以团队主语言作为最终交付语言**。
 
+### X. 分布式韧性，日志即线索
+**Distributed Resilience & Diagnosable Failure（NON-NEGOTIABLE）**
+
+**裁决原则**
+- 分布式环境下的可用性 **优先于** 单机实现的简便性
+- 并发正确性 **优先于** 性能捷径
+- 可诊断性 **优先于** 事后补救
+
+**不可违背的边界**
+- 所有后端服务（`xxx-service`）必须满足分布式环境下的高可用要求：
+  - 服务实例无状态化或有明确的会话迁移方案，支持水平扩缩容
+  - 依赖外部资源（数据库、缓存、下游服务）时必须具备超时、重试、熔断等故障隔离手段
+  - 单个下游故障不得导致级联崩溃，必须可降级运行
+- 所有涉及共享状态的写操作必须显式处理分布式并发：
+  - 必须选择明确的并发控制策略（乐观锁 / 悲观锁 / 分布式锁 / 唯一约束 / 幂等设计）
+  - 禁止依赖"单实例、单线程"假设的读改写（check-then-act）逻辑
+  - 重复请求与重放必须幂等或被明确拒绝
+- 异常日志必须清晰可诊断：
+  - 所有错误必须记录结构化日志，包含错误码、发生位置、关键上下文（如请求 ID / trace ID、资源标识）
+  - 上报给调用方的错误信息必须语义明确，禁止裸抛底层错误或吞掉异常
+  - 禁止静默失败；每个被捕获的异常要么被处理、要么被记录并上抛
+
+> **裁决说明**：
+> 当"假设部署环境简单"与"满足分布式高可用"发生冲突时，必须选择后者；
+> 当"少写并发防护代码"与"并发正确性"发生冲突时，必须选择后者；
+> 当"先上线再补日志"与"可诊断性"发生冲突时，必须选择后者。
+
 ---
 
 ## 项目结构与仓库约束
@@ -218,4 +245,4 @@ Amendment: v1.1.0 — 补充仓库目录职责与后端服务命名规则（app 
 
 ---
 
-**Version**: 1.1.0 | **Ratified**: 2026-09-05 | **Last Amended**: 2026-09-05
+**Version**: 1.2.0 | **Ratified**: 2026-09-05 | **Last Amended**: 2026-09-05
