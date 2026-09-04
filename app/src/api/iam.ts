@@ -8,6 +8,14 @@ export interface Account {
   kind: string;
   roleCodeList: string[];
   version: number;
+  /** 只读回传：创建人（账号 id） */
+  createdBy: string;
+  /** 只读回传：修改人（账号 id） */
+  updatedBy: string;
+  /** 只读回传：创建时间（RFC3339） */
+  createTime: string;
+  /** 只读回传：修改时间（RFC3339） */
+  updateTime: string;
 }
 
 export interface Application {
@@ -25,6 +33,14 @@ export interface Permission {
   permissionCode: string;
   enabledStatus: string;
   version: number;
+  /** 只读回传：创建人（账号 id） */
+  createdBy: string;
+  /** 只读回传：修改人（账号 id） */
+  updatedBy: string;
+  /** 只读回传：创建时间（RFC3339） */
+  createTime: string;
+  /** 只读回传：修改时间（RFC3339） */
+  updateTime: string;
 }
 
 export interface Role {
@@ -35,6 +51,14 @@ export interface Role {
   enabledStatus: string;
   permissionCodeList: string[];
   version: number;
+  /** 只读回传：创建人（账号 id） */
+  createdBy: string;
+  /** 只读回传：修改人（账号 id） */
+  updatedBy: string;
+  /** 只读回传：创建时间（RFC3339） */
+  createTime: string;
+  /** 只读回传：修改时间（RFC3339） */
+  updateTime: string;
 }
 
 export interface Subscription {
@@ -95,7 +119,7 @@ export const permissionApi = {
     request<ListPermissionsResponse>(`/authorization/permissions?current_page=${current_page}&page_size=${page_size}`),
 
   update: (id: string, data: { name?: string; enabledStatus?: string; version: number }) =>
-    request<void>('/authorization/permissions', { method: 'PATCH', body: { id, ...data } }),
+    request<void>(`/authorization/permissions/${id}`, { method: 'PATCH', body: data }),
 
   delete: (id: string) =>
     request<void>(`/authorization/permissions/${id}`, { method: 'DELETE' }),

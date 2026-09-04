@@ -66,12 +66,20 @@ export default function PermissionListPage() {
     !filters.name || permission.name?.includes(filters.name)
   );
 
+  const auditColumns = [
+    { title: "创建人", dataIndex: "createdBy", key: "createdBy", width: 90 },
+    { title: "创建时间", dataIndex: "createTime", key: "createTime", width: 170, render: (text: string) => text || "—" },
+    { title: "修改人", dataIndex: "updatedBy", key: "updatedBy", width: 90 },
+    { title: "修改时间", dataIndex: "updateTime", key: "updateTime", width: 170, render: (text: string) => text || "—" },
+  ];
+
   const columns = [
     { title: "ID", dataIndex: "id", key: "id" },
     { title: "权限名称", dataIndex: "name", key: "name" },
     { title: "权限编码", dataIndex: "permissionCode", key: "permissionCode" },
     { title: "所属应用", dataIndex: "applicationId", key: "applicationId" },
     { title: "状态", dataIndex: "enabledStatus", key: "enabledStatus" },
+    ...auditColumns,
     {
       title: "操作",
       key: "action",

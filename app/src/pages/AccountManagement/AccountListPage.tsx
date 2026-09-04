@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Flex, Input, Button, Table, Modal, Select, message } from "antd";
+import { Flex, Input, Button, Table, Modal, Select, Tag, message } from "antd";
 import { useNavigate } from "react-router";
 import { accountApi } from "../../api/iam";
 import { roleApi } from "../../api/iam";
@@ -114,11 +114,28 @@ export default function AccountListPage() {
     !filters.name || user.name?.includes(filters.name)
   );
 
+  const auditColumns = [
+    { title: "创建人", dataIndex: "createdBy", key: "createdBy", width: 90 },
+    { title: "创建时间", dataIndex: "createTime", key: "createTime", width: 170, render: (text: string) => text || "—" },
+    { title: "修改人", dataIndex: "updatedBy", key: "updatedBy", width: 90 },
+    { title: "修改时间", dataIndex: "updateTime", key: "updateTime", width: 170, render: (text: string) => text || "—" },
+  ];
+
   const columns = [
     { title: "ID", dataIndex: "id", key: "id" },
     { title: "姓名", dataIndex: "name", key: "name" },
     { title: "邮箱", dataIndex: "email", key: "email" },
     { title: "类型", dataIndex: "kind", key: "kind", render: (text: string) => text === "0" ? "用户" : "系统" },
+    {
+      title: "绑定角色",
+      dataIndex: "roleCodeList",
+      key: "roleCodeList",
+      render: (roleCodeList: string[] | undefined) =>
+        roleCodeList && roleCodeList.length > 0
+          ? <Flex gap={4} wrap>{roleCodeList.map(code => <Tag key={code}>{code}</Tag>)}</Flex>
+          : "—",
+    },
+    ...auditColumns,
     {
       title: "操作",
       key: "action",

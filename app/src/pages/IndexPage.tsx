@@ -5,14 +5,25 @@ import {
   MenuFoldOutlined,
   UserOutlined,
 } from "@ant-design/icons";
-import { Outlet } from "react-router";
+import { Outlet, useNavigate } from "react-router";
 import AutoBreadcrumb from "../components/AutoBreadcrumb";
 import { convertRoutesToMenuItems, routes } from "../routers/router";
 const { Header, Sider, Content, Footer } = Layout;
 
+function clearCookie(name: string): void {
+  document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+}
+
+function handleLogout(navigate: ReturnType<typeof useNavigate>) {
+  clearCookie("access_token");
+  localStorage.removeItem("access_token");
+  navigate("/login");
+}
+
 export default function IndexPage() {
   const menuItems = convertRoutesToMenuItems(routes)
   const [collapsed, setCollapsed] = useState(false);
+  const navigate = useNavigate();
 
   return (
     <Layout style={{ height: "100vh", display: "flex" }}>
@@ -100,10 +111,8 @@ export default function IndexPage() {
           <Dropdown
             menu={{
               items: [
-                { key: "profile", label: "个人中心" },
-                { key: "settings", label: "系统设置" },
                 { type: "divider" },
-                { key: "logout", label: "退出登录" },
+                { key: "logout", label: "退出登录", onClick: () => handleLogout(navigate) },
               ],
             }}
           >
