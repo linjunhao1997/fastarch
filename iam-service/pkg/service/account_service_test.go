@@ -3,15 +3,17 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"sort"
 	"testing"
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/glebarez/sqlite"
-	"github.com/redis/go-redis/v9"
-	"github.com/spf13/cast"
 	common_v1 "github.com/linjunhao1997/idl/pb/common"
 	iam_v1 "github.com/linjunhao1997/idl/pb/iam"
+	"github.com/redis/go-redis/v9"
+	"github.com/spf13/cast"
 	"gorm.io/gorm"
 
 	"iam-service/pkg/auth"
@@ -30,7 +32,7 @@ func setupAccountTestDB(t *testing.T) *gorm.DB {
 		t.Fatalf("get sqlite database: %v", err)
 	}
 	sqlDB.SetMaxOpenConns(1)
-	err = db.AutoMigrate(&model.Application{}, &model.Role{}, &model.Permission{}, &model.Account{}, &model.RAccountRole{})
+	err = db.AutoMigrate(&model.Application{}, &model.Role{}, &model.Permission{}, &model.Account{}, &model.RAccountRole{}, &model.RAccountApplication{}, &model.Resource{}, &model.PermissionResource{})
 	if err != nil {
 		t.Fatalf("migrate sqlite: %v", err)
 	}
@@ -80,6 +82,21 @@ func TestAccountEmailUnique(t *testing.T) {
 	})
 	if err != ErrEmailDuplicated {
 		t.Fatalf("CreateAccount() error = %v, want %v", err, ErrEmailDuplicated)
+	}
+}
+
+func TestListAccountsKeyword(t *testing.T) {
+	db := setupAccountTestDB(t)
+	createTestAccount(t, db, 1, "alpha@example.com", 0)
+	createTestAccount(t, db, 2, "beta@example.com", 0)
+	service := NewAccountService(db, nil)
+
+	response, err := service.ListAccounts(context.Background(), &iam_v1.ListAccountsRequest{Keyword: "alpha"})
+	if err != nil {
+		t.Fatalf("ListAccounts() error = %v", err)
+	}
+	if len(response.Accounts) != 1 || response.Accounts[0].Email != "alpha@example.com" {
+		t.Fatalf("ListAccounts() = %v, want alpha", response.Accounts)
 	}
 }
 
@@ -290,7 +307,7 @@ func TestUpdateAccountRolesIdempotentNoDuplicateRows(t *testing.T) {
 	}
 }
 
-// T044-③ 读穿回源：空快照下重建，快照按 DB 权限并集写回且 TTL≈5min（D6-②/D6-③）。
+// T044-③ 读穿回源：空快照下重建，快照按带前缀资源键并集写回且 TTL≈5min（D5/D6-②/D6-③）。
 func TestLoadPermissionSnapshotReadThrough(t *testing.T) {
 	ctx := context.Background()
 	db := setupAccountTestDB(t)
@@ -304,9 +321,16 @@ func TestLoadPermissionSnapshotReadThrough(t *testing.T) {
 	if err := db.Create(&role).Error; err != nil {
 		t.Fatalf("create role: %v", err)
 	}
-	permission := model.Permission{Id: 1, Name: "perm one", Code: "perm-one"}
+	menuResource := model.Resource{Kind: model.PermissionKindMenu, Key: "iam.account_management.account_list", Name: "用户列表"}
+	if err := db.Create(&menuResource).Error; err != nil {
+		t.Fatalf("create resource: %v", err)
+	}
+	permission := model.Permission{Id: 1, Name: "perm one", Code: "perm-one", Kind: model.PermissionKindMenu}
 	if err := db.Create(&permission).Error; err != nil {
 		t.Fatalf("create permission: %v", err)
+	}
+	if err := db.Model(&permission).Association("ResourceList").Append(&menuResource); err != nil {
+		t.Fatalf("bind resource: %v", err)
 	}
 	if err := db.Model(&role).Association("PermissionList").Append(&permission); err != nil {
 		t.Fatalf("bind permission: %v", err)
@@ -324,7 +348,7 @@ func TestLoadPermissionSnapshotReadThrough(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadPermissionSnapshot() error = %v", err)
 	}
-	want := application.Name + ":" + permission.Code
+	want := constant.SnapshotKeyPrefixMenu + menuResource.Key
 	found := false
 	for _, code := range codes {
 		if code == want {
@@ -428,5 +452,214 @@ func TestAccountAuditFieldsWithoutAuthContext(t *testing.T) {
 	}
 	if created.CreatedBy != "" && created.CreatedBy != "0" {
 		t.Fatalf("created_by = %q, want empty/0 without auth context", created.CreatedBy)
+	}
+}
+
+// ---- specs/008-account-app-context：账号-应用归属（T008）----
+
+func createTestApplicationForAccount(t *testing.T, db *gorm.DB, id int64, name string) model.Application {
+	t.Helper()
+	now := time.Now()
+	app := model.Application{
+		Id:         id,
+		Code:       fmt.Sprintf("app-%d", id),
+		Name:       name,
+		Disabled:   0,
+		CreateTime: now,
+		UpdateTime: now,
+	}
+	if err := db.Create(&app).Error; err != nil {
+		t.Fatalf("create application: %v", err)
+	}
+	return app
+}
+
+func loadAccountApplicationIds(t *testing.T, db *gorm.DB, accountId int64) []int64 {
+	t.Helper()
+	var account model.Account
+	if err := db.Preload("ApplicationList").First(&account, accountId).Error; err != nil {
+		t.Fatalf("load account: %v", err)
+	}
+	ids := make([]int64, 0, len(account.ApplicationList))
+	for _, app := range account.ApplicationList {
+		ids = append(ids, app.Id)
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	return ids
+}
+
+func TestCreateAccountWithApplications(t *testing.T) {
+	db := setupAccountTestDB(t)
+	createTestApplicationForAccount(t, db, 101, "应用A")
+	createTestApplicationForAccount(t, db, 102, "应用B")
+	service := NewAccountService(db, nil)
+
+	created, err := service.CreateAccount(auth.WithAccountId(context.Background(), 9), &iam_v1.CreateAccountRequest{
+		Name:              "alice",
+		Email:             "alice@example.com",
+		Kind:              model.AccountKindIdUser,
+		ApplicationIdList: []int64{101, 102},
+	})
+	if err != nil {
+		t.Fatalf("CreateAccount() error = %v", err)
+	}
+
+	got := loadAccountApplicationIds(t, db, cast.ToInt64(created.Id))
+	if len(got) != 2 || got[0] != 101 || got[1] != 102 {
+		t.Fatalf("application ids = %v, want [101 102]", got)
+	}
+}
+
+func TestCreateAccountWithoutApplications(t *testing.T) {
+	db := setupAccountTestDB(t)
+	service := NewAccountService(db, nil)
+
+	created, err := service.CreateAccount(context.Background(), &iam_v1.CreateAccountRequest{
+		Name:  "bob",
+		Email: "bob@example.com",
+		Kind:  model.AccountKindIdUser,
+	})
+	if err != nil {
+		t.Fatalf("CreateAccount() error = %v", err)
+	}
+	if got := loadAccountApplicationIds(t, db, cast.ToInt64(created.Id)); len(got) != 0 {
+		t.Fatalf("application ids = %v, want empty", got)
+	}
+}
+
+func TestUpdateAccountApplicationsFullReplace(t *testing.T) {
+	db := setupAccountTestDB(t)
+	createTestAccount(t, db, 1, "one@example.com", 1)
+	createTestApplicationForAccount(t, db, 101, "应用A")
+	createTestApplicationForAccount(t, db, 102, "应用B")
+	createTestApplicationForAccount(t, db, 103, "应用C")
+	service := NewAccountService(db, nil)
+	ctx := auth.WithAccountId(context.Background(), 9)
+
+	if _, err := service.UpdateAccount(ctx, &iam_v1.UpdateAccountRequest{
+		Id:                1,
+		Name:              "account",
+		Version:           1,
+		ApplicationIdList: []int64{101, 102},
+	}); err != nil {
+		t.Fatalf("UpdateAccount(add) error = %v", err)
+	}
+	if got := loadAccountApplicationIds(t, db, 1); len(got) != 2 || got[0] != 101 || got[1] != 102 {
+		t.Fatalf("after add: application ids = %v, want [101 102]", got)
+	}
+
+	// 全量替换：移除 101，新增 103
+	if _, err := service.UpdateAccount(ctx, &iam_v1.UpdateAccountRequest{
+		Id:                1,
+		Version:           2,
+		ApplicationIdList: []int64{102, 103},
+	}); err != nil {
+		t.Fatalf("UpdateAccount(replace) error = %v", err)
+	}
+	if got := loadAccountApplicationIds(t, db, 1); len(got) != 2 || got[0] != 102 || got[1] != 103 {
+		t.Fatalf("after replace: application ids = %v, want [102 103]", got)
+	}
+
+	// 显式空集 = 清空归属（合法：无归属账号）
+	if _, err := service.UpdateAccount(ctx, &iam_v1.UpdateAccountRequest{
+		Id:                1,
+		Version:           3,
+		ApplicationIdList: []int64{},
+	}); err != nil {
+		t.Fatalf("UpdateAccount(clear) error = %v", err)
+	}
+	if got := loadAccountApplicationIds(t, db, 1); len(got) != 0 {
+		t.Fatalf("after clear: application ids = %v, want empty", got)
+	}
+}
+
+func TestUpdateAccountApplicationsIdempotentNoDuplicates(t *testing.T) {
+	db := setupAccountTestDB(t)
+	createTestAccount(t, db, 1, "one@example.com", 1)
+	createTestApplicationForAccount(t, db, 101, "应用A")
+	service := NewAccountService(db, nil)
+	ctx := auth.WithAccountId(context.Background(), 9)
+
+	for i := 0; i < 3; i++ {
+		if _, err := service.UpdateAccount(ctx, &iam_v1.UpdateAccountRequest{
+			Id:                1,
+			Version:           int64(i) + 1,
+			ApplicationIdList: []int64{101, 101}, // 重复 id 幂等
+		}); err != nil {
+			t.Fatalf("UpdateAccount() #%d error = %v", i, err)
+		}
+	}
+	var count int64
+	if err := db.Model(&model.RAccountApplication{}).Where(model.RAccountApplicationColumnAccountId, 1).Count(&count).Error; err != nil {
+		t.Fatalf("count associations: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("association rows = %d, want 1", count)
+	}
+}
+
+func TestUpdateAccountApplicationsNotProvidedKeepsAssociations(t *testing.T) {
+	db := setupAccountTestDB(t)
+	createTestAccount(t, db, 1, "one@example.com", 1)
+	createTestApplicationForAccount(t, db, 101, "应用A")
+	service := NewAccountService(db, nil)
+	ctx := auth.WithAccountId(context.Background(), 9)
+
+	if _, err := service.UpdateAccount(ctx, &iam_v1.UpdateAccountRequest{
+		Id:                1,
+		Version:           1,
+		ApplicationIdList: []int64{101},
+	}); err != nil {
+		t.Fatalf("UpdateAccount(bind) error = %v", err)
+	}
+	// 不携带 application_id_list（nil）：不触碰归属（密码修改等局部更新不受影响）
+	// 仅归属变更不修改账号行，version 不递增，故仍传 1
+	if _, err := service.UpdateAccount(ctx, &iam_v1.UpdateAccountRequest{
+		Id:      1,
+		Version: 1,
+		Name:    "renamed",
+	}); err != nil {
+		t.Fatalf("UpdateAccount(without list) error = %v", err)
+	}
+	if got := loadAccountApplicationIds(t, db, 1); len(got) != 1 || got[0] != 101 {
+		t.Fatalf("application ids = %v, want [101]", got)
+	}
+}
+
+func TestUpdateAccountApplicationsInvalidApp(t *testing.T) {
+	db := setupAccountTestDB(t)
+	createTestAccount(t, db, 1, "one@example.com", 1)
+	service := NewAccountService(db, nil)
+
+	_, err := service.UpdateAccount(auth.WithAccountId(context.Background(), 9), &iam_v1.UpdateAccountRequest{
+		Id:                1,
+		Version:           1,
+		ApplicationIdList: []int64{999},
+	})
+	if err != ErrApplicationNotFound {
+		t.Fatalf("UpdateAccount() error = %v, want ErrApplicationNotFound", err)
+	}
+}
+
+func TestListAccountsCarriesApplications(t *testing.T) {
+	db := setupAccountTestDB(t)
+	createTestApplicationForAccount(t, db, 101, "应用A")
+	service := NewAccountService(db, nil)
+
+	if _, err := service.CreateAccount(context.Background(), &iam_v1.CreateAccountRequest{
+		Name:              "alice",
+		Email:             "alice@example.com",
+		Kind:              model.AccountKindIdUser,
+		ApplicationIdList: []int64{101},
+	}); err != nil {
+		t.Fatalf("CreateAccount() error = %v", err)
+	}
+
+	resp, err := service.ListAccounts(context.Background(), &iam_v1.ListAccountsRequest{CurrentPage: 1, PageSize: 10})
+	if err != nil {
+		t.Fatalf("ListAccounts() error = %v", err)
+	}
+	if len(resp.Accounts) != 1 || len(resp.Accounts[0].ApplicationIdList) != 1 || resp.Accounts[0].ApplicationIdList[0] != "101" {
+		t.Fatalf("ListAccounts() accounts = %+v, want applicationIdList [101]", resp.Accounts)
 	}
 }

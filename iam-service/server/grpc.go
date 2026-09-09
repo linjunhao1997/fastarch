@@ -29,6 +29,20 @@ func RunGrpcServer(ctx context.Context, cfg *conf.Config) error {
 	if err := db.AutoMigrate(model.Models...); err != nil {
 		return fmt.Errorf("auto migrate: %w", err)
 	}
+	if err := model.DedupRolePermissions(db); err != nil {
+		return fmt.Errorf("dedup role permissions: %w", err)
+	}
+	if err := model.DropLegacyForeignKeys(db); err != nil {
+		return fmt.Errorf("drop legacy foreign keys: %w", err)
+	}
+	// 权限体系基础数据初始化（specs/005-typed-permission-model US3）：
+	// fail-closed——seed 失败不可带残缺权限表运行
+	if err := model.Seed(ctx, db); err != nil {
+		return fmt.Errorf("seed permission data: %w", err)
+	}
+	if err := model.MigrateResourceTree(db); err != nil {
+		return fmt.Errorf("migrate resource tree: %w", err)
+	}
 
 	srv, err := grpcserver.New(cfg.GRpc.AddrWithPort(),
 		grpcserver.WithDefaultInterceptors(),

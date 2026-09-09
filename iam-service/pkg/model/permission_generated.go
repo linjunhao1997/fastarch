@@ -6,7 +6,7 @@ package model
 const (
 	PermissionColumnId            = "id"
 	PermissionColumnName          = "name"
-	PermissionColumnkind          = "kind"
+	PermissionColumnKind          = "kind"
 	PermissionColumnCode          = "code"
 	PermissionColumnValue         = "value"
 	PermissionColumnDescription   = "description"

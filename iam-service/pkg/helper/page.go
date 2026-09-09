@@ -7,10 +7,10 @@ import (
 )
 
 func SetDefaultPageParam(currentPage, pageSize int64) (int64, int64) {
-	if currentPage < 0 {
+	if currentPage <= 0 {
 		currentPage = constant.DefaultCurrentPage
 	}
-	if pageSize < 0 {
+	if pageSize <= 0 {
 		pageSize = constant.DefaultPageSize
 	} else if pageSize > constant.DefaultMaxPageSize {
 		pageSize = constant.DefaultMaxPageSize

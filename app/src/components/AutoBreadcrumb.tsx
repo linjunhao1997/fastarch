@@ -1,26 +1,22 @@
-import { Breadcrumb } from "antd";
-import { Link, useMatches } from "react-router-dom";
+import { Breadcrumb } from 'antd';
+import type { BreadcrumbProps } from 'antd';
+import { Link, useMatches, type UIMatch } from 'react-router-dom';
 
-export default function AutoBreadcrumb(props: React.ComponentProps<typeof Breadcrumb>) {
-  function itemRender(currentRoute, params, items) {
-    const isLast = currentRoute?.path === items[items.length - 1]?.path;
+type RouteHandle = { breadcrumb?: string };
 
-  
-    return isLast ? (
-      <span>{currentRoute.title}</span>
-    ) : (
-      <Link to={currentRoute.path}>{currentRoute.title}</Link>
-    );
-  }
-  const matches = useMatches();
+export default function AutoBreadcrumb() {
+  const matches = useMatches() as UIMatch<unknown, RouteHandle>[];
   const items = matches
-    .filter((match) => Boolean(match.handle?.breadcrumb))
+    .filter((match) => match.handle?.breadcrumb)
     .map((match) => ({
-      title:
-        typeof match.handle.breadcrumb === "function"
-          ? match.handle.breadcrumb(match.data)
-          : match.handle.breadcrumb,
-      path: match.pathname,
+      title: match.handle?.breadcrumb ?? '',
+      href: match.pathname,
     }));
-  return <Breadcrumb itemRender={itemRender} items={items} {...props}/>;
-};
+
+  const itemRender: BreadcrumbProps['itemRender'] = (route, _params, routes) =>
+    routes.indexOf(route) === routes.length - 1
+      ? route.title
+      : <Link to={route.href ?? '/'}>{route.title}</Link>;
+
+  return <Breadcrumb items={items} itemRender={itemRender} />;
+}

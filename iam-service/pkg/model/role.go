@@ -5,15 +5,20 @@ import "time"
 const (
 	RoleRoot  = "0000"
 	RoleAdmin = "1000"
+	// RoleAdminLegacy 是历史版本的管理员角色编码，仅用于 Seeder 数据迁移
+	// （specs/005-typed-permission-model F4）。
+	RoleAdminLegacy = "admin"
 )
 
+// 删除策略: 基础架构型（物理删除 + 引用检查 + 审计日志）
+//
 //go:generate contrib gen_gorm_mysql_repository -m role.go
 type Role struct {
 	Id             int64         `gorm:"column:id;primaryKey"`
 	Name           string        `gorm:"column:name"`
 	Code           string        `gorm:"column:code;size:255;uniqueIndex"`
 	Description    string        `gorm:"column:description"`
-	ApplicationId  int64         `gorm:"column:application_id"`
+	ApplicationId  int64         `gorm:"column:application_id;index"`
 	Disabled       bool          `gorm:"column:disabled"`
 	CreateTime     time.Time     `gorm:"column:create_time"`
 	UpdateTime     time.Time     `gorm:"column:update_time"`
@@ -30,15 +35,12 @@ func (r *Role) TableName() string {
 	return "t_role"
 }
 
-/*type RRolePermission struct {
-	Id           int64 `gorm:"column:id;primaryKey"`
-	RoleId       int64 `gorm:"column:role_id"`
-	PermissionId int64 `gorm:"column:permission_id"`
+var RoleFields = []string{
+	RoleColumnId, RoleColumnName, RoleColumnCode, RoleColumnDescription,
+	RoleColumnApplicationId, RoleColumnDisabled, RoleColumnCreateTime,
+	RoleColumnUpdateTime, RoleColumnCreatedBy, RoleColumnUpdatedBy,
+	RoleColumnVersion,
 }
-
-func (r *RRolePermission) TableName() string {
-	return "t_r_role_permission"
-}*/
 
 func init() {
 	migrate(Role{})

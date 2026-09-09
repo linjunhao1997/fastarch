@@ -3,14 +3,16 @@ import { Form, Input, Button, Select, message } from "antd";
 import { useNavigate, useParams } from "react-router";
 import { permissionApi, roleApi } from "../../api/iam";
 import { useApiErrorNotification } from "../../hooks/useApiError";
+import { useSubmitLock } from "../../hooks/useSubmitLock";
+import { ACTIONS } from "../../types/copywriting";
 
 export default function EditRolePage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
   const showNotification = useApiErrorNotification();
+  const { isSubmitting, run } = useSubmitLock();
   const [version, setVersion] = useState<number>(0);
   const [currentPermissionCodes, setCurrentPermissionCodes] = useState<string[]>([]);
   const [permissionOptions, setPermissionOptions] = useState<{ label: string; value: string }[]>([]);
@@ -53,8 +55,7 @@ export default function EditRolePage() {
 
   const onFinish = async (values: { name: string; enabledStatus: string; permissionCodeList?: string[] }) => {
     if (!id) return;
-    setSubmitting(true);
-    try {
+    run(async () => {
       const selected = new Set(values.permissionCodeList || []);
       const previous = new Set(currentPermissionCodes);
       await roleApi.update(id, {
@@ -63,13 +64,9 @@ export default function EditRolePage() {
         removedPermissionCodeList: [...previous].filter(code => !selected.has(code)),
         version,
       });
-      message.success("权限变更已生效");
+      message.success(`${ACTIONS.save}成功`);
       navigate('/authorization_management/role_management');
-    } catch (error) {
-      showNotification(error, "角色更新失败");
-    } finally {
-      setSubmitting(false);
-    }
+    }).catch((error) => showNotification(error, "角色保存失败"));
   };
 
   return (
@@ -93,8 +90,8 @@ export default function EditRolePage() {
           />
         </Form.Item>
         <Form.Item>
-          <Button type="primary" htmlType="submit" loading={submitting} disabled={loading}>保存</Button>
-          <Button style={{ marginLeft: 8 }} onClick={() => navigate('/authorization_management/role_management')}>取消</Button>
+          <Button type="primary" htmlType="submit" loading={isSubmitting} disabled={loading}>{ACTIONS.save}</Button>
+          <Button style={{ marginLeft: 8 }} onClick={() => navigate('/authorization_management/role_management')}>{ACTIONS.cancel}</Button>
         </Form.Item>
       </Form>
     </div>

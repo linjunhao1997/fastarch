@@ -63,12 +63,17 @@ message CreateAccountRequest {
   string email = 2 [(buf.validate.field).string.email = true];
   // 账号类型："0" 用户，"1" 系统
   string kind = 3 [(buf.validate.field).string = { in: ["0", "1"] }];
+  // 账号归属的应用 id 集合；可为空（允许无归属账号）
+  repeated int64 application_id_list = 4;
+  // 账号状态："enabled" 启用，"disabled" 禁用；缺省为 enabled
+  string status = 5 [(buf.validate.field).string = { in: ["", "enabled", "disabled"] }];
 }
 
 message ListAccountsRequest {
   int64 current_page = 1;
   int64 page_size = 2;
   string id = 3;
+  string keyword = 4;
 }
 
 message ListAccountsResponse {
@@ -83,6 +88,10 @@ message UpdateAccountRequest {
   string name = 4;
   string email = 5;
   int64 version = 6 [(buf.validate.field).required = true];
+  // 账号归属的应用 id 集合；presence + 全量替换语义 —— 字段缺省=不修改归属，
+  // 显式传入（含空数组）时以本集合为目标归属集合做差集增删
+  //（与 UpdateAccountRolesRequest 的 added/removed 增量语义不同）
+  repeated int64 application_id_list = 7;
 }
 
 message UpdateAccountRolesRequest {
@@ -110,4 +119,8 @@ message Account {
   string updated_by = 8;                      // 修改人（账号 id）
   google.protobuf.Timestamp create_time = 9;  // 创建时间
   google.protobuf.Timestamp update_time = 10; // 修改时间
+  // 账号当前归属的应用 id 集合（只读回传）
+  repeated string application_id_list = 11;
+  // 账号状态（只读回传）："enabled" 启用，"disabled" 禁用
+  string status = 12;
 }

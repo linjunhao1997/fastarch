@@ -8,7 +8,7 @@ const (
 	ApplicationColumnCode        = "code"
 	ApplicationColumnName        = "name"
 	ApplicationColumnDescription = "description"
-	ApplicationColumnStatus      = "status"
+	ApplicationColumnDisabled = "disabled"
 	ApplicationColumnKind        = "kind"
 	ApplicationColumnCreateTime  = "create_time"
 	ApplicationColumnUpdateTime  = "update_time"

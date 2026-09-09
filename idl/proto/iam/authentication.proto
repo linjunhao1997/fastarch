@@ -7,6 +7,8 @@ option java_multiple_files = true;
 option java_package = "com.iam.v1";
 
 import "google/api/annotations.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
 import "buf/validate/validate.proto";
 
 // 认证服务
@@ -16,6 +18,14 @@ service AuthenticationService {
     option (google.api.http) = {
       post: "/authentication/password-auth"
       body: "*"
+    };
+  }
+
+  // 获取当前登录用户的个人信息（基本信息 + 所属应用列表）
+  // 仅凭登录态（JWT accountId）返回，不接收用户标识参数
+  rpc GetMyProfile(google.protobuf.Empty) returns (GetMyProfileResponse) {
+    option (google.api.http) = {
+      get: "/authentication/my-profile"
     };
   }
 }
@@ -28,4 +38,27 @@ message PasswordAuthRequest {
 
 message PasswordAuthResponse {
   string access_token = 1;
+}
+
+// 账号归属的应用摘要（个人信息用；含停用应用，前端置灰不可选）
+message MyProfileApplication {
+  string id = 1;      // 应用 id（string 编码）
+  string code = 2;    // 应用编码
+  string name = 3;    // 应用名称
+  string status = 4;  // 启用/停用状态
+}
+
+message GetMyProfileResponse {
+  // 账号基本信息（不含密码、盐、AK/SK 等敏感凭据字段）
+  string id = 1;
+  string name = 2;
+  string email = 3;
+  // 账号类型："0" 用户，"1" 系统
+  string kind = 4;
+  string status = 5;
+  // 审计字段（只读回传，服务端注入）
+  string created_by = 6;                      // 创建人（账号 id）
+  google.protobuf.Timestamp create_time = 7;  // 创建时间
+  // 所属应用列表（含停用应用；用户无归属时为空列表）
+  repeated MyProfileApplication applications = 8;
 }

@@ -28,3 +28,9 @@ const (
 	RAccountRoleColumnAccountId = "account_id"
 	RAccountRoleColumnRoleId    = "role_id"
 )
+const (
+	// 手工补回（specs/008）：contrib 生成器会丢失 uniqueIndex 列常量
+	RAccountApplicationColumnId            = "id"
+	RAccountApplicationColumnAccountId     = "account_id"
+	RAccountApplicationColumnApplicationId = "application_id"
+)

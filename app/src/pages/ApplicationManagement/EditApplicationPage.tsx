@@ -1,47 +1,46 @@
-import { useState, useEffect } from "react";
-import { Form, Input, Button, message } from "antd";
+import { useEffect } from "react";
+import { Form, Input, Button, Radio, message } from "antd";
 import { useNavigate, useParams } from "react-router";
 import { applicationApi } from "../../api/iam";
 import { useApiErrorNotification } from "../../hooks/useApiError";
+import { useSubmitLock } from "../../hooks/useSubmitLock";
+import { ACTIONS } from "../../types/copywriting";
 
 export default function EditApplicationPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const [form] = Form.useForm();
-  const [loading, setLoading] = useState(false);
   const showNotification = useApiErrorNotification();
+  const { isSubmitting, run } = useSubmitLock();
 
   useEffect(() => {
     const fetchApplication = async () => {
       if (!id) return;
-      setLoading(true);
       try {
         const response = await applicationApi.get(id);
         form.setFieldsValue({
           name: response.name,
           description: response.description,
+          enabledStatus: response.enabledStatus || "enabled",
         });
       } catch (error) {
         showNotification(error, "获取应用信息失败");
-      } finally {
-        setLoading(false);
       }
     };
     fetchApplication();
   }, [id, form, showNotification]);
 
-  const onFinish = async (values: { name: string; description: string }) => {
+  const onFinish = async (values: { name: string; description: string; enabledStatus: string }) => {
     if (!id) return;
-    setLoading(true);
-    try {
-      await applicationApi.update(id, values);
-      message.success("应用更新成功");
+    run(async () => {
+      await applicationApi.update(id, {
+        name: values.name,
+        description: values.description,
+        enabledStatus: values.enabledStatus,
+      });
+      message.success(`${ACTIONS.save}成功`);
       navigate('/application_management/application_list');
-    } catch (error) {
-      showNotification(error, "应用更新失败");
-    } finally {
-      setLoading(false);
-    }
+    }).catch((error) => showNotification(error, "应用保存失败"));
   };
 
   return (
@@ -54,6 +53,7 @@ export default function EditApplicationPage() {
         initialValues={{
           name: "",
           description: "",
+          enabledStatus: "enabled",
         }}
       >
         <Form.Item
@@ -66,12 +66,18 @@ export default function EditApplicationPage() {
         <Form.Item label="描述" name="description">
           <Input.TextArea />
         </Form.Item>
+        <Form.Item label="状态" name="enabledStatus" rules={[{ required: true, message: "请选择状态" }]}>
+          <Radio.Group>
+            <Radio value="enabled">启用</Radio>
+            <Radio value="disabled">禁用</Radio>
+          </Radio.Group>
+        </Form.Item>
         <Form.Item>
-          <Button type="primary" htmlType="submit" loading={loading}>
-            保存
+          <Button type="primary" htmlType="submit" loading={isSubmitting}>
+            {ACTIONS.save}
           </Button>
           <Button onClick={() => navigate('/application_management/application_list')}>
-            取消
+            {ACTIONS.cancel}
           </Button>
         </Form.Item>
       </Form>

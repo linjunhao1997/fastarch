@@ -49,6 +49,61 @@
         ]
       }
     },
+    "/authorization/my-menu-tree": {
+      "get": {
+        "summary": "获取当前用户在指定应用下可见的菜单树（服务端按权限过滤）\r\n仅含 kind=menu 资源；普通用户按权限键快照过滤，管理员全量",
+        "operationId": "AuthorizationService_ListMyMenuTree",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListResourceTreeResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "applicationId",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          }
+        ],
+        "tags": [
+          "AuthorizationService"
+        ]
+      }
+    },
+    "/authorization/my-permissions": {
+      "get": {
+        "summary": "返回当前认证账号的权限码集合",
+        "operationId": "AuthorizationService_GetMyPermissions",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GetMyPermissionsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "AuthorizationService"
+        ]
+      }
+    },
     "/authorization/permissions": {
       "get": {
         "summary": "获取权限列表",
@@ -81,6 +136,19 @@
             "required": false,
             "type": "string",
             "format": "int64"
+          },
+          {
+            "name": "keyword",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "kind",
+            "description": "按类型过滤：menu | http_api | grpc；空为不过滤",
+            "in": "query",
+            "required": false,
+            "type": "string"
           }
         ],
         "tags": [
@@ -222,6 +290,269 @@
                 "version": {
                   "type": "string",
                   "format": "int64"
+                },
+                "resourceKeyList": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "资源绑定替换式更新：提供的 key 清单整体替换既有绑定；不提供则不动绑定。\r\nkind 不可修改，请求中无 kind 字段。"
+                },
+                "resourceIdList": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "int64"
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "tags": [
+          "AuthorizationService"
+        ]
+      }
+    },
+    "/authorization/resource-tree": {
+      "get": {
+        "summary": "应用内资源树，用于资源管理与权限绑定选择",
+        "operationId": "AuthorizationService_ListResourceTree",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListResourceTreeResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "applicationId",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "keyword",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "AuthorizationService"
+        ]
+      }
+    },
+    "/authorization/resources": {
+      "get": {
+        "summary": "资源清单（分页 + 按类型/关键字过滤），供权限创建/编辑的资源绑定选择器",
+        "operationId": "AuthorizationService_ListResources",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListResourcesResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "currentPage",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "kind",
+            "description": "按类型过滤：menu | http_api | grpc",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "keyword",
+            "description": "匹配 key/name",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "AuthorizationService"
+        ]
+      },
+      "post": {
+        "summary": "创建资源",
+        "operationId": "AuthorizationService_CreateResource",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Resource"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1CreateResourceRequest"
+            }
+          }
+        ],
+        "tags": [
+          "AuthorizationService"
+        ]
+      }
+    },
+    "/authorization/resources/{id}": {
+      "get": {
+        "summary": "获取资源详情",
+        "operationId": "AuthorizationService_GetResource",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Resource"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "int64"
+          }
+        ],
+        "tags": [
+          "AuthorizationService"
+        ]
+      },
+      "delete": {
+        "summary": "删除资源",
+        "operationId": "AuthorizationService_DeleteResource",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "int64"
+          }
+        ],
+        "tags": [
+          "AuthorizationService"
+        ]
+      },
+      "put": {
+        "summary": "修改资源",
+        "operationId": "AuthorizationService_UpdateResource",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Resource"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "parentId": {
+                  "type": "string",
+                  "format": "int64"
+                },
+                "parentCleared": {
+                  "type": "boolean"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "rpcFullMethod": {
+                  "type": "string"
+                },
+                "disabled": {
+                  "type": "boolean"
+                },
+                "version": {
+                  "type": "string",
+                  "format": "int64"
+                },
+                "displayOrder": {
+                  "type": "integer",
+                  "format": "int32"
                 }
               }
             }
@@ -264,6 +595,12 @@
             "required": false,
             "type": "string",
             "format": "int64"
+          },
+          {
+            "name": "keyword",
+            "in": "query",
+            "required": false,
+            "type": "string"
           }
         ],
         "tags": [
@@ -460,6 +797,12 @@
             "required": false,
             "type": "string",
             "format": "int64"
+          },
+          {
+            "name": "keyword",
+            "in": "query",
+            "required": false,
+            "type": "string"
           }
         ],
         "tags": [
@@ -613,6 +956,27 @@
         }
       }
     },
+    "v1ApplicationSummary": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "int64"
+        },
+        "name": {
+          "type": "string"
+        },
+        "code": {
+          "type": "string"
+        },
+        "enabledStatus": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    },
     "v1CheckPermissionRequest": {
       "type": "object",
       "properties": {
@@ -651,12 +1015,66 @@
         },
         "description": {
           "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "title": "权限类型：menu | http_api | grpc（创建后不可变）"
+        },
+        "resourceKeyList": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "绑定资源键，≥1 且须与 kind 同类型"
+        },
+        "resourceIdList": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "int64"
+          }
+        }
+      }
+    },
+    "v1CreateResourceRequest": {
+      "type": "object",
+      "properties": {
+        "applicationId": {
+          "type": "string",
+          "format": "int64"
+        },
+        "parentId": {
+          "type": "string",
+          "format": "int64"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "rpcFullMethod": {
+          "type": "string"
+        },
+        "disabled": {
+          "type": "boolean"
+        },
+        "displayOrder": {
+          "type": "integer",
+          "format": "int32"
         }
       }
     },
     "v1CreateRoleRequest": {
       "type": "object",
       "properties": {
+        "applicationId": {
+          "type": "string",
+          "format": "int64"
+        },
         "name": {
           "type": "string"
         },
@@ -682,6 +1100,39 @@
         }
       }
     },
+    "v1GetMyPermissionsResponse": {
+      "type": "object",
+      "properties": {
+        "permissionCodeList": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "兼容期保留，不再填充真实值（语义已升级为资源键，见 menu_key_list 等字段）"
+        },
+        "menuKeyList": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "可见菜单键（前端导航/路由渲染数据源）"
+        },
+        "httpFullMethodList": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "可调用的 HTTP 接口（映射后的 full method）"
+        },
+        "rpcFullMethodList": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "服务间可调用的 gRPC 方法"
+        }
+      }
+    },
     "v1ListPermissionsResponse": {
       "type": "object",
       "properties": {
@@ -693,6 +1144,33 @@
           "items": {
             "type": "object",
             "$ref": "#/definitions/v1Permission"
+          }
+        }
+      }
+    },
+    "v1ListResourceTreeResponse": {
+      "type": "object",
+      "properties": {
+        "roots": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1ResourceTreeNode"
+          }
+        }
+      }
+    },
+    "v1ListResourcesResponse": {
+      "type": "object",
+      "properties": {
+        "page": {
+          "$ref": "#/definitions/v1Page"
+        },
+        "resources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Resource"
           }
         }
       }
@@ -794,9 +1272,109 @@
           "type": "string",
           "format": "date-time",
           "title": "修改时间"
+        },
+        "kind": {
+          "type": "string",
+          "title": "权限类型：menu | http_api | grpc（创建后不可变）"
+        },
+        "resourceList": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Resource"
+          },
+          "title": "绑定的资源清单（列表/详情回传，请求侧不含）"
         }
       },
       "title": "权限信息"
+    },
+    "v1PermissionSummary": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "int64"
+        },
+        "name": {
+          "type": "string"
+        },
+        "permissionCode": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "enabledStatus": {
+          "type": "string"
+        }
+      }
+    },
+    "v1Resource": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "rpcFullMethod": {
+          "type": "string",
+          "title": "仅 http_api 有值：该 HTTP 路由经网关映射的目标 RPC full method"
+        },
+        "enabledStatus": {
+          "type": "string"
+        },
+        "createTime": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updateTime": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "applicationId": {
+          "type": "string",
+          "format": "int64"
+        },
+        "parentId": {
+          "type": "string",
+          "format": "int64"
+        },
+        "version": {
+          "type": "string",
+          "format": "int64"
+        },
+        "displayOrder": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "application": {
+          "$ref": "#/definitions/v1ApplicationSummary"
+        }
+      },
+      "title": "被保护的具体资源。key 全局唯一：\r\n  menu     → 路由键，如 \"authorization_management.permission_list\"\r\n  http_api → \"\u003cMETHOD\u003e \u003cpath\u003e\"，如 \"GET /authorization/permissions\"\r\n  grpc     → full method，如 \"/iam.v1.AccountService/ListAccounts\""
+    },
+    "v1ResourceTreeNode": {
+      "type": "object",
+      "properties": {
+        "resource": {
+          "$ref": "#/definitions/v1Resource"
+        },
+        "children": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1ResourceTreeNode"
+          }
+        }
+      }
     },
     "v1Role": {
       "type": "object",
@@ -845,6 +1423,16 @@
           "type": "string",
           "format": "date-time",
           "title": "修改时间"
+        },
+        "application": {
+          "$ref": "#/definitions/v1ApplicationSummary"
+        },
+        "permissionList": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1PermissionSummary"
+          }
         }
       },
       "title": "角色信息"

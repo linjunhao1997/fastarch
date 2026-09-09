@@ -1,110 +1,91 @@
-import { useState, useEffect } from "react";
-import { Flex, Input, Button, Table, Modal } from "antd";
-import { useNavigate } from "react-router";
-import { roleApi } from "../../api/iam";
-import { useApiErrorNotification } from "../../hooks/useApiError";
-import type { Role } from "../../api/iam";
-
-const { Search } = Input;
+import { useMemo } from 'react';
+import { Button, Flex, Tag, message } from 'antd';
+import { CheckCircleOutlined, StopOutlined } from '@ant-design/icons';
+import { useNavigate, useSearchParams } from 'react-router';
+import { roleApi } from '../../api/iam';
+import { ListPageShell } from '../../components/ListPageShell';
+import { useConfirmDelete } from '../../components/ConfirmDelete';
+import { useApiErrorNotification } from '../../hooks/useApiError';
+import { useTableQuery } from '../../hooks/useTableQuery';
+import type { Role } from '../../types';
+import { ACTIONS, buildSuccessMessage } from '../../types/copywriting';
 
 export default function RoleManagementPage() {
   const navigate = useNavigate();
-  const [roles, setRoles] = useState<Role[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [filters, setFilters] = useState({ name: "" });
   const showNotification = useApiErrorNotification();
+  const confirmDelete = useConfirmDelete();
+  const [searchParams] = useSearchParams();
+  const tableQuery = useTableQuery({
+    domain: 'roles',
+    fetcher: (currentPage, pageSize, keyword) => roleApi.list(currentPage, pageSize, keyword),
+    getItems: (response) => response.roles,
+  });
 
-  const fetchRoles = async () => {
-    setLoading(true);
-    try {
-      const response = await roleApi.list(1, 100);
-      setRoles(response.roles || []);
-    } catch (error) {
-      showNotification(error, "获取角色列表失败");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchRoles();
-  }, [showNotification]);
-
-  const handleSearch = (value: string) => {
-    setFilters({ name: value });
-  };
-
-  const handleReset = () => {
-    setFilters({ name: "" });
-  };
-
-  const handleCreateRole = () => {
-    navigate('/authorization_management/role_create');
-  };
-
-  const handleEditRole = (roleId: string) => {
-    navigate(`/authorization_management/role_edit/${roleId}`);
-  };
-
-  const handleDeleteRole = (role: Role) => {
-    Modal.confirm({
-      title: "删除角色",
-      content: `确定删除角色 ${role.name} 吗？`,
-      onOk: async () => {
-        try {
-          await roleApi.delete(role.id);
-          await fetchRoles();
-        } catch (error) {
-          showNotification(error, "删除角色失败");
-          throw error;
-        }
-      },
-    });
-  };
-
-  const filteredRoles = roles.filter((role) =>
-    !filters.name || role.name?.includes(filters.name)
-  );
-
-  const auditColumns = [
-    { title: "创建人", dataIndex: "createdBy", key: "createdBy", width: 90 },
-    { title: "创建时间", dataIndex: "createTime", key: "createTime", width: 170, render: (text: string) => text || "—" },
-    { title: "修改人", dataIndex: "updatedBy", key: "updatedBy", width: 90 },
-    { title: "修改时间", dataIndex: "updateTime", key: "updateTime", width: 170, render: (text: string) => text || "—" },
-  ];
-
-  const columns = [
-    { title: "ID", dataIndex: "id", key: "id" },
-    { title: "角色名称", dataIndex: "name", key: "name" },
-    { title: "角色编码", dataIndex: "roleCode", key: "roleCode" },
-    { title: "所属应用", dataIndex: "applicationId", key: "applicationId" },
-    { title: "状态", dataIndex: "enabledStatus", key: "enabledStatus" },
-    ...auditColumns,
+  const columns = useMemo(() => [
+    { title: 'ID', dataIndex: 'id', key: 'id' },
+    { title: '角色名称', dataIndex: 'name', key: 'name' },
+    { title: '角色编码', dataIndex: 'roleCode', key: 'roleCode' },
+    { title: '所属应用', dataIndex: 'applicationId', key: 'applicationId' },
     {
-      title: "操作",
-      key: "action",
+      title: '状态',
+      dataIndex: 'enabledStatus',
+      key: 'enabledStatus',
+      render: (status: string) => status === 'enabled'
+        ? <Tag icon={<CheckCircleOutlined />}>启用</Tag>
+        : <Tag icon={<StopOutlined />}>禁用</Tag>,
+    },
+    {
+      title: '权限编码',
+      dataIndex: 'permissionCodeList',
+      key: 'permissionCodeList',
+      render: (permissionCodeList: string[] | undefined) =>
+        permissionCodeList && permissionCodeList.length > 0
+          ? <Flex gap={4} wrap>{permissionCodeList.map((code) => <Tag key={code}>{code}</Tag>)}</Flex>
+          : '—',
+    },
+    { title: '创建人', dataIndex: 'createdBy', key: 'createdBy' },
+    { title: '创建时间', dataIndex: 'createTime', key: 'createTime', render: (value: string) => value || '—' },
+    { title: '修改人', dataIndex: 'updatedBy', key: 'updatedBy' },
+    { title: '修改时间', dataIndex: 'updateTime', key: 'updateTime', render: (value: string) => value || '—' },
+    {
+      title: '操作',
+      key: 'action',
       render: (_: unknown, record: Role) => (
         <Flex gap={0}>
-          <Button type="link" onClick={() => handleEditRole(record.id)}>编辑</Button>
-          <Button type="link" danger onClick={() => handleDeleteRole(record)}>删除</Button>
+          <Button type="link" onClick={() => navigate(`/authorization_management/role_edit/${record.id}`)}>
+            {ACTIONS.edit}
+          </Button>
+          <Button
+            type="link"
+            danger
+            onClick={() => confirmDelete({
+              entityType: '角色',
+              entityName: record.name,
+              onDelete: async () => {
+                await roleApi.delete(record.id);
+                await tableQuery.refresh();
+                message.success(buildSuccessMessage(ACTIONS.delete));
+              },
+              onError: (error) => showNotification(error, '删除角色失败'),
+            })}
+          >
+            {ACTIONS.delete}
+          </Button>
         </Flex>
       ),
     },
-  ];
+  ], [navigate, showNotification, tableQuery]);
 
   return (
-    <div>
-      <Flex gap={16} style={{ marginBottom: 16 }}>
-        <Search placeholder="搜索角色名称" onSearch={handleSearch} style={{ width: 200 }} />
-        <Button onClick={handleReset}>重置</Button>
-        <Button type="primary" onClick={handleCreateRole}>创建角色</Button>
-      </Flex>
-      <Table
-        columns={columns}
-        dataSource={filteredRoles}
-        rowKey="id"
-        loading={loading}
-      />
-    </div>
+    <ListPageShell<Role>
+      columns={columns}
+      tableQuery={tableQuery}
+      searchPlaceholder="搜索角色名称或编码"
+      keyword={searchParams.get('keyword') ?? ''}
+      onSearch={tableQuery.setKeyword}
+      emptyDescription="暂无角色"
+      createLabel={`${ACTIONS.create}角色`}
+      onCreate={() => navigate('/authorization_management/role_create')}
+    />
   );
 }

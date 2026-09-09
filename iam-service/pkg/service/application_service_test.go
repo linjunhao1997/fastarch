@@ -9,7 +9,6 @@ import (
 	"gorm.io/gorm"
 
 	iam_v1 "github.com/linjunhao1997/idl/pb/iam"
-	"iam-service/pkg/constant"
 	"iam-service/pkg/model"
 )
 
@@ -28,7 +27,7 @@ func setupApplicationTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("clean tables: %v", err)
 	}
-	err = db.AutoMigrate(&model.Application{}, &model.Role{}, &model.Permission{})
+	err = db.AutoMigrate(&model.Application{}, &model.Role{}, &model.Permission{}, &model.Account{}, &model.RAccountApplication{})
 	if err != nil {
 		t.Fatalf("migrate sqlite: %v", err)
 	}
@@ -42,7 +41,7 @@ func createTestApplication(t *testing.T, db *gorm.DB, id int64, name string) mod
 		Id:         id,
 		Code:       "app-code",
 		Name:       name,
-		Status:     constant.ApplicationStatusEnabled,
+		Disabled:   0,
 		CreateTime: now,
 		UpdateTime: now,
 	}
@@ -160,5 +159,48 @@ func TestDeleteApplicationRepeated(t *testing.T) {
 	}
 	if _, err := service.DeleteApplication(context.Background(), &iam_v1.DeleteApplicationRequest{Id: app.Id}); err != gorm.ErrRecordNotFound {
 		t.Fatalf("second DeleteApplication() error = %v, want %v", err, gorm.ErrRecordNotFound)
+	}
+}
+
+// ---- specs/008-account-app-context：应用删除时账号关联拦截（T009）----
+
+func TestDeleteApplicationBlockedByAccountAssociation(t *testing.T) {
+	db := setupApplicationTestDB(t)
+	if err := db.AutoMigrate(&model.Account{}, &model.RAccountApplication{}); err != nil {
+		t.Fatalf("migrate account tables: %v", err)
+	}
+	app := createTestApplication(t, db, 201, "被关联应用")
+	now := time.Now()
+	account := model.Account{
+		Id:         1,
+		Code:       "acc",
+		Name:       "account",
+		Email:      "acc@example.com",
+		Status:     "enabled",
+		Kind:       model.AccountKindIdUser,
+		CreateTime: now,
+		UpdateTime: now,
+		Version:    1,
+	}
+	if err := db.Create(&account).Error; err != nil {
+		t.Fatalf("create account: %v", err)
+	}
+	association := model.RAccountApplication{AccountId: account.Id, ApplicationId: app.Id}
+	if err := db.Create(&association).Error; err != nil {
+		t.Fatalf("create association: %v", err)
+	}
+
+	service := NewApplicationService(db)
+	_, err := service.DeleteApplication(context.Background(), &iam_v1.DeleteApplicationRequest{Id: app.Id})
+	if err != ErrApplicationReferenced {
+		t.Fatalf("DeleteApplication() error = %v, want ErrApplicationReferenced", err)
+	}
+
+	var count int64
+	if err := db.Model(&model.Application{}).Where(model.ApplicationColumnId, app.Id).Count(&count).Error; err != nil {
+		t.Fatalf("count applications: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("application was deleted despite account association")
 	}
 }

@@ -48,6 +48,12 @@
             "required": false,
             "type": "string",
             "format": "int64"
+          },
+          {
+            "name": "keyword",
+            "in": "query",
+            "required": false,
+            "type": "string"
           }
         ],
         "tags": [
@@ -258,6 +264,10 @@
         },
         "description": {
           "type": "string"
+        },
+        "enabledStatus": {
+          "type": "string",
+          "title": "应用状态：\"enabled\" 启用，\"disabled\" 禁用；缺省为 enabled"
         }
       }
     },

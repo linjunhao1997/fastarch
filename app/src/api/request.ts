@@ -5,6 +5,16 @@ export class UnauthorizedError extends Error {
   }
 }
 
+export class ApiError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
 export interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
@@ -50,6 +60,8 @@ export async function request<T>(endpoint: string, options: RequestOptions = {})
   // body 形如 {"code":<grpc状态码>,"message":"...","details":[ErrorInfo...]}
   if (!response.ok) {
     if (response.status === 401) {
+      const redirectPath = encodeURIComponent(window.location.pathname + window.location.search);
+      window.location.assign(`/login?redirect=${redirectPath}`);
       throw new UnauthorizedError();
     }
 
@@ -62,7 +74,7 @@ export async function request<T>(endpoint: string, options: RequestOptions = {})
         errorMessage = errorData.error;
       }
     }
-    throw new Error(errorMessage);
+    throw new ApiError(errorMessage, response.status);
   }
 
   return data as T;

@@ -16,6 +16,29 @@
     "application/json"
   ],
   "paths": {
+    "/authentication/my-profile": {
+      "get": {
+        "summary": "获取当前登录用户的个人信息（基本信息 + 所属应用列表）\r\n仅凭登录态（JWT accountId）返回，不接收用户标识参数",
+        "operationId": "AuthenticationService_GetMyProfile",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GetMyProfileResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "AuthenticationService"
+        ]
+      }
+    },
     "/authentication/password-auth": {
       "post": {
         "summary": "密码认证",
@@ -78,6 +101,68 @@
           }
         }
       }
+    },
+    "v1GetMyProfileResponse": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "title": "账号基本信息（不含密码、盐、AK/SK 等敏感凭据字段）"
+        },
+        "name": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "title": "账号类型：\"0\" 用户，\"1\" 系统"
+        },
+        "status": {
+          "type": "string"
+        },
+        "createdBy": {
+          "type": "string",
+          "description": "创建人（账号 id）",
+          "title": "审计字段（只读回传，服务端注入）"
+        },
+        "createTime": {
+          "type": "string",
+          "format": "date-time",
+          "title": "创建时间"
+        },
+        "applications": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1MyProfileApplication"
+          },
+          "title": "所属应用列表（含停用应用；用户无归属时为空列表）"
+        }
+      }
+    },
+    "v1MyProfileApplication": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "title": "应用 id（string 编码）"
+        },
+        "code": {
+          "type": "string",
+          "title": "应用编码"
+        },
+        "name": {
+          "type": "string",
+          "title": "应用名称"
+        },
+        "status": {
+          "type": "string",
+          "title": "启用/停用状态"
+        }
+      },
+      "title": "账号归属的应用摘要（个人信息用；含停用应用，前端置灰不可选）"
     },
     "v1PasswordAuthRequest": {
       "type": "object",

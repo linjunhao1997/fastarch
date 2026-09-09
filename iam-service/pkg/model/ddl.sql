@@ -18,7 +18,7 @@ CREATE TABLE `t_account` (
 CREATE TABLE `t_application` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `name` longtext,
-  `status` longtext,
+  `disabled` tinyint(1) DEFAULT NULL,
   `kind` longtext,
   `create_time` datetime(3) DEFAULT NULL,
   `update_time` datetime(3) DEFAULT NULL,

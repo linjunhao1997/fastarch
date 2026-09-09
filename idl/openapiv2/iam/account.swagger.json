@@ -54,6 +54,12 @@
             "in": "query",
             "required": false,
             "type": "string"
+          },
+          {
+            "name": "keyword",
+            "in": "query",
+            "required": false,
+            "type": "string"
           }
         ],
         "tags": [
@@ -255,6 +261,14 @@
                 "version": {
                   "type": "string",
                   "format": "int64"
+                },
+                "applicationIdList": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "int64"
+                  },
+                  "title": "账号归属的应用 id 集合；presence + 全量替换语义 —— 字段缺省=不修改归属，\r\n显式传入（含空数组）时以本集合为目标归属集合做差集增删\r\n（与 UpdateAccountRolesRequest 的 added/removed 增量语义不同）"
                 }
               }
             }
@@ -339,6 +353,17 @@
           "type": "string",
           "format": "date-time",
           "title": "修改时间"
+        },
+        "applicationIdList": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "账号当前归属的应用 id 集合（只读回传）"
+        },
+        "status": {
+          "type": "string",
+          "title": "账号状态（只读回传）：\"enabled\" 启用，\"disabled\" 禁用"
         }
       },
       "title": "账号信息"
@@ -355,6 +380,18 @@
         "kind": {
           "type": "string",
           "title": "账号类型：\"0\" 用户，\"1\" 系统"
+        },
+        "applicationIdList": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "int64"
+          },
+          "title": "账号归属的应用 id 集合；可为空（允许无归属账号）"
+        },
+        "status": {
+          "type": "string",
+          "title": "账号状态：\"enabled\" 启用，\"disabled\" 禁用；缺省为 enabled"
         }
       }
     },

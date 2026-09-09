@@ -1,26 +1,26 @@
-import { useState } from "react";
-import { Form, Input, Button, message } from "antd";
+import { Form, Input, Button, Radio, message } from "antd";
 import { useNavigate } from "react-router";
 import { applicationApi } from "../../api/iam";
 import { useApiErrorNotification } from "../../hooks/useApiError";
+import { useSubmitLock } from "../../hooks/useSubmitLock";
+import { ACTIONS } from "../../types/copywriting";
 
 export default function CreateApplicationPage() {
   const navigate = useNavigate();
   const [form] = Form.useForm();
-  const [loading, setLoading] = useState(false);
   const showNotification = useApiErrorNotification();
+  const { isSubmitting, run } = useSubmitLock();
 
-  const onFinish = async (values: { name: string; description: string }) => {
-    setLoading(true);
-    try {
-      await applicationApi.create(values);
-      message.success("应用创建成功");
+  const onFinish = async (values: { name: string; description: string; enabledStatus: string }) => {
+    run(async () => {
+      await applicationApi.create({
+        name: values.name,
+        description: values.description,
+        enabledStatus: values.enabledStatus,
+      });
+      message.success(`${ACTIONS.create}成功`);
       navigate('/application_management/application_list');
-    } catch (error) {
-      showNotification(error, "应用创建失败");
-    } finally {
-      setLoading(false);
-    }
+    }).catch((error) => showNotification(error, "应用创建失败"));
   };
 
   return (
@@ -33,6 +33,7 @@ export default function CreateApplicationPage() {
         initialValues={{
           name: "",
           description: "",
+          enabledStatus: "enabled",
         }}
       >
         <Form.Item
@@ -45,12 +46,18 @@ export default function CreateApplicationPage() {
         <Form.Item label="描述" name="description">
           <Input.TextArea />
         </Form.Item>
+        <Form.Item label="状态" name="enabledStatus" rules={[{ required: true, message: "请选择状态" }]}>
+          <Radio.Group>
+            <Radio value="enabled">启用</Radio>
+            <Radio value="disabled">禁用</Radio>
+          </Radio.Group>
+        </Form.Item>
         <Form.Item>
-          <Button type="primary" htmlType="submit" loading={loading}>
-            创建
+          <Button type="primary" htmlType="submit" loading={isSubmitting}>
+            {ACTIONS.create}
           </Button>
           <Button onClick={() => navigate('/application_management/application_list')}>
-            取消
+            {ACTIONS.cancel}
           </Button>
         </Form.Item>
       </Form>

@@ -11,6 +11,7 @@ import (
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -20,6 +21,7 @@ const _ = grpc.SupportPackageIsVersion7
 
 const (
 	AuthenticationService_PasswordAuth_FullMethodName = "/iam.v1.AuthenticationService/PasswordAuth"
+	AuthenticationService_GetMyProfile_FullMethodName = "/iam.v1.AuthenticationService/GetMyProfile"
 )
 
 // AuthenticationServiceClient is the client API for AuthenticationService service.
@@ -28,6 +30,9 @@ const (
 type AuthenticationServiceClient interface {
 	// 密码认证
 	PasswordAuth(ctx context.Context, in *PasswordAuthRequest, opts ...grpc.CallOption) (*PasswordAuthResponse, error)
+	// 获取当前登录用户的个人信息（基本信息 + 所属应用列表）
+	// 仅凭登录态（JWT accountId）返回，不接收用户标识参数
+	GetMyProfile(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetMyProfileResponse, error)
 }
 
 type authenticationServiceClient struct {
@@ -47,12 +52,24 @@ func (c *authenticationServiceClient) PasswordAuth(ctx context.Context, in *Pass
 	return out, nil
 }
 
+func (c *authenticationServiceClient) GetMyProfile(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetMyProfileResponse, error) {
+	out := new(GetMyProfileResponse)
+	err := c.cc.Invoke(ctx, AuthenticationService_GetMyProfile_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AuthenticationServiceServer is the server API for AuthenticationService service.
 // All implementations should embed UnimplementedAuthenticationServiceServer
 // for forward compatibility
 type AuthenticationServiceServer interface {
 	// 密码认证
 	PasswordAuth(context.Context, *PasswordAuthRequest) (*PasswordAuthResponse, error)
+	// 获取当前登录用户的个人信息（基本信息 + 所属应用列表）
+	// 仅凭登录态（JWT accountId）返回，不接收用户标识参数
+	GetMyProfile(context.Context, *emptypb.Empty) (*GetMyProfileResponse, error)
 }
 
 // UnimplementedAuthenticationServiceServer should be embedded to have forward compatible implementations.
@@ -61,6 +78,9 @@ type UnimplementedAuthenticationServiceServer struct {
 
 func (UnimplementedAuthenticationServiceServer) PasswordAuth(context.Context, *PasswordAuthRequest) (*PasswordAuthResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PasswordAuth not implemented")
+}
+func (UnimplementedAuthenticationServiceServer) GetMyProfile(context.Context, *emptypb.Empty) (*GetMyProfileResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetMyProfile not implemented")
 }
 
 // UnsafeAuthenticationServiceServer may be embedded to opt out of forward compatibility for this service.
@@ -92,6 +112,24 @@ func _AuthenticationService_PasswordAuth_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AuthenticationService_GetMyProfile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthenticationServiceServer).GetMyProfile(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthenticationService_GetMyProfile_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthenticationServiceServer).GetMyProfile(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AuthenticationService_ServiceDesc is the grpc.ServiceDesc for AuthenticationService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -102,6 +140,10 @@ var AuthenticationService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "PasswordAuth",
 			Handler:    _AuthenticationService_PasswordAuth_Handler,
+		},
+		{
+			MethodName: "GetMyProfile",
+			Handler:    _AuthenticationService_GetMyProfile_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

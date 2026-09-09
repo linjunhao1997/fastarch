@@ -124,6 +124,65 @@ service AuthorizationService {
       body: "*"
     };
   }
+
+  // 返回当前认证账号的权限码集合
+  rpc GetMyPermissions(google.protobuf.Empty) returns (GetMyPermissionsResponse) {
+    option (google.api.http) = {
+      get: "/authorization/my-permissions"
+    };
+  }
+
+  // 资源清单（分页 + 按类型/关键字过滤），供权限创建/编辑的资源绑定选择器
+  rpc ListResources(ListResourcesRequest) returns (ListResourcesResponse) {
+    option (google.api.http) = {
+      get: "/authorization/resources"
+    };
+  }
+
+  // 应用内资源树，用于资源管理与权限绑定选择
+  rpc ListResourceTree(ListResourceTreeRequest) returns (ListResourceTreeResponse) {
+    option (google.api.http) = {
+      get: "/authorization/resource-tree"
+    };
+  }
+
+  // 获取当前用户在指定应用下可见的菜单树（服务端按权限过滤）
+  // 仅含 kind=menu 资源；普通用户按权限键快照过滤，管理员全量
+  rpc ListMyMenuTree(ListMyMenuTreeRequest) returns (ListResourceTreeResponse) {
+    option (google.api.http) = {
+      get: "/authorization/my-menu-tree"
+    };
+  }
+
+  // 创建资源
+  rpc CreateResource(CreateResourceRequest) returns (Resource) {
+    option (google.api.http) = {
+      post: "/authorization/resources"
+      body: "*"
+    };
+  }
+
+  // 获取资源详情
+  rpc GetResource(common.v1.GetRequest) returns (Resource) {
+    option (google.api.http) = {
+      get: "/authorization/resources/{id}"
+    };
+  }
+
+  // 修改资源
+  rpc UpdateResource(UpdateResourceRequest) returns (Resource) {
+    option (google.api.http) = {
+      put: "/authorization/resources/{id}"
+      body: "*"
+    };
+  }
+
+  // 删除资源
+  rpc DeleteResource(DeleteResourceRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/authorization/resources/{id}"
+    };
+  }
 }
 
 message CreatePermissionRequest {
@@ -132,21 +191,31 @@ message CreatePermissionRequest {
   string code = 3 [(buf.validate.field).string.min_len = 1];
   string value = 4;
   string description = 5;
+  // 权限类型：menu | http_api | grpc（创建后不可变）
+  string kind = 6 [(buf.validate.field).required = true];
+  // 绑定资源键，≥1 且须与 kind 同类型
+  repeated string resource_key_list = 7 [deprecated = true];
+  repeated int64 resource_id_list = 8;
 }
 
 message CreateRoleRequest {
-  string name = 1 [(buf.validate.field).string.min_len = 1];
-  string role_code = 2 [(buf.validate.field).string.min_len = 1];
+  int64 application_id = 1 [(buf.validate.field).required = true];
+  string name = 2 [(buf.validate.field).string.min_len = 1];
+  string role_code = 3 [(buf.validate.field).string.min_len = 1];
 }
 
 message ListPermissionsRequest {
   int64 current_page = 1;
   int64 page_size = 2;
+  string keyword = 3;
+  // 按类型过滤：menu | http_api | grpc；空为不过滤
+  string kind = 4;
 }
 
 message ListRolesRequest {
   int64 current_page = 1;
   int64 page_size = 2;
+  string keyword = 3;
 }
 
 message ListPermissionsResponse {
@@ -164,6 +233,10 @@ message UpdatePermissionRequest {
   string name = 2;
   string enabled_status = 3;
   int64 version = 4 [(buf.validate.field).required = true];
+  // 资源绑定替换式更新：提供的 key 清单整体替换既有绑定；不提供则不动绑定。
+  // kind 不可修改，请求中无 kind 字段。
+  repeated string resource_key_list = 5 [deprecated = true];
+  repeated int64 resource_id_list = 6;
 }
 
 message UpdateRoleRequest {
@@ -198,6 +271,7 @@ message UpdateSubscriptionRequest {
 message ListSubscriptionsRequest {
   int64 current_page = 1;
   int64 page_size = 2;
+  string keyword = 3;
 }
 
 message ListSubscriptionsResponse {
@@ -218,6 +292,89 @@ message Permission {
   string updated_by = 8;                      // 修改人（账号 id）
   google.protobuf.Timestamp create_time = 9;  // 创建时间
   google.protobuf.Timestamp update_time = 10; // 修改时间
+  // 权限类型：menu | http_api | grpc（创建后不可变）
+  string kind = 11;
+  // 绑定的资源清单（列表/详情回传，请求侧不含）
+  repeated Resource resource_list = 12;
+}
+
+// 被保护的具体资源。key 全局唯一：
+//   menu     → 路由键，如 "authorization_management.permission_list"
+//   http_api → "<METHOD> <path>"，如 "GET /authorization/permissions"
+//   grpc     → full method，如 "/iam.v1.AccountService/ListAccounts"
+message Resource {
+  string id = 1;
+  string kind = 2;
+  string key = 3;
+  string name = 4;
+  // 仅 http_api 有值：该 HTTP 路由经网关映射的目标 RPC full method
+  string rpc_full_method = 5;
+  string enabled_status = 6;
+  google.protobuf.Timestamp create_time = 7;
+  google.protobuf.Timestamp update_time = 8;
+  int64 application_id = 9;
+  int64 parent_id = 10;
+  int64 version = 11;
+  int32 display_order = 12;
+  ApplicationSummary application = 13;
+}
+
+message ListResourcesRequest {
+  int64 current_page = 1;
+  int64 page_size = 2;
+  // 按类型过滤：menu | http_api | grpc
+  string kind = 3;
+  // 匹配 key/name
+  string keyword = 4;
+}
+
+message ListResourcesResponse {
+  common.v1.Page page = 1;
+  repeated Resource resources = 2;
+}
+
+message ListResourceTreeRequest {
+  int64 application_id = 1 [(buf.validate.field).required = true];
+  string keyword = 2;
+}
+
+message ListMyMenuTreeRequest {
+  int64 application_id = 1 [(buf.validate.field).required = true];
+}
+
+message ResourceTreeNode {
+  Resource resource = 1;
+  repeated ResourceTreeNode children = 2;
+}
+
+message ListResourceTreeResponse {
+  repeated ResourceTreeNode roots = 1;
+}
+
+message CreateResourceRequest {
+  int64 application_id = 1 [(buf.validate.field).required = true];
+  int64 parent_id = 2;
+  string kind = 3 [(buf.validate.field).required = true];
+  string key = 4 [(buf.validate.field).string.min_len = 1];
+  string name = 5 [(buf.validate.field).string.min_len = 1];
+  string rpc_full_method = 6;
+  bool disabled = 7;
+  int32 display_order = 8;
+}
+
+message UpdateResourceRequest {
+  int64 id = 1 [(buf.validate.field).required = true];
+  int64 parent_id = 2;
+  bool parent_cleared = 3;
+  string name = 4;
+  string rpc_full_method = 5;
+  bool disabled = 6;
+  int64 version = 7 [(buf.validate.field).required = true];
+  int32 display_order = 8;
+}
+
+message DeleteResourceRequest {
+  int64 id = 1 [(buf.validate.field).required = true];
 }
 
 // 角色信息
@@ -227,13 +384,31 @@ message Role {
   int64 application_id = 3;
   string role_code = 4;
   string enabled_status = 5;
-  repeated string permission_code_list = 6;
+  repeated string permission_code_list = 6 [deprecated = true];
   int64 version = 7;
   // 审计字段（只读回传，由服务端注入；请求消息不含此类字段，宪法 XII）
   string created_by = 8;                      // 创建人（账号 id）
   string updated_by = 9;                      // 修改人（账号 id）
   google.protobuf.Timestamp create_time = 10; // 创建时间
   google.protobuf.Timestamp update_time = 11; // 修改时间
+  ApplicationSummary application = 12;
+  repeated PermissionSummary permission_list = 13;
+}
+
+message ApplicationSummary {
+  int64 id = 1;
+  string name = 2;
+  string code = 3;
+  string enabled_status = 4;
+  string description = 5;
+}
+
+message PermissionSummary {
+  int64 id = 1;
+  string name = 2;
+  string permission_code = 3;
+  string kind = 4;
+  string enabled_status = 5;
 }
 
 // 权限申请记录
@@ -258,4 +433,15 @@ message CheckPermissionRequest {
 
 message CheckPermissionResponse {
   bool ok = 1;
+}
+
+message GetMyPermissionsResponse {
+  // 兼容期保留，不再填充真实值（语义已升级为资源键，见 menu_key_list 等字段）
+  repeated string permission_code_list = 1 [deprecated = true];
+  // 可见菜单键（前端导航/路由渲染数据源）
+  repeated string menu_key_list = 2;
+  // 可调用的 HTTP 接口（映射后的 full method）
+  repeated string http_full_method_list = 3;
+  // 服务间可调用的 gRPC 方法
+  repeated string rpc_full_method_list = 4;
 }

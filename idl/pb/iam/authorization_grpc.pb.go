@@ -36,6 +36,14 @@ const (
 	AuthorizationService_UpdateSubscription_FullMethodName = "/iam.v1.AuthorizationService/UpdateSubscription"
 	AuthorizationService_ListSubscriptions_FullMethodName  = "/iam.v1.AuthorizationService/ListSubscriptions"
 	AuthorizationService_CheckPermission_FullMethodName    = "/iam.v1.AuthorizationService/CheckPermission"
+	AuthorizationService_GetMyPermissions_FullMethodName   = "/iam.v1.AuthorizationService/GetMyPermissions"
+	AuthorizationService_ListResources_FullMethodName      = "/iam.v1.AuthorizationService/ListResources"
+	AuthorizationService_ListResourceTree_FullMethodName   = "/iam.v1.AuthorizationService/ListResourceTree"
+	AuthorizationService_ListMyMenuTree_FullMethodName     = "/iam.v1.AuthorizationService/ListMyMenuTree"
+	AuthorizationService_CreateResource_FullMethodName     = "/iam.v1.AuthorizationService/CreateResource"
+	AuthorizationService_GetResource_FullMethodName        = "/iam.v1.AuthorizationService/GetResource"
+	AuthorizationService_UpdateResource_FullMethodName     = "/iam.v1.AuthorizationService/UpdateResource"
+	AuthorizationService_DeleteResource_FullMethodName     = "/iam.v1.AuthorizationService/DeleteResource"
 )
 
 // AuthorizationServiceClient is the client API for AuthorizationService service.
@@ -70,6 +78,23 @@ type AuthorizationServiceClient interface {
 	ListSubscriptions(ctx context.Context, in *ListSubscriptionsRequest, opts ...grpc.CallOption) (*ListSubscriptionsResponse, error)
 	// 鉴权：校验当前账号是否拥有指定权限
 	CheckPermission(ctx context.Context, in *CheckPermissionRequest, opts ...grpc.CallOption) (*CheckPermissionResponse, error)
+	// 返回当前认证账号的权限码集合
+	GetMyPermissions(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetMyPermissionsResponse, error)
+	// 资源清单（分页 + 按类型/关键字过滤），供权限创建/编辑的资源绑定选择器
+	ListResources(ctx context.Context, in *ListResourcesRequest, opts ...grpc.CallOption) (*ListResourcesResponse, error)
+	// 应用内资源树，用于资源管理与权限绑定选择
+	ListResourceTree(ctx context.Context, in *ListResourceTreeRequest, opts ...grpc.CallOption) (*ListResourceTreeResponse, error)
+	// 获取当前用户在指定应用下可见的菜单树（服务端按权限过滤）
+	// 仅含 kind=menu 资源；普通用户按权限键快照过滤，管理员全量
+	ListMyMenuTree(ctx context.Context, in *ListMyMenuTreeRequest, opts ...grpc.CallOption) (*ListResourceTreeResponse, error)
+	// 创建资源
+	CreateResource(ctx context.Context, in *CreateResourceRequest, opts ...grpc.CallOption) (*Resource, error)
+	// 获取资源详情
+	GetResource(ctx context.Context, in *common.GetRequest, opts ...grpc.CallOption) (*Resource, error)
+	// 修改资源
+	UpdateResource(ctx context.Context, in *UpdateResourceRequest, opts ...grpc.CallOption) (*Resource, error)
+	// 删除资源
+	DeleteResource(ctx context.Context, in *DeleteResourceRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
 
 type authorizationServiceClient struct {
@@ -215,6 +240,78 @@ func (c *authorizationServiceClient) CheckPermission(ctx context.Context, in *Ch
 	return out, nil
 }
 
+func (c *authorizationServiceClient) GetMyPermissions(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetMyPermissionsResponse, error) {
+	out := new(GetMyPermissionsResponse)
+	err := c.cc.Invoke(ctx, AuthorizationService_GetMyPermissions_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authorizationServiceClient) ListResources(ctx context.Context, in *ListResourcesRequest, opts ...grpc.CallOption) (*ListResourcesResponse, error) {
+	out := new(ListResourcesResponse)
+	err := c.cc.Invoke(ctx, AuthorizationService_ListResources_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authorizationServiceClient) ListResourceTree(ctx context.Context, in *ListResourceTreeRequest, opts ...grpc.CallOption) (*ListResourceTreeResponse, error) {
+	out := new(ListResourceTreeResponse)
+	err := c.cc.Invoke(ctx, AuthorizationService_ListResourceTree_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authorizationServiceClient) ListMyMenuTree(ctx context.Context, in *ListMyMenuTreeRequest, opts ...grpc.CallOption) (*ListResourceTreeResponse, error) {
+	out := new(ListResourceTreeResponse)
+	err := c.cc.Invoke(ctx, AuthorizationService_ListMyMenuTree_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authorizationServiceClient) CreateResource(ctx context.Context, in *CreateResourceRequest, opts ...grpc.CallOption) (*Resource, error) {
+	out := new(Resource)
+	err := c.cc.Invoke(ctx, AuthorizationService_CreateResource_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authorizationServiceClient) GetResource(ctx context.Context, in *common.GetRequest, opts ...grpc.CallOption) (*Resource, error) {
+	out := new(Resource)
+	err := c.cc.Invoke(ctx, AuthorizationService_GetResource_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authorizationServiceClient) UpdateResource(ctx context.Context, in *UpdateResourceRequest, opts ...grpc.CallOption) (*Resource, error) {
+	out := new(Resource)
+	err := c.cc.Invoke(ctx, AuthorizationService_UpdateResource_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authorizationServiceClient) DeleteResource(ctx context.Context, in *DeleteResourceRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, AuthorizationService_DeleteResource_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AuthorizationServiceServer is the server API for AuthorizationService service.
 // All implementations should embed UnimplementedAuthorizationServiceServer
 // for forward compatibility
@@ -247,6 +344,23 @@ type AuthorizationServiceServer interface {
 	ListSubscriptions(context.Context, *ListSubscriptionsRequest) (*ListSubscriptionsResponse, error)
 	// 鉴权：校验当前账号是否拥有指定权限
 	CheckPermission(context.Context, *CheckPermissionRequest) (*CheckPermissionResponse, error)
+	// 返回当前认证账号的权限码集合
+	GetMyPermissions(context.Context, *emptypb.Empty) (*GetMyPermissionsResponse, error)
+	// 资源清单（分页 + 按类型/关键字过滤），供权限创建/编辑的资源绑定选择器
+	ListResources(context.Context, *ListResourcesRequest) (*ListResourcesResponse, error)
+	// 应用内资源树，用于资源管理与权限绑定选择
+	ListResourceTree(context.Context, *ListResourceTreeRequest) (*ListResourceTreeResponse, error)
+	// 获取当前用户在指定应用下可见的菜单树（服务端按权限过滤）
+	// 仅含 kind=menu 资源；普通用户按权限键快照过滤，管理员全量
+	ListMyMenuTree(context.Context, *ListMyMenuTreeRequest) (*ListResourceTreeResponse, error)
+	// 创建资源
+	CreateResource(context.Context, *CreateResourceRequest) (*Resource, error)
+	// 获取资源详情
+	GetResource(context.Context, *common.GetRequest) (*Resource, error)
+	// 修改资源
+	UpdateResource(context.Context, *UpdateResourceRequest) (*Resource, error)
+	// 删除资源
+	DeleteResource(context.Context, *DeleteResourceRequest) (*emptypb.Empty, error)
 }
 
 // UnimplementedAuthorizationServiceServer should be embedded to have forward compatible implementations.
@@ -297,6 +411,30 @@ func (UnimplementedAuthorizationServiceServer) ListSubscriptions(context.Context
 }
 func (UnimplementedAuthorizationServiceServer) CheckPermission(context.Context, *CheckPermissionRequest) (*CheckPermissionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CheckPermission not implemented")
+}
+func (UnimplementedAuthorizationServiceServer) GetMyPermissions(context.Context, *emptypb.Empty) (*GetMyPermissionsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetMyPermissions not implemented")
+}
+func (UnimplementedAuthorizationServiceServer) ListResources(context.Context, *ListResourcesRequest) (*ListResourcesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListResources not implemented")
+}
+func (UnimplementedAuthorizationServiceServer) ListResourceTree(context.Context, *ListResourceTreeRequest) (*ListResourceTreeResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListResourceTree not implemented")
+}
+func (UnimplementedAuthorizationServiceServer) ListMyMenuTree(context.Context, *ListMyMenuTreeRequest) (*ListResourceTreeResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListMyMenuTree not implemented")
+}
+func (UnimplementedAuthorizationServiceServer) CreateResource(context.Context, *CreateResourceRequest) (*Resource, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateResource not implemented")
+}
+func (UnimplementedAuthorizationServiceServer) GetResource(context.Context, *common.GetRequest) (*Resource, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetResource not implemented")
+}
+func (UnimplementedAuthorizationServiceServer) UpdateResource(context.Context, *UpdateResourceRequest) (*Resource, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateResource not implemented")
+}
+func (UnimplementedAuthorizationServiceServer) DeleteResource(context.Context, *DeleteResourceRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteResource not implemented")
 }
 
 // UnsafeAuthorizationServiceServer may be embedded to opt out of forward compatibility for this service.
@@ -580,6 +718,150 @@ func _AuthorizationService_CheckPermission_Handler(srv interface{}, ctx context.
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AuthorizationService_GetMyPermissions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthorizationServiceServer).GetMyPermissions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthorizationService_GetMyPermissions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthorizationServiceServer).GetMyPermissions(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthorizationService_ListResources_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListResourcesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthorizationServiceServer).ListResources(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthorizationService_ListResources_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthorizationServiceServer).ListResources(ctx, req.(*ListResourcesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthorizationService_ListResourceTree_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListResourceTreeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthorizationServiceServer).ListResourceTree(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthorizationService_ListResourceTree_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthorizationServiceServer).ListResourceTree(ctx, req.(*ListResourceTreeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthorizationService_ListMyMenuTree_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListMyMenuTreeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthorizationServiceServer).ListMyMenuTree(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthorizationService_ListMyMenuTree_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthorizationServiceServer).ListMyMenuTree(ctx, req.(*ListMyMenuTreeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthorizationService_CreateResource_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateResourceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthorizationServiceServer).CreateResource(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthorizationService_CreateResource_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthorizationServiceServer).CreateResource(ctx, req.(*CreateResourceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthorizationService_GetResource_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(common.GetRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthorizationServiceServer).GetResource(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthorizationService_GetResource_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthorizationServiceServer).GetResource(ctx, req.(*common.GetRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthorizationService_UpdateResource_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateResourceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthorizationServiceServer).UpdateResource(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthorizationService_UpdateResource_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthorizationServiceServer).UpdateResource(ctx, req.(*UpdateResourceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthorizationService_DeleteResource_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteResourceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthorizationServiceServer).DeleteResource(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthorizationService_DeleteResource_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthorizationServiceServer).DeleteResource(ctx, req.(*DeleteResourceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AuthorizationService_ServiceDesc is the grpc.ServiceDesc for AuthorizationService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -646,6 +928,38 @@ var AuthorizationService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CheckPermission",
 			Handler:    _AuthorizationService_CheckPermission_Handler,
+		},
+		{
+			MethodName: "GetMyPermissions",
+			Handler:    _AuthorizationService_GetMyPermissions_Handler,
+		},
+		{
+			MethodName: "ListResources",
+			Handler:    _AuthorizationService_ListResources_Handler,
+		},
+		{
+			MethodName: "ListResourceTree",
+			Handler:    _AuthorizationService_ListResourceTree_Handler,
+		},
+		{
+			MethodName: "ListMyMenuTree",
+			Handler:    _AuthorizationService_ListMyMenuTree_Handler,
+		},
+		{
+			MethodName: "CreateResource",
+			Handler:    _AuthorizationService_CreateResource_Handler,
+		},
+		{
+			MethodName: "GetResource",
+			Handler:    _AuthorizationService_GetResource_Handler,
+		},
+		{
+			MethodName: "UpdateResource",
+			Handler:    _AuthorizationService_UpdateResource_Handler,
+		},
+		{
+			MethodName: "DeleteResource",
+			Handler:    _AuthorizationService_DeleteResource_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -32,8 +32,22 @@ func applicationToPb(a model.Application) *iam_v1.Application {
 		Name:          a.Name,
 		AppCode:       a.Code,
 		Description:   a.Description,
-		EnabledStatus: boolToStatus(a.Status == constant.ApplicationStatusEnabled),
+		EnabledStatus: disabledToStatus(a.Disabled),
 	}
+}
+
+func disabledToStatus(disabled int) string {
+	if disabled == 0 {
+		return "enabled"
+	}
+	return "disabled"
+}
+
+func statusToDisabled(status string) int {
+	if status == "" || status == constant.ApplicationStatusEnabled {
+		return 0
+	}
+	return 1
 }
 
 func (s *ApplicationService) CreateApplication(ctx context.Context, request *iam_v1.CreateApplicationRequest) (*iam_v1.Application, error) {
@@ -44,7 +58,7 @@ func (s *ApplicationService) CreateApplication(ctx context.Context, request *iam
 		Code:        cast.ToString(pkId),
 		Name:        request.Name,
 		Description: request.Description,
-		Status:      constant.ApplicationStatusEnabled,
+		Disabled:    statusToDisabled(request.EnabledStatus),
 		CreateTime:  now,
 		UpdateTime:  now,
 	}
@@ -66,9 +80,13 @@ func (s *ApplicationService) GetApplication(ctx context.Context, request *common
 
 func (s *ApplicationService) ListApplications(ctx context.Context, request *iam_v1.ListApplicationsRequest) (*iam_v1.ListApplicationsResponse, error) {
 	limit, offset := helper.GetLimitAndOffset(request.CurrentPage, request.PageSize)
+	filter := applyKeywordFilter(s.db.WithContext(ctx), []string{
+		model.ApplicationColumnName + " LIKE ?",
+		model.ApplicationColumnCode + " LIKE ?",
+	}, request.Keyword)
 	var count int64
 	var apps []model.Application
-	err := s.db.WithContext(ctx).Model(model.Application{}).Count(&count).Limit(limit).Offset(offset).Find(&apps).Error
+	err := filter.Model(model.Application{}).Count(&count).Limit(limit).Offset(offset).Find(&apps).Error
 	if err != nil {
 		return nil, err
 	}
@@ -91,11 +109,7 @@ func (s *ApplicationService) UpdateApplication(ctx context.Context, request *iam
 		updates[model.ApplicationColumnDescription] = request.Description
 	}
 	if len(request.EnabledStatus) > 0 {
-		if request.EnabledStatus == "enabled" {
-			updates[model.ApplicationColumnStatus] = constant.ApplicationStatusEnabled
-		} else {
-			updates[model.ApplicationColumnStatus] = constant.ApplicationStatusDisabled
-		}
+		updates[model.ApplicationColumnDisabled] = statusToDisabled(request.EnabledStatus)
 	}
 	updates[model.ApplicationColumnUpdateTime] = time.Now()
 	result := s.db.WithContext(ctx).Model(model.Application{}).
@@ -125,7 +139,15 @@ func (s *ApplicationService) DeleteApplication(ctx context.Context, request *iam
 	if err != nil {
 		return nil, err
 	}
-	if roleCount > 0 || permissionCount > 0 {
+	// specs/008-account-app-context锛氳处鍙熺被搴旂敤鍏宠仈涔熸瀯鎴愬紩鐢紝瀛樺湪鏃舵嫆缁濆垹闄わ紙FR-014锛?
+	var accountAssociationCount int64
+	err = s.db.WithContext(ctx).Model(model.RAccountApplication{}).
+		Where(model.RAccountApplicationColumnApplicationId, request.Id).
+		Count(&accountAssociationCount).Error
+	if err != nil {
+		return nil, err
+	}
+	if roleCount > 0 || permissionCount > 0 || accountAssociationCount > 0 {
 		return nil, ErrApplicationReferenced
 	}
 
