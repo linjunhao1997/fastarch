@@ -849,6 +849,37 @@ func TestListResourcesFilterAndPagination(t *testing.T) {
 	}
 }
 
+func TestListResourcesApplicationIdFilter(t *testing.T) {
+	db := setupAuthorizationTestDB(t)
+	createMenuResource(t, db, 1, 1, nil, "iam.app1.a", "应用1菜单A", 0)
+	createMenuResource(t, db, 2, 1, nil, "iam.app1.b", "应用1菜单B", 0)
+	createMenuResource(t, db, 3, 2, nil, "iam.app2.a", "应用2菜单A", 0)
+	service := NewAuthorizationService(db, nil)
+	ctx := context.Background()
+
+	resp, err := service.ListResources(ctx, &iam_v1.ListResourcesRequest{ApplicationId: 1})
+	if err != nil {
+		t.Fatalf("ListResources() error = %v", err)
+	}
+	if len(resp.Resources) != 2 || resp.Page == nil || resp.Page.Total != 2 {
+		t.Fatalf("ListResources(application_id=1) = %+v, page = %+v", resp.Resources, resp.Page)
+	}
+	for _, r := range resp.Resources {
+		if r.ApplicationId != 1 {
+			t.Fatalf("ListResources(application_id=1) contains resource %s with application_id %d", r.Id, r.ApplicationId)
+		}
+	}
+
+	// 不传 application_id 保持全局行为
+	resp, err = service.ListResources(ctx, &iam_v1.ListResourcesRequest{})
+	if err != nil {
+		t.Fatalf("ListResources() error = %v", err)
+	}
+	if resp.Page == nil || resp.Page.Total != 3 {
+		t.Fatalf("ListResources() page = %+v, want total 3", resp.Page)
+	}
+}
+
 // ── specs/008-account-app-context：我的菜单树（T019）──
 
 func createMenuResource(t *testing.T, db *gorm.DB, id int64, applicationId int64, parentId *int64, key, name string, displayOrder int32) model.Resource {

@@ -78,4 +78,11 @@ var (
 	ErrApplicationNotFound              = NewErrorWithCode("1001029", codes.InvalidArgument, errors.New("所属应用不存在"))
 	ErrResourceHierarchyDepthExceeded    = NewErrorWithCode("1001030", codes.InvalidArgument, errors.New("资源层级深度不能超过 5 层"))
 	ErrApplicationDisabled               = NewErrorWithCode("1001031", codes.FailedPrecondition, errors.New("应用已停用"))
+	// specs/009-ak-sk-auth 访问凭证域（1001040 起）
+	ErrAccessCredentialNotFound        = NewErrorWithCode("1001040", codes.NotFound, errors.New("访问凭证不存在"))
+	ErrAccessCredentialAccountInvalid  = NewErrorWithCode("1001041", codes.FailedPrecondition, errors.New("绑定账号不存在或已停用"))
+	ErrAccessCredentialLimitExceeded   = NewErrorWithCode("1001042", codes.ResourceExhausted, errors.New("该账号凭证数量已达上限"))
+	ErrAccessCredentialSkDecrypt       = NewErrorWithCode("1001043", codes.Internal, errors.New("凭证密钥解密失败，请检查加密密钥配置"))
+	ErrAccessCredentialUpdateBusy      = NewErrorWithCode("1001044", codes.FailedPrecondition, errors.New("凭证已被他人修改，请刷新后重试"))
+	ErrAccountReferencedByCredential   = NewErrorWithCode("1001045", codes.FailedPrecondition, errors.New("账号名下存在访问凭证，请先删除凭证"))
 )

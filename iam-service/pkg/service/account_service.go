@@ -387,6 +387,20 @@ func (service *AccountService) DeleteAccount(ctx context.Context, request *iam_v
 		return nil, ErrAccountReferenced
 	}
 
+	// 名下访问凭证引用校验（specs/009-ak-sk-auth data-model：删除用户前凭证数须为 0）
+	var credentialCount int64
+	err = service.db.WithContext(ctx).Model(model.AccessCredential{}).
+		Where(model.AccessCredentialColumnAccountId, request.Id).
+		Count(&credentialCount).Error
+	if err != nil {
+		slog.Warn("check account credential references failed", "account_id", request.Id, "error", err)
+		return nil, err
+	}
+	if credentialCount > 0 {
+		slog.Warn("delete account rejected: bound by access credentials", "account_id", request.Id, "credential_count", credentialCount)
+		return nil, ErrAccountReferencedByCredential
+	}
+
 	result := service.db.WithContext(ctx).
 		Where(model.AccountColumnId, request.Id).
 		Delete(model.Account{})

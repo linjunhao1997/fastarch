@@ -803,6 +803,9 @@ func (a AuthorizationService) ListResources(ctx context.Context, request *iam_v1
 		if len(request.Kind) > 0 {
 			query = query.Where(model.ResourceColumnKind, request.Kind)
 		}
+		if request.ApplicationId > 0 {
+			query = query.Where(model.ResourceColumnApplicationId, request.ApplicationId)
+		}
 		return query
 	}
 	var count int64

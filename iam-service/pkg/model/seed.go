@@ -21,11 +21,11 @@ const (
 
 func Seed(ctx context.Context, db *gorm.DB) error {
 	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := seedResources(tx); err != nil {
-			return err
-		}
 		applicationId, err := seedApplication(tx)
 		if err != nil {
+			return err
+		}
+		if err := seedResources(tx, applicationId); err != nil {
 			return err
 		}
 		if err := migrateLegacyAdminRole(tx); err != nil {
@@ -45,7 +45,74 @@ func Seed(ctx context.Context, db *gorm.DB) error {
 	})
 }
 
-func seedResources(tx *gorm.DB) error {
+// credentialSeedResources 是凭证域（specs/009-ak-sk-auth T006）的资源种子清单：
+// 7 条 HTTP 路由 + 7 个 gRPC full method + 1 个菜单键。资源登记后由
+// seedBuiltinPermissions 全量绑定到 builtin "*" 权限（管理员可见），
+// 其余角色经资源管理按需授权。幂等：按 (application_id, kind, key) 补齐缺失行。
+var credentialSeedResources = []Resource{
+	// HTTP 路由资源（key = "<METHOD> <path>"，与 HTTP_ROUTES 镜像）
+	{Kind: PermissionKindHTTPAPI, Key: "POST /authentication/access-credentials", Name: "创建访问凭证", RpcFullMethod: "/iam.v1.AccessCredentialService/CreateAccessCredential"},
+	{Kind: PermissionKindHTTPAPI, Key: "GET /authentication/access-credentials", Name: "凭证列表", RpcFullMethod: "/iam.v1.AccessCredentialService/ListAccessCredentials"},
+	{Kind: PermissionKindHTTPAPI, Key: "GET /authentication/access-credentials/{id}", Name: "凭证详情", RpcFullMethod: "/iam.v1.AccessCredentialService/GetAccessCredential"},
+	{Kind: PermissionKindHTTPAPI, Key: "PATCH /authentication/access-credentials/{id}", Name: "编辑凭证", RpcFullMethod: "/iam.v1.AccessCredentialService/UpdateAccessCredential"},
+	{Kind: PermissionKindHTTPAPI, Key: "POST /authentication/access-credentials/{id}/status", Name: "启用/禁用凭证", RpcFullMethod: "/iam.v1.AccessCredentialService/ChangeAccessCredentialStatus"},
+	{Kind: PermissionKindHTTPAPI, Key: "POST /authentication/access-credentials/{id}/reset-secret", Name: "重置凭证密钥", RpcFullMethod: "/iam.v1.AccessCredentialService/ResetAccessCredentialSecret"},
+	{Kind: PermissionKindHTTPAPI, Key: "DELETE /authentication/access-credentials/{id}", Name: "删除凭证", RpcFullMethod: "/iam.v1.AccessCredentialService/DeleteAccessCredential"},
+	// gRPC 资源（key = full method，与 GRPC_FULL_METHODS 镜像）
+	{Kind: PermissionKindGRPC, Key: "/iam.v1.AccessCredentialService/CreateAccessCredential", Name: "创建访问凭证"},
+	{Kind: PermissionKindGRPC, Key: "/iam.v1.AccessCredentialService/ListAccessCredentials", Name: "凭证列表"},
+	{Kind: PermissionKindGRPC, Key: "/iam.v1.AccessCredentialService/GetAccessCredential", Name: "凭证详情"},
+	{Kind: PermissionKindGRPC, Key: "/iam.v1.AccessCredentialService/UpdateAccessCredential", Name: "编辑凭证"},
+	{Kind: PermissionKindGRPC, Key: "/iam.v1.AccessCredentialService/ChangeAccessCredentialStatus", Name: "启用/禁用凭证"},
+	{Kind: PermissionKindGRPC, Key: "/iam.v1.AccessCredentialService/ResetAccessCredentialSecret", Name: "重置凭证密钥"},
+	{Kind: PermissionKindGRPC, Key: "/iam.v1.AccessCredentialService/DeleteAccessCredential", Name: "删除凭证"},
+	// 菜单资源（key 与 MENU_KEYS / 前端 handle.key 镜像）
+	{Kind: PermissionKindMenu, Key: "access_credential_list", Name: "访问凭证"},
+}
+
+func seedResources(tx *gorm.DB, applicationId int64) error {
+	keys := make([]string, 0, len(credentialSeedResources))
+	for _, item := range credentialSeedResources {
+		keys = append(keys, item.Key)
+	}
+	var existing []Resource
+	if err := tx.Select(ResourceFields).
+		Where(ResourceColumnApplicationId, applicationId).
+		// key 为 MySQL 保留字，显式 SQL 片段必须反引号（gorm 仅对 Eq 形式自动引用）
+		Where("`key` IN ?", keys).
+		Find(&existing).Error; err != nil {
+		return err
+	}
+	existingKeys := make(map[string]struct{}, len(existing))
+	for _, row := range existing {
+		existingKeys[row.Kind+"|"+row.Key] = struct{}{}
+	}
+
+	now := time.Now()
+	missing := make([]Resource, 0, len(credentialSeedResources))
+	for _, item := range credentialSeedResources {
+		if _, ok := existingKeys[item.Kind+"|"+item.Key]; ok {
+			continue
+		}
+		missing = append(missing, Resource{
+			Id:            krand.NewID(),
+			ApplicationId: applicationId,
+			Kind:          item.Kind,
+			Key:           item.Key,
+			Name:          item.Name,
+			RpcFullMethod: item.RpcFullMethod,
+			CreateTime:    now,
+			UpdateTime:    now,
+			Version:       1,
+		})
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	if err := tx.Create(&missing).Error; err != nil {
+		return err
+	}
+	slog.Info("seed credential resources", "application_id", applicationId, "created", len(missing))
 	return nil
 }
 

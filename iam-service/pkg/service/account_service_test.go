@@ -32,7 +32,7 @@ func setupAccountTestDB(t *testing.T) *gorm.DB {
 		t.Fatalf("get sqlite database: %v", err)
 	}
 	sqlDB.SetMaxOpenConns(1)
-	err = db.AutoMigrate(&model.Application{}, &model.Role{}, &model.Permission{}, &model.Account{}, &model.RAccountRole{}, &model.RAccountApplication{}, &model.Resource{}, &model.PermissionResource{})
+	err = db.AutoMigrate(&model.Application{}, &model.Role{}, &model.Permission{}, &model.Account{}, &model.RAccountRole{}, &model.RAccountApplication{}, &model.Resource{}, &model.PermissionResource{}, &model.AccessCredential{})
 	if err != nil {
 		t.Fatalf("migrate sqlite: %v", err)
 	}
@@ -245,6 +245,45 @@ func TestDeleteAccount(t *testing.T) {
 				t.Fatalf("account count = %d, want 0", count)
 			}
 		})
+	}
+}
+
+// specs/009-ak-sk-auth T025：删除用户前名下凭证数须为 0（引用完整性检查点）。
+func TestDeleteAccountReferencedByCredential(t *testing.T) {
+	db := setupAccountTestDB(t)
+	account := createTestAccount(t, db, 1, "cred@example.com", 1)
+	credential := model.AccessCredential{
+		Id:              900,
+		AccessKey:       "FAKdeleteguard0000001",
+		SecretKeyCipher: "cipher",
+		AccountId:       account.Id,
+		Status:          constant.AccessCredentialStatusEnabled,
+		Version:         1,
+	}
+	if err := db.Create(&credential).Error; err != nil {
+		t.Fatalf("create credential: %v", err)
+	}
+
+	service := NewAccountService(db, nil)
+	_, err := service.DeleteAccount(context.Background(), &iam_v1.DeleteAccountRequest{Id: account.Id})
+	if err != ErrAccountReferencedByCredential {
+		t.Fatalf("DeleteAccount() error = %v, want %v", err, ErrAccountReferencedByCredential)
+	}
+
+	var count int64
+	if err := db.Model(model.Account{}).Where(model.AccountColumnId, account.Id).Count(&count).Error; err != nil {
+		t.Fatalf("count account: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("account count = %d, want 1 (deletion must be rejected)", count)
+	}
+
+	// 清空凭证后删除放行
+	if err := db.Where(model.AccessCredentialColumnAccountId, account.Id).Delete(&model.AccessCredential{}).Error; err != nil {
+		t.Fatalf("delete credentials: %v", err)
+	}
+	if _, err := service.DeleteAccount(context.Background(), &iam_v1.DeleteAccountRequest{Id: account.Id}); err != nil {
+		t.Fatalf("DeleteAccount() after credentials removed error = %v, want nil", err)
 	}
 }
 

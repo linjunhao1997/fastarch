@@ -7,6 +7,8 @@ import (
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
+
+	"iam-service/pkg/constant"
 )
 
 func setupSeedTestDB(t *testing.T) *gorm.DB {
@@ -150,6 +152,79 @@ func TestSeedAdminRole(t *testing.T) {
 	if count != 1 {
 		t.Fatalf("admin role count = %d, want 1", count)
 	}
+}
+
+// S5' 凭证域资源（specs/009-ak-sk-auth T006）：15 条种子资源存在且归属内置应用，
+// HTTP 资源携带 RpcFullMethod；重复 Seed 不新增（幂等）。
+func TestSeedCredentialResources(t *testing.T) {
+	db := setupSeedTestDB(t)
+	if err := Seed(context.Background(), db); err != nil {
+		t.Fatalf("Seed() error = %v", err)
+	}
+
+	app := Application{}
+	if err := db.Where(ApplicationColumnCode, constant.ApplicationCode).First(&app).Error; err != nil {
+		t.Fatalf("get builtin application: %v", err)
+	}
+
+	for _, seed := range []struct {
+		kind  string
+		count int64
+	}{
+		{PermissionKindHTTPAPI, 7},
+		{PermissionKindGRPC, 7},
+		{PermissionKindMenu, 1},
+	} {
+		var count int64
+		if err := db.Model(Resource{}).
+			Where(ResourceColumnApplicationId, app.Id).
+			Where(ResourceColumnKind, seed.kind).
+			Where("`key` IN ?", credentialSeedResourceKeys()).
+			Count(&count).Error; err != nil {
+			t.Fatalf("count %s resources: %v", seed.kind, err)
+		}
+		if count != seed.count {
+			t.Fatalf("credential %s resources = %d, want %d", seed.kind, count, seed.count)
+		}
+	}
+
+	// HTTP 资源必须携带 RpcFullMethod（http 域快照键的数据来源）
+	var missingRpc int64
+	if err := db.Model(Resource{}).
+		Where(ResourceColumnApplicationId, app.Id).
+		Where(ResourceColumnKind, PermissionKindHTTPAPI).
+		Where("`key` IN ?", credentialSeedResourceKeys()).
+		Where(ResourceColumnRpcFullMethod + " = ''").
+		Count(&missingRpc).Error; err != nil {
+		t.Fatalf("count http resources missing rpc method: %v", err)
+	}
+	if missingRpc != 0 {
+		t.Fatalf("%d credential http resources missing rpc_full_method", missingRpc)
+	}
+
+	// 幂等：重复 Seed 资源零新增
+	var before, after int64
+	if err := db.Model(Resource{}).Count(&before).Error; err != nil {
+		t.Fatalf("count resources: %v", err)
+	}
+	if err := Seed(context.Background(), db); err != nil {
+		t.Fatalf("Seed() #2 error = %v", err)
+	}
+	if err := db.Model(Resource{}).Count(&after).Error; err != nil {
+		t.Fatalf("count resources after re-seed: %v", err)
+	}
+	if before != after {
+		t.Fatalf("resource count changed after re-seed: %d -> %d", before, after)
+	}
+}
+
+// credentialSeedResourceKeys 收集凭证种子资源的 key 清单（避免跨测试文件导出循环）。
+func credentialSeedResourceKeys() []string {
+	keys := make([]string, 0, len(credentialSeedResources))
+	for _, item := range credentialSeedResources {
+		keys = append(keys, item.Key)
+	}
+	return keys
 }
 
 // S5/S6 三个内置权限存在、kind 正确、全量绑定同类型资源并授予管理员角色。

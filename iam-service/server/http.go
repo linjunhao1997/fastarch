@@ -34,6 +34,9 @@ func RunHttpServer(ctx context.Context, cfg *conf.Config) error {
 	if err := iam_v1.RegisterApplicationServiceHandlerFromEndpoint(ctx, mux, cfg.Http.Endpoint, dialOptions); err != nil {
 		return fmt.Errorf("register application service handler: %w", err)
 	}
+	if err := iam_v1.RegisterAccessCredentialServiceHandlerFromEndpoint(ctx, mux, cfg.Http.Endpoint, dialOptions); err != nil {
+		return fmt.Errorf("register access credential service handler: %w", err)
+	}
 
 	return httpserver.Run(ctx, cfg.Http.AddrWithPort(), mux)
 }

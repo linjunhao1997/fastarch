@@ -398,6 +398,14 @@
             "in": "query",
             "required": false,
             "type": "string"
+          },
+          {
+            "name": "applicationId",
+            "description": "按所属应用过滤（资源管理页按应用维度展示）",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
           }
         ],
         "tags": [

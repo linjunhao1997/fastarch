@@ -326,6 +326,8 @@ message ListResourcesRequest {
   string kind = 3;
   // 匹配 key/name
   string keyword = 4;
+  // 按所属应用过滤（资源管理页按应用维度展示）
+  int64 application_id = 5;
 }
 
 message ListResourcesResponse {

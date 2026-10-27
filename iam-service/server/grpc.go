@@ -13,6 +13,7 @@ import (
 
 	"iam-service/conf"
 	"iam-service/pkg/auth"
+	"iam-service/pkg/cipher"
 	"iam-service/pkg/model"
 	"iam-service/pkg/service"
 )
@@ -44,13 +45,25 @@ func RunGrpcServer(ctx context.Context, cfg *conf.Config) error {
 		return fmt.Errorf("migrate resource tree: %w", err)
 	}
 
+	// 访问凭证域配置解析（specs/009-ak-sk-auth）：密钥缺失 fail-fast，
+	// 禁止以明文/无加密状态运行（data-model.md 配置项）
+	credentialWindow, credentialMaxPerAccount, credentialEncryptKey, err := cfg.ResolveCredentialConfig()
+	if err != nil {
+		return err
+	}
+	credentialAES, err := cipher.NewAESGCMFromEncodedKey(credentialEncryptKey)
+	if err != nil {
+		return fmt.Errorf("init credential cipher: %w", err)
+	}
+
 	srv, err := grpcserver.New(cfg.GRpc.AddrWithPort(),
 		grpcserver.WithDefaultInterceptors(),
 		grpcserver.WithErrorDomain(cfg.App.Name),
 		grpcserver.WithGormErrorMapping(),
 		grpcserver.WithServerOptions(
-			// 权限快照读穿回源函数注入鉴权拦截器（research.md D6-②）
-			grpc.ChainUnaryInterceptor(auth.Interceptor(rdb, service.NewPermissionSnapshotLoader(db))),
+			// 权限快照读穿回源函数注入鉴权拦截器（research.md D6-②）；
+			// 签名验签器注入 AK/SK 双轨分支（specs/009-ak-sk-auth T017）
+			grpc.ChainUnaryInterceptor(auth.Interceptor(rdb, service.NewPermissionSnapshotLoader(db), auth.NewSignatureStore(db, rdb, credentialAES, credentialWindow))),
 			grpc.StatsHandler(otelgrpc.NewClientHandler()),
 		),
 	)
@@ -63,6 +76,7 @@ func RunGrpcServer(ctx context.Context, cfg *conf.Config) error {
 	iam_v1.RegisterAccountServiceServer(s, service.NewAccountService(db, rdb))
 	iam_v1.RegisterAuthorizationServiceServer(s, service.NewAuthorizationService(db, rdb))
 	iam_v1.RegisterApplicationServiceServer(s, service.NewApplicationService(db))
+	iam_v1.RegisterAccessCredentialServiceServer(s, service.NewAccessCredentialService(db, rdb, credentialAES, credentialMaxPerAccount))
 
 	return srv.Run(ctx)
 }

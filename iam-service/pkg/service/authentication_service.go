@@ -93,10 +93,11 @@ func (a AuthenticationService) PasswordAuth(ctx context.Context, request *iam_v1
 	})
 
 	accessTokenCookie := http.Cookie{
-		Name:    auth.Authorization,
-		Value:   jwtStr,
-		Expires: expirationTime,
-		Path:    "/",
+		Name:     auth.Authorization,
+		Value:    jwtStr,
+		Expires:  expirationTime,
+		Path:     "/",
+		HttpOnly: true,
 	}
 	err = grpc.SetHeader(ctx, metadata.Pairs("Set-Cookie", accessTokenCookie.String()))
 	if err != nil {

@@ -53,4 +53,12 @@ var HTTP_ROUTES = []HTTPRoute{
 	{"GET", "/authorization/resources/{id}", "/iam.v1.AuthorizationService/GetResource"},
 	{"PUT", "/authorization/resources/{id}", "/iam.v1.AuthorizationService/UpdateResource"},
 	{"DELETE", "/authorization/resources/{id}", "/iam.v1.AuthorizationService/DeleteResource"},
+	// AccessCredentialService（specs/009-ak-sk-auth）
+	{"POST", "/authentication/access-credentials", "/iam.v1.AccessCredentialService/CreateAccessCredential"},
+	{"GET", "/authentication/access-credentials", "/iam.v1.AccessCredentialService/ListAccessCredentials"},
+	{"GET", "/authentication/access-credentials/{id}", "/iam.v1.AccessCredentialService/GetAccessCredential"},
+	{"PATCH", "/authentication/access-credentials/{id}", "/iam.v1.AccessCredentialService/UpdateAccessCredential"},
+	{"POST", "/authentication/access-credentials/{id}/status", "/iam.v1.AccessCredentialService/ChangeAccessCredentialStatus"},
+	{"POST", "/authentication/access-credentials/{id}/reset-secret", "/iam.v1.AccessCredentialService/ResetAccessCredentialSecret"},
+	{"DELETE", "/authentication/access-credentials/{id}", "/iam.v1.AccessCredentialService/DeleteAccessCredential"},
 }

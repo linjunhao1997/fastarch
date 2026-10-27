@@ -25,3 +25,9 @@ const (
 	AccountStatusEnabled  = "enabled"
 	AccountStatusDisabled = "disabled"
 )
+
+// 访问凭证状态（specs/009-ak-sk-auth：启用/禁用二元，无自动封禁，FR-014a）
+const (
+	AccessCredentialStatusEnabled  = "enabled"
+	AccessCredentialStatusDisabled = "disabled"
+)

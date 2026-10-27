@@ -42,4 +42,12 @@ var GRPC_FULL_METHODS = []string{
 	"/iam.v1.AuthorizationService/GetResource",
 	"/iam.v1.AuthorizationService/UpdateResource",
 	"/iam.v1.AuthorizationService/DeleteResource",
+	// AccessCredentialService（specs/009-ak-sk-auth）
+	"/iam.v1.AccessCredentialService/CreateAccessCredential",
+	"/iam.v1.AccessCredentialService/ListAccessCredentials",
+	"/iam.v1.AccessCredentialService/GetAccessCredential",
+	"/iam.v1.AccessCredentialService/UpdateAccessCredential",
+	"/iam.v1.AccessCredentialService/ChangeAccessCredentialStatus",
+	"/iam.v1.AccessCredentialService/ResetAccessCredentialSecret",
+	"/iam.v1.AccessCredentialService/DeleteAccessCredential",
 }
