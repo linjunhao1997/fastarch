@@ -8,7 +8,8 @@
 
 ```
 ┌───────────────────────────────────────────────────────────────┐
-│  前端 app/ :5173  React 19 + Ant Design + Vite + TS           │
+│  前端 frontend-service/iam-web :5173                          │
+│  React 19 + Ant Design + Vite + TS                            │
 │  按 <服务前缀> 代理 → /account /authorization /sender ...      │
 └──────────────────────────┬────────────────────────────────────┘
                            │ HTTP (REST)
@@ -36,7 +37,7 @@
 | `idl/` | `idl`（对外名 `github.com/linjunhao1997/idl`） | **接口层**：proto 定义 + 生成的 pb/gateway/swagger 代码 + 公共拦截器库（`lib/grpclib`、`lib/gwlib`） |
 | `contrib/` | `github.com/linjunhao1997/contrib` | **共享基础设施**：配置加载、cobra 应用引导、grpcserver/httpserver 组装、MySQL/Redis 助手、代码生成器 |
 | `iam-service/` | `iam-service` | 业务服务（每个业务服务一个这样的目录） |
-| `app/` | — | React 前端 |
+| `frontend-service/iam-web/` | — | React 前端 |
 
 依赖方向：`iam-service → idl + contrib`，`contrib → idl`，均通过 `replace ../` 指向本地。**idl 被所有服务依赖，contrib 被所有服务复用，业务服务之间不互相依赖**（需要跨服务调用走 gRPC）。
 
@@ -50,7 +51,7 @@
 | 应用层（Application） | `iam-service/pkg/service/*_service.go` | 实现 pb 生成的 `XxxServiceServer` 接口；做 DTO(model↔pb) 转换、编排、事务边界 |
 | 领域/持久层（Domain/Infra） | `iam-service/pkg/model/` + `pkg/helper/` | GORM 模型 + 生成的列名常量；helper 提供分页等横切工具 |
 | 共享内核（Shared Kernel） | `idl/lib/*`、`contrib/pkg/*` | 拦截器、错误转换、配置、服务组装——业务服务只"用"不"改" |
-| 前端（BFF 视角） | `app/src/{api,pages,routers}` | api 按服务一个文件，页面三件套，路由即菜单 |
+| 前端（BFF 视角） | `frontend-service/iam-web/src/{api,pages,routers}` | api 按服务一个文件，页面三件套，路由即菜单 |
 
 ## 三、目录结构
 
@@ -92,9 +93,9 @@ fastarch/
 │       ├── model/                # 手写模型 + *_generated.go(列名常量) + ddl.sql
 │       └── service/              # 业务实现 + service_error.go 业务错误
 │
-└── app/                          # React 前端
+└── frontend-service/iam-web/     # React 前端
     └── src/
-        ├── api/                  # iam.ts（每服务一个文件: request + xxxApi）
+        ├── api/                  # request.ts 统一封装 + iam.ts（每服务一个文件: xxxApi）
         ├── pages/<XxxManagement>/ # XxxListPage / CreateXxxPage / EditXxxPage 三件套
         ├── routers/router.tsx    # createBrowserRouter + handle 元数据（菜单/面包屑自动生成）
         ├── components/           # AuthWrapper、AutoBreadcrumb
@@ -111,21 +112,83 @@ fastarch/
 | 后端 | Go 1.21+，cobra CLI，viper 配置，GORM，JWT，Redis |
 | 存储 | MySQL（AutoMigrate）+ Redis |
 
-## 五、快速开始
+## 五、快速开始（从零部署）
 
-环境要求：Go 1.21+、Node 20+/pnpm、MySQL 8、Redis 7、buf 工具链（`buf`、`protoc-gen-go`、`protoc-gen-go-grpc`、`protoc-gen-grpc-gateway`、`protoc-gen-openapiv2`，见 `idl/proto/protoc.sh` 头部注释的安装命令）。
+### 5.0 环境要求
+
+| 依赖 | 版本 | 用途 |
+|---|---|---|
+| Go | 1.21+ | 后端编译运行 |
+| Node | 20+ | 前端构建 |
+| pnpm | 8+ | 前端包管理 |
+| MySQL | 8 | 业务数据（AutoMigrate 自动建表） |
+| Redis | 7 | token/权限快照缓存 |
+
+> buf 工具链（`buf`、`protoc-gen-*`）只在**修改 proto 重新生成代码**时才需要，纯部署可跳过；生成产物（`idl/pb/`、`idl/openapiv2/`）已随仓库提交。
+
+### 5.1 数据库准备
+
+只需建库（建表由服务启动时的 AutoMigrate + 种子数据自动完成）：
+
+```sql
+CREATE DATABASE IF NOT EXISTS iam_dev DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+```
+
+然后确认 `iam-service/conf/config.yaml` 的 `database.dsn`、`redis.addr` 与本机环境一致。
+
+### 5.2 注入凭证加密密钥（必须）
+
+AK/SK 访问凭证功能要求注入 32 字节（hex/base64）加密密钥，**缺失时服务启动直接报错**（fail-fast）：
+
+```powershell
+# Windows（用户级，重开终端生效）
+[Environment]::SetEnvironmentVariable('IAM_CREDENTIAL_ENCRYPT_KEY', '<32字节hex密钥>', 'User')
+
+# Linux/macOS（写入 ~/.bashrc 或 ~/.zshrc）
+export IAM_CREDENTIAL_ENCRYPT_KEY='<32字节hex密钥>'
+```
+
+> 密钥可自行生成（如 `openssl rand -hex 32`）。注意：同一套库换密钥后，已落库的旧凭证密文将无法解密，需重新生成凭证。密钥只走环境变量，**禁止写入 config.yaml 入仓**。
+
+### 5.3 启动后端（两个终端）
 
 ```bash
-# 1. 数据库：改 iam-service/conf/config.yaml 的 database.dsn / redis.addr
-
-# 2. 启动 iam-service（两个终端）
 cd iam-service
-go run . grpc      # gRPC  :9090
-go run . http      # 网关  :8080 → 9090
-
-# 3. 启动前端
-cd app && pnpm install && pnpm dev   # :5173，代理 /account 等前缀 → :8080
+go run . grpc      # gRPC  :9090（启动时自动 AutoMigrate + 种子数据）
+go run . http      # 网关  :8080 → 9090（需先启动 gRPC）
 ```
+
+### 5.4 初始化管理员账号（仅全新库需要一次）
+
+种子数据只建应用/角色/权限，**不建账号**；而 `CreateAccount` 接口又要求登录态，全新库直接调接口会死锁。首次部署请执行以下 SQL 引导一个管理员（之后所有账号在页面上管理）：
+
+```sql
+-- 密码 Admin@123456（salt=fastarch-boot-ad，sha256(password+salt)）
+INSERT INTO t_account (id, code, name, email, status, salt, password, ak, sk, kind, create_time, update_time, created_by, updated_by, version)
+VALUES (1, 'boot-admin', 'Administrator', 'admin@fastarch.local', 'enabled',
+        'ZmFzdGFyY2gtYm9vdC1hZA==', '28e29d4f2ab50620e8b291b06e2b744ddc1d2692ff13882a4ec5484d863b0fd1',
+        '', '', '0', NOW(3), NOW(3), 0, 0, 1);
+
+-- 绑定内置管理员角色（code=1000，由种子数据创建）
+INSERT INTO t_r_account_role (id, account_id, role_id)
+VALUES (1, 1, (SELECT id FROM t_role WHERE code = '1000'));
+
+-- 绑定种子应用，登录后可进入应用上下文
+INSERT INTO t_r_account_application (id, account_id, application_id)
+VALUES (1, 1, (SELECT id FROM t_application LIMIT 1));
+```
+
+**登录后请立即在「账号管理」中修改该账号密码，并新建日常使用的管理员账号、禁用/删除引导账号。**
+
+### 5.5 启动前端
+
+```bash
+cd frontend-service/iam-web
+pnpm install
+pnpm dev           # :5173，代理 /account /application /authorization /authentication → :8080
+```
+
+浏览器打开 http://localhost:5173 ，用引导账号登录即可。
 
 配置文件示例（`iam-service/conf/config.yaml`）：
 
@@ -451,10 +514,10 @@ proto 契约 → 代码生成 → model(如涉新表/新列) → service 实现 
 | 4 | 模型 | `pkg/model/` | 新表才动 model：手写结构体 + `TableName()` + `init(){migrate}` + `ddl.sql` 同步；查询条件只用生成的列名常量 |
 | 5 | 业务实现 | `pkg/service/xxx_service.go` | `var _ xxx_v1.XxxServiceServer = (*Service)(nil)` 编译断言；model↔pb 转换用 `xxxToPb` 函数；分页必走 `helper`；错误必走 `service_error.go` 业务码 |
 | 6 | 注册（仅新 service 需要） | `server/grpc.go` / `server/http.go` | 只加 `Register` 两行；已有 service 新增方法**不需要**动 server 层 |
-| 7 | 前端 API | `app/src/api/<domain>.ts` | 每服务一个文件；复用统一 `request<T>`；类型与 proto 响应一一对应 |
-| 8 | 前端页面 | `app/src/pages/<XxxManagement>/` | 三件套：`XxxListPage` / `CreateXxxPage` / `EditXxxPage`；错误统一 `useApiErrorNotification()` |
-| 9 | 路由 | `app/src/routers/router.tsx` | handle 元数据驱动菜单/面包屑（见 9.3）；**不要新建静态菜单配置** |
-| 10 | 代理 | `app/vite.config.ts` | 仅新服务前缀时加一条 |
+| 7 | 前端 API | `frontend-service/iam-web/src/api/<domain>.ts` | 每服务一个文件；复用统一 `request<T>`；类型与 proto 响应一一对应 |
+| 8 | 前端页面 | `frontend-service/iam-web/src/pages/<XxxManagement>/` | 三件套：`XxxListPage` / `CreateXxxPage` / `EditXxxPage`；错误统一 `useApiErrorNotification()` |
+| 9 | 路由 | `frontend-service/iam-web/src/routers/router.tsx` | handle 元数据驱动菜单/面包屑（见 9.3）；**不要新建静态菜单配置** |
+| 10 | 代理 | `frontend-service/iam-web/vite.config.ts` | 仅新服务前缀时加一条 |
 
 > 在已有服务上加接口 = 步骤 1/2/3/5 + 前端 7/8/9；新服务 = 第七节 + 上述全部。
 
@@ -498,7 +561,7 @@ export const senderApi = {
 };
 ```
 
-> 现状提示：`request` 目前定义在 `api/iam.ts` 内部未导出。建议抽到 `src/api/request.ts` 公共文件，新服务的 api 文件统一 import，避免复制粘贴（新增 sender 模块时顺手做这一步）。
+> `request` 统一定义在 `src/api/request.ts`（公共封装：token 注入、错误解析），各服务的 api 文件直接 import 使用。
 
 ### 9.2 页面三件套
 
@@ -545,4 +608,4 @@ export const senderApi = {
 | 生成模型列名常量 | `go run ../contrib/main.go gen_gorm_mysql_repository -m pkg/model/xxx.go`（`go generate ./...` 亦可） |
 | 启动某服务 gRPC / 网关 | `cd <service> && go run . grpc` / `go run . http` |
 | 指定配置/端口 | `go run . grpc -c conf/config.yaml` / `go run . http --addr 127.0.0.1 --port 8080 --endpoint 127.0.0.1:9090` |
-| 前端开发 | `cd app && pnpm dev` |
+| 前端开发 | `cd frontend-service/iam-web && pnpm dev` |
