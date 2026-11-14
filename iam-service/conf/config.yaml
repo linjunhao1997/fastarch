@@ -1,5 +1,5 @@
 database:
-  dsn: "root:mysql12345678@tcp(127.0.0.1:3306)/iam_dev?charset=utf8mb4&parseTime=True&loc=Local"
+  dsn: "root:mysql12345678@tcp(127.0.0.1:3306)/fastarch_dev?charset=utf8mb4&parseTime=True&loc=Local"
 
 redis:
   addr: "localhost:6379"
