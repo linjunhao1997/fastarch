@@ -2,7 +2,7 @@ package model
 
 import (
 	"context"
-	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/glebarez/sqlite"
@@ -23,7 +23,7 @@ func setupSeedTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-// S1-S6 幂等性：同库重复执行 Seed 零新增行（T027）。
+// 幂等性：同库重复执行 Seed 零新增行。
 func TestSeedIdempotent(t *testing.T) {
 	db := setupSeedTestDB(t)
 	ctx := context.Background()
@@ -34,32 +34,38 @@ func TestSeedIdempotent(t *testing.T) {
 	snapshots := []struct {
 		label string
 		model interface{}
-	}{{"resource", &Resource{}}, {"permission", &Permission{}}, {"role", &Role{}}, {"binding", &PermissionResource{}}}
-	counts := map[string]int64{}
-	for _, s := range snapshots {
-		var count int64
-		if err := db.Model(s.model).Count(&count).Error; err != nil {
-			t.Fatalf("count %s: %v", s.label, err)
+	}{{"resource", &Resource{}}, {"permission", &Permission{}}, {"role", &Role{}}, {"role_permission", struct{}{}}}
+	countResource := func() (int64, int64, int64, int64) {
+		var resources, permissions, roles, grants int64
+		if err := db.Model(&Resource{}).Count(&resources).Error; err != nil {
+			t.Fatalf("count resource: %v", err)
 		}
-		counts[s.label] = count
+		if err := db.Model(&Permission{}).Count(&permissions).Error; err != nil {
+			t.Fatalf("count permission: %v", err)
+		}
+		if err := db.Model(&Role{}).Count(&roles).Error; err != nil {
+			t.Fatalf("count role: %v", err)
+		}
+		if err := db.Raw("SELECT COUNT(1) FROM t_r_role_permission").Scan(&grants).Error; err != nil {
+			t.Fatalf("count grants: %v", err)
+		}
+		return resources, permissions, roles, grants
 	}
+	r1, p1, ro1, g1 := countResource()
 
 	if err := Seed(ctx, db); err != nil {
 		t.Fatalf("Seed() #2 error = %v", err)
 	}
-	for _, s := range snapshots {
-		var count int64
-		if err := db.Model(s.model).Count(&count).Error; err != nil {
-			t.Fatalf("count %s: %v", s.label, err)
-		}
-		if counts[s.label] != count {
-			t.Fatalf("%s count changed after re-seed: %d -> %d", s.label, counts[s.label], count)
-		}
+	r2, p2, ro2, g2 := countResource()
+	if r1 != r2 || p1 != p2 || ro1 != ro2 || g1 != g2 {
+		t.Fatalf("counts changed after re-seed: resource %d->%d, permission %d->%d, role %d->%d, grant %d->%d",
+			r1, r2, p1, p2, ro1, ro2, g1, g2)
 	}
+	_ = snapshots
 }
 
-// S0' 遗留迁移：历史 code="admin" 角色迁移为 RoleAdmin，账号绑定保留，
-// 重复的 RoleAdmin 角色被并入；迁移后内置权限全量授予迁移后角色（F4）。
+// TestMigrateLegacyAdminRole 已随运行时 Go 迁移移除：遗留 admin 角色改名/合并
+// 由 pkg/migration 000004_seed 在真实 MySQL 上承担。此处仅保留遗留角色共存的幂等验证。
 func TestSeedMigratesLegacyAdminRole(t *testing.T) {
 	db := setupSeedTestDB(t)
 	ctx := context.Background()
@@ -67,10 +73,6 @@ func TestSeedMigratesLegacyAdminRole(t *testing.T) {
 	legacyRole := Role{Id: 1, Name: "管理员", Code: RoleAdminLegacy, ApplicationId: 1}
 	if err := db.Create(&legacyRole).Error; err != nil {
 		t.Fatalf("create legacy role: %v", err)
-	}
-	dupRole := Role{Id: 2, Name: "管理员", Code: RoleAdmin, ApplicationId: 1}
-	if err := db.Create(&dupRole).Error; err != nil {
-		t.Fatalf("create duplicate admin role: %v", err)
 	}
 	account := Account{Id: 100, Email: "legacy-admin@example.com"}
 	if err := db.Create(&account).Error; err != nil {
@@ -84,62 +86,48 @@ func TestSeedMigratesLegacyAdminRole(t *testing.T) {
 		t.Fatalf("Seed() error = %v", err)
 	}
 
-	// 历史角色编码已迁移，账号绑定保留
-	var migrated Role
-	if err := db.Where(RoleColumnCode, RoleAdmin).First(&migrated).Error; err != nil {
-		t.Fatalf("get migrated admin role: %v", err)
+	// 遗留角色行原地保留（改名/合并由 pkg/migration 000004 承担，夹具不做迁移），
+	// 新建管理员角色与遗留角色并存，遗留角色的账号绑定不受影响
+	var legacy Role
+	if err := db.Where(RoleColumnId, legacyRole.Id).First(&legacy).Error; err != nil {
+		t.Fatalf("get legacy role: %v", err)
 	}
-	if migrated.Id != legacyRole.Id {
-		t.Fatalf("migrated admin role id = %d, want %d (legacy row renamed in place)", migrated.Id, legacyRole.Id)
+	if legacy.Code != RoleAdminLegacy {
+		t.Fatalf("legacy role code = %q, want unchanged %q", legacy.Code, RoleAdminLegacy)
 	}
 	var count int64
 	if err := db.Raw("SELECT COUNT(1) FROM t_r_account_role WHERE account_id = ? AND role_id = ?", account.Id, legacyRole.Id).Scan(&count).Error; err != nil {
 		t.Fatalf("count account binding: %v", err)
 	}
 	if count != 1 {
-		t.Fatalf("account binding to migrated role = %d, want 1", count)
-	}
-	// 重复角色已被删除
-	var dupCount int64
-	if err := db.Model(Role{}).Where(RoleColumnId, dupRole.Id).Count(&dupCount).Error; err != nil {
-		t.Fatalf("count duplicate role: %v", err)
-	}
-	if dupCount != 0 {
-		t.Fatal("duplicate RoleAdmin role should be merged and removed")
-	}
-	// 内置权限已全量授予迁移后角色
-	var grantCount int64
-	if err := db.Raw("SELECT COUNT(1) FROM t_r_role_permission WHERE role_id = ?", legacyRole.Id).Scan(&grantCount).Error; err != nil {
-		t.Fatalf("count grants: %v", err)
-	}
-	if grantCount != 3 {
-		t.Fatalf("builtin permission grants to migrated admin = %d, want 3", grantCount)
+		t.Fatalf("account binding to legacy role = %d, want 1", count)
 	}
 
 	// 幂等：再次 Seed 无变化
-	before := map[string]int64{}
-	for _, m := range []interface{}{&Role{}, &Permission{}, &PermissionResource{}} {
-		var c int64
-		if err := db.Model(m).Count(&c).Error; err != nil {
-			t.Fatalf("count %T: %v", m, err)
-		}
-		before[fmt.Sprintf("%T", m)] = c
+	var rolesBefore, permissionsBefore int64
+	if err := db.Model(&Role{}).Count(&rolesBefore).Error; err != nil {
+		t.Fatalf("count roles: %v", err)
+	}
+	if err := db.Model(&Permission{}).Count(&permissionsBefore).Error; err != nil {
+		t.Fatalf("count permissions: %v", err)
 	}
 	if err := Seed(ctx, db); err != nil {
 		t.Fatalf("Seed() #2 error = %v", err)
 	}
-	for _, m := range []interface{}{&Role{}, &Permission{}, &PermissionResource{}} {
-		var c int64
-		if err := db.Model(m).Count(&c).Error; err != nil {
-			t.Fatalf("count %T: %v", m, err)
-		}
-		if before[fmt.Sprintf("%T", m)] != c {
-			t.Fatalf("%T count changed after re-seed: %d -> %d", m, before[fmt.Sprintf("%T", m)], c)
-		}
+	var rolesAfter, permissionsAfter int64
+	if err := db.Model(&Role{}).Count(&rolesAfter).Error; err != nil {
+		t.Fatalf("count roles after re-seed: %v", err)
+	}
+	if err := db.Model(&Permission{}).Count(&permissionsAfter).Error; err != nil {
+		t.Fatalf("count permissions after re-seed: %v", err)
+	}
+	if rolesBefore != rolesAfter || permissionsBefore != permissionsAfter {
+		t.Fatalf("counts changed after re-seed: role %d->%d, permission %d->%d",
+			rolesBefore, rolesAfter, permissionsBefore, permissionsAfter)
 	}
 }
 
-// S4 管理员角色存在且 code=RoleAdmin。
+// 管理员角色存在且 code=RoleAdmin。
 func TestSeedAdminRole(t *testing.T) {
 	db := setupSeedTestDB(t)
 	if err := Seed(context.Background(), db); err != nil {
@@ -154,9 +142,38 @@ func TestSeedAdminRole(t *testing.T) {
 	}
 }
 
-// S5' 凭证域资源（specs/009-ak-sk-auth T006）：15 条种子资源存在且归属内置应用，
-// HTTP 资源携带 RpcFullMethod；重复 Seed 不新增（幂等）。
-func TestSeedCredentialResources(t *testing.T) {
+// 权限码词汇表：全部 PERMISSION_CODES 建权限行且全量授予管理员角色（011 裁决）。
+func TestSeedVocabularyPermissions(t *testing.T) {
+	db := setupSeedTestDB(t)
+	if err := Seed(context.Background(), db); err != nil {
+		t.Fatalf("Seed() error = %v", err)
+	}
+
+	adminRole := Role{}
+	if err := db.Where(RoleColumnCode, RoleAdmin).First(&adminRole).Error; err != nil {
+		t.Fatalf("get admin role: %v", err)
+	}
+
+	for _, code := range PERMISSION_CODES {
+		var permission Permission
+		if err := db.Where(PermissionColumnCode, code).First(&permission).Error; err != nil {
+			t.Fatalf("vocabulary permission %s missing: %v", code, err)
+		}
+		var granted int64
+		if err := db.Raw(
+			"SELECT COUNT(1) FROM t_r_role_permission WHERE role_id = ? AND permission_id = ?",
+			adminRole.Id, permission.Id,
+		).Scan(&granted).Error; err != nil {
+			t.Fatalf("count grant for %s: %v", code, err)
+		}
+		if granted != 1 {
+			t.Fatalf("vocabulary permission %s granted %d times to admin, want 1", code, granted)
+		}
+	}
+}
+
+// 组件资源种子：COMPONENT_SEEDS 全部存在（固定 id）、kind 合法、绑定码合法（与迁移 SQL 镜像）。
+func TestSeedComponents(t *testing.T) {
 	db := setupSeedTestDB(t)
 	if err := Seed(context.Background(), db); err != nil {
 		t.Fatalf("Seed() error = %v", err)
@@ -167,39 +184,28 @@ func TestSeedCredentialResources(t *testing.T) {
 		t.Fatalf("get builtin application: %v", err)
 	}
 
-	for _, seed := range []struct {
-		kind  string
-		count int64
-	}{
-		{PermissionKindHTTPAPI, 7},
-		{PermissionKindGRPC, 7},
-		{PermissionKindMenu, 1},
-	} {
-		var count int64
-		if err := db.Model(Resource{}).
-			Where(ResourceColumnApplicationId, app.Id).
-			Where(ResourceColumnKind, seed.kind).
-			Where("`key` IN ?", credentialSeedResourceKeys()).
-			Count(&count).Error; err != nil {
-			t.Fatalf("count %s resources: %v", seed.kind, err)
+	for _, seed := range COMPONENT_SEEDS {
+		var resource Resource
+		if err := db.Where(ResourceColumnId, seed.Id).First(&resource).Error; err != nil {
+			t.Fatalf("component %s (id=%d) missing: %v", seed.Key, seed.Id, err)
 		}
-		if count != seed.count {
-			t.Fatalf("credential %s resources = %d, want %d", seed.kind, count, seed.count)
+		if resource.Key != seed.Key || resource.Kind != seed.Kind {
+			t.Fatalf("component id=%d key/kind = %s/%s, want %s/%s", seed.Id, resource.Key, resource.Kind, seed.Key, seed.Kind)
 		}
-	}
-
-	// HTTP 资源必须携带 RpcFullMethod（http 域快照键的数据来源）
-	var missingRpc int64
-	if err := db.Model(Resource{}).
-		Where(ResourceColumnApplicationId, app.Id).
-		Where(ResourceColumnKind, PermissionKindHTTPAPI).
-		Where("`key` IN ?", credentialSeedResourceKeys()).
-		Where(ResourceColumnRpcFullMethod + " = ''").
-		Count(&missingRpc).Error; err != nil {
-		t.Fatalf("count http resources missing rpc method: %v", err)
-	}
-	if missingRpc != 0 {
-		t.Fatalf("%d credential http resources missing rpc_full_method", missingRpc)
+		if resource.ApplicationId != app.Id {
+			t.Fatalf("component id=%d application_id = %d, want %d", seed.Id, resource.ApplicationId, app.Id)
+		}
+		if !IsValidComponentKind(resource.Kind) {
+			t.Fatalf("component id=%d invalid kind %q", seed.Id, resource.Kind)
+		}
+		for _, code := range resource.PermissionCodes {
+			if !IsValidPermissionCode(code) {
+				t.Fatalf("component id=%d has invalid permission code %q", seed.Id, code)
+			}
+			if !slices.Contains(PERMISSION_CODES, code) {
+				t.Fatalf("component id=%d binds code %q outside vocabulary", seed.Id, code)
+			}
+		}
 	}
 
 	// 幂等：重复 Seed 资源零新增
@@ -218,63 +224,41 @@ func TestSeedCredentialResources(t *testing.T) {
 	}
 }
 
-// credentialSeedResourceKeys 收集凭证种子资源的 key 清单（避免跨测试文件导出循环）。
-func credentialSeedResourceKeys() []string {
-	keys := make([]string, 0, len(credentialSeedResources))
-	for _, item := range credentialSeedResources {
-		keys = append(keys, item.Key)
-	}
-	return keys
-}
-
-// S5/S6 三个内置权限存在、kind 正确、全量绑定同类型资源并授予管理员角色。
-func TestSeedBuiltinPermissions(t *testing.T) {
+// 账号-应用关系：绑定启用角色的账号自动获得应用可见性。
+func TestSeedAccountApplications(t *testing.T) {
 	db := setupSeedTestDB(t)
-	if err := Seed(context.Background(), db); err != nil {
+	ctx := context.Background()
+	if err := Seed(ctx, db); err != nil {
 		t.Fatalf("Seed() error = %v", err)
 	}
 
+	app := Application{}
+	if err := db.Where(ApplicationColumnCode, constant.ApplicationCode).First(&app).Error; err != nil {
+		t.Fatalf("get builtin application: %v", err)
+	}
 	adminRole := Role{}
 	if err := db.Where(RoleColumnCode, RoleAdmin).First(&adminRole).Error; err != nil {
 		t.Fatalf("get admin role: %v", err)
 	}
+	account := Account{Id: 200, Email: "bound@example.com"}
+	if err := db.Create(&account).Error; err != nil {
+		t.Fatalf("create account: %v", err)
+	}
+	if err := db.Exec("INSERT INTO t_r_account_role (account_id, role_id) VALUES (?, ?)", account.Id, adminRole.Id).Error; err != nil {
+		t.Fatalf("bind role: %v", err)
+	}
 
-	for _, seed := range []struct {
-		code string
-		kind string
-	}{
-		{BuiltinPermissionMenuAll, PermissionKindMenu},
-		{BuiltinPermissionHTTPAll, PermissionKindHTTPAPI},
-		{BuiltinPermissionGRPCAll, PermissionKindGRPC},
-	} {
-		permission := Permission{}
-		if err := db.Where(PermissionColumnCode, seed.code).First(&permission).Error; err != nil {
-			t.Fatalf("get builtin permission %s: %v", seed.code, err)
-		}
-		if permission.Kind != seed.kind {
-			t.Fatalf("builtin permission %s kind = %q, want %q", seed.code, permission.Kind, seed.kind)
-		}
-
-		var kindResourceCount, bindingCount, roleBindingCount int64
-		if err := db.Model(Resource{}).Where(ResourceColumnKind, seed.kind).Count(&kindResourceCount).Error; err != nil {
-			t.Fatalf("count resources: %v", err)
-		}
-		if err := db.Model(PermissionResource{}).
-			Where(PermissionResourceColumnPermissionId, permission.Id).
-			Count(&bindingCount).Error; err != nil {
-			t.Fatalf("count bindings: %v", err)
-		}
-		if bindingCount != kindResourceCount {
-			t.Fatalf("builtin permission %s bindings = %d, want %d (full kind resources)", seed.code, bindingCount, kindResourceCount)
-		}
-		if err := db.Raw(
-			"SELECT COUNT(1) FROM t_r_role_permission WHERE role_id = ? AND permission_id = ?",
-			adminRole.Id, permission.Id,
-		).Scan(&roleBindingCount).Error; err != nil {
-			t.Fatalf("count role binding: %v", err)
-		}
-		if roleBindingCount != 1 {
-			t.Fatalf("builtin permission %s granted to admin %d times, want 1", seed.code, roleBindingCount)
-		}
+	if err := Seed(ctx, db); err != nil {
+		t.Fatalf("Seed() #2 error = %v", err)
+	}
+	var count int64
+	if err := db.Model(&RAccountApplication{}).
+		Where(RAccountApplicationColumnAccountId, account.Id).
+		Where(RAccountApplicationColumnApplicationId, app.Id).
+		Count(&count).Error; err != nil {
+		t.Fatalf("count account application: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("account application rows = %d, want 1", count)
 	}
 }

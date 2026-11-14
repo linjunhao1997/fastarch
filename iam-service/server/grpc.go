@@ -14,7 +14,7 @@ import (
 	"iam-service/conf"
 	"iam-service/pkg/auth"
 	"iam-service/pkg/cipher"
-	"iam-service/pkg/model"
+	"iam-service/pkg/migration"
 	"iam-service/pkg/service"
 )
 
@@ -23,27 +23,13 @@ import (
 func RunGrpcServer(ctx context.Context, cfg *conf.Config) error {
 	rdb := cache.NewRedis(cfg.Redis.Addr)
 
+	// 表创建、字段变更与数据录入全部由内嵌的 golang-migrate 迁移承担
+	// （pkg/migration/migrations），失败 fail-fast，禁止以未迁移 Schema 运行。
+	if err := migration.Run(cfg.Database.DSN); err != nil {
+		return fmt.Errorf("run migrations: %w", err)
+	}
+
 	db, err := database.NewMySQL(cfg.Database.DSN)
-	if err != nil {
-		return fmt.Errorf("connect mysql: %w", err)
-	}
-	if err := db.AutoMigrate(model.Models...); err != nil {
-		return fmt.Errorf("auto migrate: %w", err)
-	}
-	if err := model.DedupRolePermissions(db); err != nil {
-		return fmt.Errorf("dedup role permissions: %w", err)
-	}
-	if err := model.DropLegacyForeignKeys(db); err != nil {
-		return fmt.Errorf("drop legacy foreign keys: %w", err)
-	}
-	// 权限体系基础数据初始化（specs/005-typed-permission-model US3）：
-	// fail-closed——seed 失败不可带残缺权限表运行
-	if err := model.Seed(ctx, db); err != nil {
-		return fmt.Errorf("seed permission data: %w", err)
-	}
-	if err := model.MigrateResourceTree(db); err != nil {
-		return fmt.Errorf("migrate resource tree: %w", err)
-	}
 
 	// 访问凭证域配置解析（specs/009-ak-sk-auth）：密钥缺失 fail-fast，
 	// 禁止以明文/无加密状态运行（data-model.md 配置项）

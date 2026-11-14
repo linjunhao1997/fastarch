@@ -32,7 +32,7 @@ func setupAccountTestDB(t *testing.T) *gorm.DB {
 		t.Fatalf("get sqlite database: %v", err)
 	}
 	sqlDB.SetMaxOpenConns(1)
-	err = db.AutoMigrate(&model.Application{}, &model.Role{}, &model.Permission{}, &model.Account{}, &model.RAccountRole{}, &model.RAccountApplication{}, &model.Resource{}, &model.PermissionResource{}, &model.AccessCredential{})
+	err = db.AutoMigrate(&model.Application{}, &model.Role{}, &model.Permission{}, &model.Account{}, &model.RAccountRole{}, &model.RAccountApplication{}, &model.Resource{}, &model.AccessCredential{})
 	if err != nil {
 		t.Fatalf("migrate sqlite: %v", err)
 	}
@@ -346,7 +346,7 @@ func TestUpdateAccountRolesIdempotentNoDuplicateRows(t *testing.T) {
 	}
 }
 
-// T044-③ 读穿回源：空快照下重建，快照按带前缀资源键并集写回且 TTL≈5min（D5/D6-②/D6-③）。
+// T044-③ 读穿回源：空快照下重建，快照按权限码并集写回且 TTL≈5min（D5/D6-②/D6-③）。
 func TestLoadPermissionSnapshotReadThrough(t *testing.T) {
 	ctx := context.Background()
 	db := setupAccountTestDB(t)
@@ -360,16 +360,9 @@ func TestLoadPermissionSnapshotReadThrough(t *testing.T) {
 	if err := db.Create(&role).Error; err != nil {
 		t.Fatalf("create role: %v", err)
 	}
-	menuResource := model.Resource{Kind: model.PermissionKindMenu, Key: "iam.account_management.account_list", Name: "用户列表"}
-	if err := db.Create(&menuResource).Error; err != nil {
-		t.Fatalf("create resource: %v", err)
-	}
-	permission := model.Permission{Id: 1, Name: "perm one", Code: "perm-one", Kind: model.PermissionKindMenu}
+	permission := model.Permission{Id: 1, Name: "perm one", Code: "iam.account.list"}
 	if err := db.Create(&permission).Error; err != nil {
 		t.Fatalf("create permission: %v", err)
-	}
-	if err := db.Model(&permission).Association("ResourceList").Append(&menuResource); err != nil {
-		t.Fatalf("bind resource: %v", err)
 	}
 	if err := db.Model(&role).Association("PermissionList").Append(&permission); err != nil {
 		t.Fatalf("bind permission: %v", err)
@@ -387,7 +380,7 @@ func TestLoadPermissionSnapshotReadThrough(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadPermissionSnapshot() error = %v", err)
 	}
-	want := constant.SnapshotKeyPrefixMenu + menuResource.Key
+	want := "iam.account.list"
 	found := false
 	for _, code := range codes {
 		if code == want {

@@ -67,10 +67,10 @@ func handlerOK(ctx context.Context, req any) (any, error) {
 	return "ok", nil
 }
 
-// D3：网关来源请求校验 http: 前缀键。
-func TestInterceptorGatewayOriginChecksHTTPKey(t *testing.T) {
+// 权限码模型：快照持有方法所需权限码即放行（网关来源不再改变判定语义）。
+func TestInterceptorSnapshotCodeGranted(t *testing.T) {
 	_, rdb := newTestSnapshotEnv(t, map[int64][]string{
-		2: {constant.SnapshotKeyPrefixHTTP + "/iam.v1.AuthorizationService/ListPermissions"},
+		2: {"iam.permission.list"},
 	})
 	ctx, info := testInterceptorContext(t, "2", true)
 	_, err := Interceptor(rdb, func(ctx context.Context, accountId int64) ([]string, error) {
@@ -78,14 +78,14 @@ func TestInterceptorGatewayOriginChecksHTTPKey(t *testing.T) {
 		return nil, nil
 	}, nil)(ctx, nil, info, handlerOK)
 	if err != nil {
-		t.Fatalf("gateway-origin request with http key denied: %v", err)
+		t.Fatalf("request with required permission code denied: %v", err)
 	}
 }
 
-// D3：无网关标记（服务间直连）校验 rpc: 前缀键；http: 键不放大为服务间调用能力。
-func TestInterceptorDirectGRPCChecksRPCKey(t *testing.T) {
+// 权限码模型：持有无关权限码（缺所需码）→ PermissionDenied（fail-closed）。
+func TestInterceptorCodeNotHeldDenied(t *testing.T) {
 	_, rdb := newTestSnapshotEnv(t, map[int64][]string{
-		2: {constant.SnapshotKeyPrefixHTTP + "/iam.v1.AuthorizationService/ListPermissions"},
+		2: {"iam.account.list"},
 	})
 	ctx, info := testInterceptorContext(t, "2", false)
 	_, err := Interceptor(rdb, func(ctx context.Context, accountId int64) ([]string, error) {
@@ -93,21 +93,21 @@ func TestInterceptorDirectGRPCChecksRPCKey(t *testing.T) {
 		return nil, nil
 	}, nil)(ctx, nil, info, handlerOK)
 	if status.Code(err) != codes.PermissionDenied {
-		t.Fatalf("direct gRPC with only http key: got %v, want PermissionDenied", err)
+		t.Fatalf("missing required code: got %v, want PermissionDenied", err)
 	}
 }
 
-// D3：服务间直连拥有 rpc: 键时放行。
-func TestInterceptorDirectGRPCAllowedWithRPCKey(t *testing.T) {
+// 无网关标记（服务间直连）与网关来源同一套权限码判定。
+func TestInterceptorDirectGRPCSameCodeRule(t *testing.T) {
 	_, rdb := newTestSnapshotEnv(t, map[int64][]string{
-		2: {constant.SnapshotKeyPrefixRPC + "/iam.v1.AuthorizationService/ListPermissions"},
+		2: {"iam.permission.list"},
 	})
 	ctx, info := testInterceptorContext(t, "2", false)
 	_, err := Interceptor(rdb, func(ctx context.Context, accountId int64) ([]string, error) {
 		return nil, nil
 	}, nil)(ctx, nil, info, handlerOK)
 	if err != nil {
-		t.Fatalf("direct gRPC with rpc key denied: %v", err)
+		t.Fatalf("direct gRPC request with required code denied: %v", err)
 	}
 }
 
@@ -149,17 +149,18 @@ func TestInterceptorMissingTokenRejected(t *testing.T) {
 	}
 }
 
-// 无匹配键 fail-closed（FR-010）。
+// 未登记方法 fail-closed：即使账号持有权限码也拒绝（FR-010）。
 func TestInterceptorFailClosedOnUnknownMethod(t *testing.T) {
 	_, rdb := newTestSnapshotEnv(t, map[int64][]string{
-		2: {constant.SnapshotKeyPrefixRPC + "/iam.v1.AccountService/ListAccounts"},
+		2: {"iam.account.list"},
 	})
-	ctx, info := testInterceptorContext(t, "2", false)
+	ctx, _ := testInterceptorContext(t, "2", false)
+	info := &grpc.UnaryServerInfo{FullMethod: "/iam.v1.UnregisteredService/DoSomething"}
 	_, err := Interceptor(rdb, func(ctx context.Context, accountId int64) ([]string, error) {
 		return nil, nil
 	}, nil)(ctx, nil, info, handlerOK)
 	if status.Code(err) != codes.PermissionDenied {
-		t.Fatalf("unknown method: got %v, want PermissionDenied", err)
+		t.Fatalf("unregistered method: got %v, want PermissionDenied", err)
 	}
 }
 
@@ -182,7 +183,7 @@ func TestInterceptorCacheMissRebuildsSnapshot(t *testing.T) {
 	_, rdb := newTestSnapshotEnv(t, nil)
 	ctx, info := testInterceptorContext(t, "2", false)
 	_, err := Interceptor(rdb, func(ctx context.Context, accountId int64) ([]string, error) {
-		return []string{constant.SnapshotKeyPrefixRPC + "/iam.v1.AuthorizationService/ListPermissions"}, nil
+		return []string{"iam.permission.list"}, nil
 	}, nil)(ctx, nil, info, handlerOK)
 	if err != nil {
 		t.Fatalf("cache miss with loader grant should pass: %v", err)
@@ -288,7 +289,7 @@ func TestInterceptorSignatureTrackAuthorized(t *testing.T) {
 	var gotAccountId int64
 	_, err := Interceptor(store.rdb, func(ctx context.Context, accountId int64) ([]string, error) {
 		gotAccountId = accountId
-		return []string{constant.SnapshotKeyPrefixHTTP + "/iam.v1.AuthorizationService/ListPermissions"}, nil
+		return []string{"iam.permission.list"}, nil
 	}, store)(ctx, nil, info, handlerOK)
 	if err != nil {
 		t.Fatalf("signature track request denied: %v", err)
@@ -437,7 +438,7 @@ func TestInterceptorSignatureTrackReplayRealFlow(t *testing.T) {
 		return metadata.NewIncomingContext(context.Background(), md), &grpc.UnaryServerInfo{FullMethod: "/iam.v1.AuthorizationService/ListPermissions"}
 	}
 	loader := func(ctx context.Context, accountId int64) ([]string, error) {
-		return []string{constant.SnapshotKeyPrefixHTTP + "/iam.v1.AuthorizationService/ListPermissions"}, nil
+		return []string{"iam.permission.list"}, nil
 	}
 
 	// 首次请求放行

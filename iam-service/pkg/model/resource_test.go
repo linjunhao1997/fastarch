@@ -22,9 +22,9 @@ func newResourceTestDB(t *testing.T) *gorm.DB {
 
 func TestResourceApplicationScopedKey(t *testing.T) {
 	db := newResourceTestDB(t)
-	first := Resource{Id: 1, ApplicationId: 1, Kind: PermissionKindMenu, Key: "account.list", Name: "账号列表"}
-	secondSameApplication := Resource{Id: 2, ApplicationId: 1, Kind: PermissionKindMenu, Key: "account.list", Name: "重复资源"}
-	secondApplication := Resource{Id: 3, ApplicationId: 2, Kind: PermissionKindMenu, Key: "account.list", Name: "其他应用资源"}
+	first := Resource{Id: 1, ApplicationId: 1, Kind: ComponentKindMenu, Key: "account.list", Name: "账号列表"}
+	secondSameApplication := Resource{Id: 2, ApplicationId: 1, Kind: ComponentKindMenu, Key: "account.list", Name: "重复资源"}
+	secondApplication := Resource{Id: 3, ApplicationId: 2, Kind: ComponentKindMenu, Key: "account.list", Name: "其他应用资源"}
 	if err := db.Create(&first).Error; err != nil {
 		t.Fatalf("create first resource: %v", err)
 	}
@@ -36,27 +36,6 @@ func TestResourceApplicationScopedKey(t *testing.T) {
 	}
 }
 
-func TestMigrateResourceTreeBackfillsApplication(t *testing.T) {
-	db := newResourceTestDB(t)
-	application := Application{Id: 10, Code: "iam-service", Name: "IAM"}
-	if err := db.Create(&application).Error; err != nil {
-		t.Fatalf("create application: %v", err)
-	}
-	resource := Resource{Id: 1, Kind: PermissionKindMenu, Key: "legacy.key", Name: "Legacy"}
-	if err := db.Create(&resource).Error; err != nil {
-		t.Fatalf("create legacy resource: %v", err)
-	}
-	if err := MigrateResourceTree(db); err != nil {
-		t.Fatalf("MigrateResourceTree() error = %v", err)
-	}
-	var got Resource
-	if err := db.Select(ResourceFields).Where(ResourceColumnId, resource.Id).First(&got).Error; err != nil {
-		t.Fatalf("get resource: %v", err)
-	}
-	if got.ApplicationId != application.Id {
-		t.Fatalf("resource application id = %d, want %d", got.ApplicationId, application.Id)
-	}
-	if db.Migrator().HasIndex(&Resource{}, "idx_resource_key") {
-		t.Fatal("legacy global key index still exists")
-	}
-}
+// TestMigrateResourceTreeBackfillsApplication 已随运行时 Go 迁移函数移除：
+// 资源归属回填由 pkg/migration 000004_seed ⑥ 在真实 MySQL 上承担。
+

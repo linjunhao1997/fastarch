@@ -39,9 +39,9 @@ type AuthorizationService struct {
 	rdb *redis.Client
 }
 
-// loadAccountPermissionSnapshot 璇诲彇璐﹀彿鏉冮檺蹇収锛氱紦瀛樺懡涓洿鎺ヨ繑鍥烇紝鏈懡涓垨
-// 鏍煎紡涓嶇璧拌绌垮洖婧愰噸寤猴紙涓?auth 鎷︽埅鍣ㄥ叡鐢ㄥ洖婧愰€昏緫锛宺esearch.md D6-鈶?D8锛夈€?
-// Redis 鏁呴殰 fail-closed锛屽簳灞傞敊璇粎鍏ユ棩蹇楋紙research.md D12/D13锛夈€?
+// loadAccountPermissionSnapshot 读取账号权限快照：缓存命中直接返回，未命中或
+// 格式不符走读穿回源重建（与 auth 拦截器共用回源逻辑）。快照内容为纯权限码集合
+// （011 权限码模型）。Redis 故障 fail-closed，底层错误仅入日志。
 func loadAccountPermissionSnapshot(ctx context.Context, rdb *redis.Client, db *gorm.DB, accountId int64) ([]string, error) {
 	str, err := rdb.Get(ctx, constant.GetAccountPermissionKey(accountId)).Result()
 	var permKeys []string
@@ -50,25 +50,22 @@ func loadAccountPermissionSnapshot(ctx context.Context, rdb *redis.Client, db *g
 		if err == nil {
 			return permKeys, nil
 		}
-		// 鏍煎紡涓嶇锛堟棫鏍煎紡娈嬬暀锛夎涓烘湭鍛戒腑锛岃蛋鍥炴簮閲嶅缓锛坮esearch.md D8锛?
+		// 格式不符（旧格式残留）视为未命中，走回源重建
 		slog.Warn("unmarshal permission snapshot failed, rebuilding from db", "account_id", accountId, "error", err)
 	} else if !errors.Is(err, redis.Nil) {
 		slog.Error("get permission snapshot from redis failed", "account_id", accountId, "error", err)
-		return nil, status.Error(codes.FailedPrecondition, "鏉冮檺鏍￠獙鏈嶅姟鏆傛椂涓嶅彲鐢紝璇风◢鍚庨噸璇?)")
+		return nil, status.Error(codes.FailedPrecondition, "权限校验服务暂时不可用，请稍后重试")
 	}
 	permKeys, err = auth.LoadPermissionSnapshot(ctx, rdb, accountId, NewPermissionSnapshotLoader(db))
 	if err != nil {
 		slog.Error("rebuild permission snapshot from db failed", "account_id", accountId, "error", err)
-		return nil, status.Error(codes.FailedPrecondition, "鏉冮檺鏍￠獙鏈嶅姟鏆傛椂涓嶅彲鐢紝璇风◢鍚庨噸璇?)")
+		return nil, status.Error(codes.FailedPrecondition, "权限校验服务暂时不可用，请稍后重试")
 	}
 	return permKeys, nil
 }
 
 func (a AuthorizationService) CheckPermission(ctx context.Context, request *iam_v1.CheckPermissionRequest) (*iam_v1.CheckPermissionResponse, error) {
-	// 璇箟瑁佸喅锛坈ontracts 搂2.8锛夛細permission_code 鎸夎祫婧?key 瑙ｉ噴锛?
-	// gRPC 鍩熸嫾 rpc: 鍓嶇紑鍦ㄥ揩鐓т腑鍖归厤锛涙棫鏍煎紡澶嶅悎鐮佺洿鎺ュ垽 false锛屼笉鍋氬吋瀹硅浆鎹€?
-	requiredKey := constant.SnapshotKeyPrefixRPC + request.PermissionCode
-
+	// 权限码是唯一授权词汇（011 裁决）：直接按码匹配快照
 	if auth.IsAdminFromContext(ctx) {
 		return &iam_v1.CheckPermissionResponse{Ok: true}, nil
 	}
@@ -78,7 +75,7 @@ func (a AuthorizationService) CheckPermission(ctx context.Context, request *iam_
 		return nil, err
 	}
 	for _, key := range permKeys {
-		if key == requiredKey {
+		if key == request.PermissionCode {
 			return &iam_v1.CheckPermissionResponse{
 				Ok: true,
 			}, nil
@@ -101,142 +98,30 @@ func permissionToPb(p model.Permission) *iam_v1.Permission {
 		UpdatedBy:      cast.ToString(p.UpdatedBy),
 		CreateTime:     timestamppb.New(p.CreateTime),
 		UpdateTime:     timestamppb.New(p.UpdateTime),
-		Kind:           p.Kind,
-		ResourceList: func() []*iam_v1.Resource {
-			list := make([]*iam_v1.Resource, 0, len(p.ResourceList))
-			for _, r := range p.ResourceList {
-				list = append(list, resourceToPb(*r, nil))
-			}
-			return list
-		}(),
 	}
 }
 
 func resourceToPb(r model.Resource, application *iam_v1.ApplicationSummary) *iam_v1.Resource {
+	codeList := make([]string, 0, len(r.PermissionCodes))
+	codeList = append(codeList, r.PermissionCodes...)
 	pb := &iam_v1.Resource{
-		Id:            cast.ToString(r.Id),
-		Kind:          r.Kind,
-		Key:           r.Key,
-		Name:          r.Name,
-		RpcFullMethod: r.RpcFullMethod,
-		EnabledStatus: boolToStatus(r.Disabled),
-		CreateTime:    timestamppb.New(r.CreateTime),
-		UpdateTime:    timestamppb.New(r.UpdateTime),
-		ApplicationId: r.ApplicationId,
-		Version:       r.Version,
-		DisplayOrder:  r.DisplayOrder,
-		Application:   application,
+		Id:                 cast.ToString(r.Id),
+		Kind:               r.Kind,
+		Key:                r.Key,
+		Name:               r.Name,
+		PermissionCodeList: codeList,
+		EnabledStatus:      boolToStatus(r.Disabled),
+		CreateTime:         timestamppb.New(r.CreateTime),
+		UpdateTime:         timestamppb.New(r.UpdateTime),
+		ApplicationId:      r.ApplicationId,
+		Version:            r.Version,
+		DisplayOrder:       r.DisplayOrder,
+		Application:        application,
 	}
 	if r.ParentId != nil {
 		pb.ParentId = *r.ParentId
 	}
 	return pb
-}
-
-// resolveResources 鏍￠獙鏉冮檺绫诲瀷涓庤祫婧愮粦瀹氾紙data-model VR-1锛夛細kind 蹇呴』鍚堟硶銆?
-// 缁戝畾闈炵┖銆佽祫婧愬瓨鍦ㄤ笖涓庢潈闄愬悓绫诲瀷锛涜繑鍥炲幓閲嶅悗鐨勮祫婧愬垪琛紙淇濇寔璇锋眰椤哄簭锛夈€?
-func resolveResources(tx *gorm.DB, applicationId int64, kind string, resourceKeys []string, resourceIds []int64) ([]model.Resource, error) {
-	if !model.IsValidPermissionKind(kind) {
-		return nil, ErrInvalidPermissionKind
-	}
-	if len(resourceKeys) == 0 && len(resourceIds) == 0 {
-		return nil, ErrPermissionResourceRequired
-	}
-	if len(resourceKeys) > 0 && len(resourceIds) > 0 {
-		return nil, ErrPermissionResourceInputAmbiguous
-	}
-	var resources []model.Resource
-	if len(resourceIds) > 0 {
-		uniqueIds := make([]int64, 0, len(resourceIds))
-		idSeen := make(map[int64]struct{}, len(resourceIds))
-		for _, id := range resourceIds {
-			if _, exists := idSeen[id]; exists {
-				continue
-			}
-			idSeen[id] = struct{}{}
-			uniqueIds = append(uniqueIds, id)
-		}
-		if err := tx.Where(model.ResourceColumnId+" IN ?", uniqueIds).
-			Select(model.ResourceFields).Find(&resources).Error; err != nil {
-			return nil, err
-		}
-		if len(resources) != len(uniqueIds) {
-			return nil, ErrResourceNotFound
-		}
-	} else {
-		seen := make(map[string]struct{}, len(resourceKeys))
-		keys := make([]string, 0, len(resourceKeys))
-		for _, key := range resourceKeys {
-			if _, exists := seen[key]; exists {
-				continue
-			}
-			seen[key] = struct{}{}
-			keys = append(keys, key)
-		}
-		if err := tx.Where("`key` IN ?", keys).
-			Select(model.ResourceFields).Find(&resources).Error; err != nil {
-			return nil, err
-		}
-		if len(resources) != len(keys) {
-			return nil, ErrResourceNotFound
-		}
-	}
-	ordered := make([]model.Resource, 0, len(resources))
-	for _, resource := range resources {
-		if resource.ApplicationId != applicationId {
-			return nil, ErrResourceParentInvalid
-		}
-		ordered = append(ordered, resource)
-	}
-	return ordered, nil
-}
-
-func selectResourcesWithAncestors(tx *gorm.DB, applicationId int64, selected []model.Resource) ([]model.Resource, error) {
-	var resources []model.Resource
-	if err := tx.Where(model.ResourceColumnApplicationId, applicationId).
-		Select(model.ResourceFields).Find(&resources).Error; err != nil {
-		return nil, err
-	}
-	resourceById := make(map[int64]model.Resource, len(resources))
-	for _, r := range resources {
-		resourceById[r.Id] = r
-	}
-	selectedById := make(map[int64]struct{}, len(selected))
-	for _, resource := range selected {
-		selectedById[resource.Id] = struct{}{}
-	}
-	for _, resource := range selected {
-		current := resource
-		for current.ParentId != nil {
-			parentId := *current.ParentId
-			parent, exists := resourceById[parentId]
-			if !exists {
-				return nil, ErrResourceParentInvalid
-			}
-			if _, alreadySelected := selectedById[parentId]; !alreadySelected {
-				selectedById[parentId] = struct{}{}
-				selected = append(selected, parent)
-			}
-			current = parent
-		}
-	}
-	return selected, nil
-}
-
-// replacePermissionResourceBindings 灏嗘潈闄愮殑璧勬簮缁戝畾鏇挎崲涓虹粰瀹氳祫婧愬垪琛紙FR-004锛夈€?
-func replacePermissionResourceBindings(tx *gorm.DB, permissionId int64, resources []model.Resource) error {
-	if err := tx.Where(model.PermissionResourceColumnPermissionId, permissionId).
-		Delete(&model.PermissionResource{}).Error; err != nil {
-		return err
-	}
-	bindings := make([]model.PermissionResource, 0, len(resources))
-	for _, r := range resources {
-		bindings = append(bindings, model.PermissionResource{PermissionId: permissionId, ResourceId: r.Id})
-	}
-	if len(bindings) > 0 {
-		return tx.Create(&bindings).Error
-	}
-	return nil
 }
 
 func roleToPb(r model.Role, application *iam_v1.ApplicationSummary) *iam_v1.Role {
@@ -267,7 +152,6 @@ func roleToPb(r model.Role, application *iam_v1.ApplicationSummary) *iam_v1.Role
 				Id:             permission.Id,
 				Name:           permission.Name,
 				PermissionCode: permission.Code,
-				Kind:           permission.Kind,
 				EnabledStatus:  boolToStatus(permission.Disabled),
 			})
 		}
@@ -277,16 +161,18 @@ func roleToPb(r model.Role, application *iam_v1.ApplicationSummary) *iam_v1.Role
 }
 
 func (a AuthorizationService) CreatePermission(ctx context.Context, request *iam_v1.CreatePermissionRequest) (*iam_v1.Permission, error) {
+	// 权限码格式校验（011 裁决：服务.模块.操作，如 iam.account.delete）
+	if !model.IsValidPermissionCode(request.Code) {
+		return nil, ErrInvalidPermissionCode
+	}
 	pkId := krand.NewID()
 	now := time.Now()
-	// 瀹¤瀛楁鏈嶅姟绔敞鍏ワ細created_by/updated_by 鍙栬璇佷笂涓嬫枃鎿嶄綔鑰咃紝鏃犺璇佷笂涓嬫枃鏃?0锛坮esearch.md D16锛?
+	// 审计字段服务端注入：created_by/updated_by 取认证上下文操作者
 	operator := auth.GetAccountId(ctx)
 	permission := model.Permission{
 		Id:            pkId,
 		Name:          request.Name,
 		Code:          request.Code,
-		Kind:          request.Kind,
-		Value:         request.Value,
 		Description:   request.Description,
 		ApplicationId: request.ApplicationId,
 		Disabled:      false,
@@ -305,32 +191,16 @@ func (a AuthorizationService) CreatePermission(ctx context.Context, request *iam
 		if count > 0 {
 			return ErrPermissionCodeDuplicated
 		}
-		// 绫诲瀷涓庤祫婧愮粦瀹氭牎楠岋紙data-model VR-1锛?
-		resources, err := resolveResources(tx, request.ApplicationId, request.Kind, request.ResourceKeyList, request.ResourceIdList)
-		if err != nil {
-			return err
-		}
-		resources, err = selectResourcesWithAncestors(tx, request.ApplicationId, resources)
-		if err != nil {
-			return err
-		}
-		if err := tx.Model(model.Permission{}).Create(&permission).Error; err != nil {
-			return err
-		}
-		return replacePermissionResourceBindings(tx, pkId, resources)
+		return tx.Model(model.Permission{}).Create(&permission).Error
 	})
 	if err != nil {
-		slog.Warn("create permission failed", "permission_code", request.Code, "kind", request.Kind, "error", err)
+		slog.Warn("create permission failed", "permission_code", request.Code, "error", err)
 		return nil, err
 	}
-	// 鍥炰紶鍚祫婧愮粦瀹氾紙瀹硶 XII 鍏ㄩ噺鍥炰紶锛?
 	var created model.Permission
 	if err := a.db.WithContext(ctx).
 		Select(model.PermissionFields).
 		Where(model.PermissionColumnId, pkId).First(&created).Error; err != nil {
-		return nil, err
-	}
-	if err := loadPermissionResources(ctx, a.db, &created); err != nil {
 		return nil, err
 	}
 	return permissionToPb(created), nil
@@ -344,12 +214,6 @@ func (a AuthorizationService) GetPermission(ctx context.Context, request *common
 	if err != nil {
 		return nil, err
 	}
-	if err := loadPermissionResources(ctx, a.db, &permission); err != nil {
-		return nil, err
-	}
-	if err != nil {
-		return nil, err
-	}
 	return permissionToPb(permission), nil
 }
 
@@ -360,12 +224,7 @@ func (a AuthorizationService) ListPermissions(ctx context.Context, request *iam_
 		model.PermissionColumnCode + " LIKE ?",
 	}
 	buildQuery := func() *gorm.DB {
-		query := applyKeywordFilter(a.db.WithContext(ctx).Model(model.Permission{}), keywordConditions, request.Keyword)
-		// 鎸夌被鍨嬭繃婊わ紙濂戠害澧為噺 ListPermissionsRequest.kind锛?
-		if len(request.Kind) > 0 {
-			query = query.Where(model.PermissionColumnKind, request.Kind)
-		}
-		return query
+		return applyKeywordFilter(a.db.WithContext(ctx).Model(model.Permission{}), keywordConditions, request.Keyword)
 	}
 	var count int64
 	err := buildQuery().Count(&count).Error
@@ -377,7 +236,6 @@ func (a AuthorizationService) ListPermissions(ctx context.Context, request *iam_
 		Order(model.PermissionColumnId + " ASC").
 		Limit(limit).
 		Offset(offset).
-		Preload("ResourceList").
 		Find(&permissions).Error
 	if err != nil {
 		return nil, err
@@ -401,17 +259,12 @@ func (a AuthorizationService) UpdatePermission(ctx context.Context, request *iam
 		updates[model.PermissionColumnDisabled] = statusToBool(request.EnabledStatus)
 	}
 	updates[model.PermissionColumnUpdateTime] = time.Now()
-	// 瀹¤瀛楁鏈嶅姟绔敞鍏ワ細浠呮洿鏂颁慨鏀逛汉涓庝慨鏀规椂闂达紙research.md D16锛屽娉?XII锛?
+	// 审计字段服务端注入：仅更新修改人与修改时间
 	updates[model.PermissionColumnUpdatedBy] = auth.GetAccountId(ctx)
 	updates[model.PermissionColumnVersion] = gorm.Expr(model.PermissionColumnVersion + " + 1")
 
-	changedBinding := len(request.ResourceKeyList) > 0 || len(request.ResourceIdList) > 0
 	changedStatus := len(request.EnabledStatus) > 0
 	err := a.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var permission model.Permission
-		if err := tx.Where(model.PermissionColumnId, request.Id).Select(model.PermissionFields).First(&permission).Error; err != nil {
-			return err
-		}
 		result := tx.Model(model.Permission{}).
 			Where(model.PermissionColumnId, request.Id).
 			Where(model.PermissionColumnVersion, request.Version).
@@ -421,21 +274,6 @@ func (a AuthorizationService) UpdatePermission(ctx context.Context, request *iam
 		}
 		if result.RowsAffected == 0 {
 			return ErrUpdatePermissionBusy
-		}
-		// 璧勬簮缁戝畾鏇挎崲寮忔洿鏂帮細鎻愪緵鐨?key 娓呭崟鏁翠綋鏇挎崲鏃㈡湁缁戝畾锛團R-004锛?
-		// kind 涓嶅彲鍙橈細浠ュ簱鍐?permission.Kind 鏍￠獙缁戝畾绫诲瀷涓€鑷存€?
-		if changedBinding {
-			resources, err := resolveResources(tx, permission.ApplicationId, permission.Kind, request.ResourceKeyList, request.ResourceIdList)
-			if err != nil {
-				return err
-			}
-			resources, err = selectResourcesWithAncestors(tx, permission.ApplicationId, resources)
-			if err != nil {
-				return err
-			}
-			if err := replacePermissionResourceBindings(tx, permission.Id, resources); err != nil {
-				return err
-			}
 		}
 		return nil
 	})
@@ -447,8 +285,8 @@ func (a AuthorizationService) UpdatePermission(ctx context.Context, request *iam
 		slog.Warn("update permission failed", "permission_id", request.Id, "version", request.Version, "error", err)
 		return nil, err
 	}
-	// 缁戝畾澧炲噺鎴栫鐢ㄧ姸鎬佸彉鏇寸珛鍗崇敓鏁堬細澶辨晥寮曠敤璇ユ潈闄愯处鍙风殑鏉冮檺蹇収锛坉ata-model VR-3锛?
-	if changedBinding || changedStatus {
+	// 禁用状态变更立即生效：失效引用该权限账号的权限快照
+	if changedStatus {
 		a.invalidatePermissionAccountsSnapshot(ctx, request.Id)
 	}
 	return &emptypb.Empty{}, nil
@@ -466,7 +304,7 @@ func (a AuthorizationService) CreateRole(ctx context.Context, request *iam_v1.Cr
 		Select(model.ApplicationFields).First(&application).Error; err != nil {
 		return nil, ErrApplicationNotFound
 	}
-	// 瀹¤瀛楁鏈嶅姟绔敞鍏ワ細created_by/updated_by 鍙栬璇佷笂涓嬫枃鎿嶄綔鑰咃紝鏃犺璇佷笂涓嬫枃鏃?0锛坮esearch.md D16锛?
+	// 审计字段服务端注入：created_by/updated_by 取认证上下文操作者
 	operator := auth.GetAccountId(ctx)
 	role := model.Role{
 		Id:            pkId,
@@ -511,9 +349,6 @@ func (a AuthorizationService) GetRole(ctx context.Context, request *common_v1.Ge
 		return nil, err
 	}
 	if err := loadRolePermissions(ctx, a.db, &role); err != nil {
-		return nil, err
-	}
-	if err != nil {
 		return nil, err
 	}
 	summaries, err := loadApplicationSummaries(ctx, a.db, []int64{role.ApplicationId})
@@ -576,22 +411,22 @@ func (a AuthorizationService) UpdateRole(ctx context.Context, request *iam_v1.Up
 		updates[model.RoleColumnDisabled] = statusToBool(request.EnabledStatus)
 	}
 	updates[model.RoleColumnUpdateTime] = time.Now()
-	// 瀹¤瀛楁鏈嶅姟绔敞鍏ワ細浠呮洿鏂颁慨鏀逛汉涓庝慨鏀规椂闂达紙research.md D16锛屽娉?XII锛?
+	// 审计字段服务端注入：仅更新修改人与修改时间
 	updates[model.RoleColumnUpdatedBy] = auth.GetAccountId(ctx)
 	updates[model.RoleColumnVersion] = gorm.Expr(model.RoleColumnVersion + " + 1")
 	resp, err := a.updateRoleInTransaction(ctx, request, updates)
 	if err != nil {
 		return nil, err
 	}
-	// 鏉冮檺闆嗗悎澧炲噺鎴栫鐢ㄧ姸鎬佸彉鏇寸珛鍗崇敓鏁堬細澶辨晥缁戝畾璐﹀彿鐨勬潈闄愬揩鐓э紙research.md D6-鈶狅級
+	// 权限集合增减或禁用状态变更立即生效：失效绑定账号的权限快照
 	if len(request.AddedPermissionCodeList) > 0 || len(request.RemovedPermissionCodeList) > 0 || len(request.EnabledStatus) > 0 {
 		a.invalidateRoleAccountsSnapshot(ctx, request.Id)
 	}
 	return resp, nil
 }
 
-// invalidateRoleAccountsSnapshot 鍒犻櫎缁戝畾璇ヨ鑹茬殑鍏ㄩ儴璐﹀彿鐨勬潈闄愬揩鐓ч敭锛坮esearch.md D6-鈶狅級銆?
-// 蹇収涓烘淳鐢熸暟鎹細鍒犻櫎澶辫触浠呰鏃ュ織锛岀敱鐭?TTL 鍏滃簳锛屼笉褰卞搷宸叉彁浜ょ殑涓氬姟鍙樻洿銆?
+// invalidateRoleAccountsSnapshot 删除绑定该角色的全部账号的权限快照键。
+// 快照为派生数据：删除失败仅记日志，由短 TTL 兜底，不影响已提交的业务变更。
 func (a AuthorizationService) invalidateRoleAccountsSnapshot(ctx context.Context, roleId int64) {
 	if a.rdb == nil {
 		return
@@ -609,8 +444,8 @@ func (a AuthorizationService) invalidateRoleAccountsSnapshot(ctx context.Context
 	}
 }
 
-// invalidatePermissionAccountsSnapshot 鍒犻櫎寮曠敤璇ユ潈闄愶紙缁忕敱浠绘剰瑙掕壊缁戝畾锛夌殑
-// 鍏ㄩ儴璐﹀彿鐨勬潈闄愬揩鐓ч敭锛坰pecs/005-typed-permission-model VR-3锛夈€?
+// invalidatePermissionAccountsSnapshot 删除引用该权限（经任意角色绑定）的
+// 全部账号的权限快照键。
 func (a AuthorizationService) invalidatePermissionAccountsSnapshot(ctx context.Context, permissionId int64) {
 	if a.rdb == nil {
 		return
@@ -629,7 +464,7 @@ func (a AuthorizationService) invalidatePermissionAccountsSnapshot(ctx context.C
 	}
 }
 
-// deleteAccountPermissionSnapshot 鍒犻櫎鍗曚釜璐﹀彿鐨勬潈闄愬揩鐓ч敭锛屽け璐ヤ粎璁版棩蹇楋紙娲剧敓鏁版嵁鍏滃簳鍙噸寤猴級銆?
+// deleteAccountPermissionSnapshot 删除单个账号的权限快照键，失败仅记日志（派生数据兜底可重建）。
 func (a AuthorizationService) deleteAccountPermissionSnapshot(ctx context.Context, accountId, sourceId int64) {
 	if err := a.rdb.Del(ctx, constant.GetAccountPermissionKey(accountId)).Err(); err != nil {
 		slog.Warn("invalidate account permission snapshot failed",
@@ -718,34 +553,20 @@ func (a AuthorizationService) DeletePermission(ctx context.Context, request *iam
 		return nil, ErrPermissionReferenced
 	}
 
-	// 鏈瑙掕壊寮曠敤鐨勬潈闄愬垹闄ゆ椂绾ц仈娓呯悊璧勬簮缁戝畾锛屼笉浜х敓鎮┖缁戝畾琛岋紙FR-011锛?
-	err = a.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where(model.PermissionResourceColumnPermissionId, request.Id).
-			Delete(&model.PermissionResource{}).Error; err != nil {
-			return err
-		}
-		result := tx.Where(model.PermissionColumnId, request.Id).Delete(model.Permission{})
-		if result.Error != nil {
-			return result.Error
-		}
-		if result.RowsAffected == 0 {
-			return gorm.ErrRecordNotFound
-		}
-		return nil
-	})
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			slog.Warn("delete permission rejected: permission not found", "permission_id", request.Id)
-			return nil, gorm.ErrRecordNotFound
-		}
-		slog.Warn("delete permission failed", "permission_id", request.Id, "error", err)
-		return nil, err
+	result := a.db.WithContext(ctx).Where(model.PermissionColumnId, request.Id).Delete(model.Permission{})
+	if result.Error != nil {
+		slog.Warn("delete permission failed", "permission_id", request.Id, "error", result.Error)
+		return nil, result.Error
+	}
+	if result.RowsAffected == 0 {
+		slog.Warn("delete permission rejected: permission not found", "permission_id", request.Id)
+		return nil, gorm.ErrRecordNotFound
 	}
 	return &emptypb.Empty{}, nil
 }
 
 func (a AuthorizationService) DeleteRole(ctx context.Context, request *iam_v1.DeleteRoleRequest) (*emptypb.Empty, error) {
-	// VR-4锛氱鐞嗗憳瑙掕壊涓虹郴缁熷唴缃紝绂佹鍒犻櫎锛坰pecs/005-typed-permission-model US3锛?
+	// 管理员角色为系统内置，禁止删除
 	var role model.Role
 	if err := a.db.WithContext(ctx).Where(model.RoleColumnId, request.Id).Select(model.RoleFields).First(&role).Error; err != nil {
 		slog.Warn("delete role rejected: role not found", "role_id", request.Id, "error", err)
@@ -786,7 +607,7 @@ func (a AuthorizationService) DeleteRole(ctx context.Context, request *iam_v1.De
 		slog.Warn("delete role failed", "role_id", request.Id, "error", err)
 		return nil, err
 	}
-	// 绾ц仈娓呴櫎鏉冮檺鍏宠仈绔嬪嵆鐢熸晥锛氬け鏁堬紙娈嬩綑锛夌粦瀹氳处鍙风殑鏉冮檺蹇収锛坮esearch.md D6-鈶狅級
+	// 级联清理权限关联立即生效：失效（残余）绑定账号的权限快照
 	a.invalidateRoleAccountsSnapshot(ctx, request.Id)
 	return &emptypb.Empty{}, nil
 }
@@ -794,7 +615,7 @@ func (a AuthorizationService) DeleteRole(ctx context.Context, request *iam_v1.De
 func (a AuthorizationService) ListResources(ctx context.Context, request *iam_v1.ListResourcesRequest) (*iam_v1.ListResourcesResponse, error) {
 	limit, offset := helper.GetLimitAndOffset(request.CurrentPage, request.PageSize)
 	keywordConditions := []string{
-		// key 鏄?MySQL 淇濈暀瀛楋紝鎷煎叆鍘熷 SQL 蹇呴』鍙嶅紩鍙峰寘瑁?
+		// key 是 MySQL 保留字，拼入原生 SQL 必须反引号包裹
 		"`key` LIKE ?",
 		model.ResourceColumnName + " LIKE ?",
 	}
@@ -833,26 +654,43 @@ func (a AuthorizationService) ListResources(ctx context.Context, request *iam_v1
 	}, nil
 }
 
+// validateComponentInput 校验组件类型与绑定权限码格式：
+// kind 须为 menu/page/button；绑定码须为合法权限码（服务.模块.操作）。
+func validateComponentInput(kind string, permissionCodes []string) error {
+	if !model.IsValidComponentKind(kind) {
+		return ErrInvalidComponentKind
+	}
+	for _, code := range permissionCodes {
+		if !model.IsValidPermissionCode(code) {
+			return ErrInvalidPermissionCode
+		}
+	}
+	return nil
+}
+
 func (a AuthorizationService) CreateResource(ctx context.Context, request *iam_v1.CreateResourceRequest) (*iam_v1.Resource, error) {
 	if request.ApplicationId <= 0 {
 		return nil, ErrResourceApplicationRequired
 	}
+	if err := validateComponentInput(request.Kind, request.PermissionCodeList); err != nil {
+		return nil, err
+	}
 	now := time.Now()
 	operator := auth.GetAccountId(ctx)
 	resource := model.Resource{
-		Id:            krand.NewID(),
-		ApplicationId: request.ApplicationId,
-		Kind:          request.Kind,
-		Key:           request.Key,
-		Name:          request.Name,
-		RpcFullMethod: request.RpcFullMethod,
-		Disabled:      request.Disabled,
-		DisplayOrder:  request.DisplayOrder,
-		CreateTime:    now,
-		UpdateTime:    now,
-		CreatedBy:     operator,
-		UpdatedBy:     operator,
-		Version:       1,
+		Id:              krand.NewID(),
+		ApplicationId:   request.ApplicationId,
+		Kind:            request.Kind,
+		Key:             request.Key,
+		Name:            request.Name,
+		PermissionCodes: append([]string{}, request.PermissionCodeList...),
+		Disabled:        request.Disabled,
+		DisplayOrder:    request.DisplayOrder,
+		CreateTime:      now,
+		UpdateTime:      now,
+		CreatedBy:       operator,
+		UpdatedBy:       operator,
+		Version:         1,
 	}
 	if request.ParentId > 0 {
 		resource.ParentId = &request.ParentId
@@ -914,8 +752,13 @@ func (a AuthorizationService) UpdateResource(ctx context.Context, request *iam_v
 	if len(request.Name) > 0 {
 		updates[model.ResourceColumnName] = request.Name
 	}
-	if len(request.RpcFullMethod) > 0 {
-		updates[model.ResourceColumnRpcFullMethod] = request.RpcFullMethod
+	// permission_code_list 替换式更新：未提供（nil）不动，提供空清单即解绑全部权限码
+	if request.PermissionCodeList != nil {
+		for _, code := range request.PermissionCodeList {
+			if !model.IsValidPermissionCode(code) {
+				return nil, ErrInvalidPermissionCode
+			}
+		}
 	}
 	updates[model.ResourceColumnDisabled] = request.Disabled
 	if request.DisplayOrder != 0 {
@@ -951,6 +794,15 @@ func (a AuthorizationService) UpdateResource(ctx context.Context, request *iam_v
 		if result.RowsAffected == 0 {
 			return ErrResourceUpdateBusy
 		}
+		// permission_codes 走 struct Updates（gorm serializer 对 map 更新不生效）
+		if request.PermissionCodeList != nil {
+			if err := tx.Model(&model.Resource{}).
+				Where(model.ResourceColumnId, request.Id).
+				Select(model.ResourceColumnPermissionCodes).
+				Updates(&model.Resource{PermissionCodes: append([]string{}, request.PermissionCodeList...)}).Error; err != nil {
+				return err
+			}
+		}
 		return nil
 	})
 	if err != nil {
@@ -975,15 +827,6 @@ func (a AuthorizationService) DeleteResource(ctx context.Context, request *iam_v
 		}
 		if childCount > 0 {
 			return ErrResourceHasChildren
-		}
-		var bindingCount int64
-		if err := tx.Model(model.PermissionResource{}).
-			Where(model.PermissionResourceColumnResourceId, request.Id).
-			Count(&bindingCount).Error; err != nil {
-			return err
-		}
-		if bindingCount > 0 {
-			return ErrResourceReferenced
 		}
 		result := tx.Where(model.ResourceColumnId, request.Id).Delete(model.Resource{})
 		if result.Error != nil {
@@ -1027,10 +870,10 @@ func (a AuthorizationService) ListResourceTree(ctx context.Context, request *iam
 	return &iam_v1.ListResourceTreeResponse{Roots: roots}, nil
 }
 
-// ListMyMenuTree 杩斿洖褰撳墠鐢ㄦ埛鍦ㄦ寚瀹氬簲鐢ㄤ笅鍙鐨勮彍鍗曟爲锛堜粎 kind=menu锛宻pecs/008 FR-008/009锛夈€?
-// 鑿滃崟鍙鎬х敱鏈嶅姟绔鍐筹紙research.md D3锛夛細鏅€氱敤鎴锋寜鏉冮檺閿揩鐓э紙menu: 鍓嶇紑锛?
-// 杩囨护涓斿懡涓妭鐐圭殑绁栧厛璺緞涓€骞惰繑鍥烇紱绠＄悊鍛樿繑鍥炶搴旂敤鍏ㄩ儴鑿滃崟鑺傜偣銆?
-// 搴旂敤涓嶅瓨鍦ㄦ垨宸插仠鐢ㄨ繑鍥炰笟鍔￠敊璇紙research.md D4锛夛紱绌鸿彍鍗曡繑鍥炵┖ roots銆?
+// ListMyMenuTree 返回当前用户在指定应用下可见的组件树（menu/page/button 全量节点，
+// 前端按 kind 决定渲染方式）。可见性由服务端裁决：组件未绑定权限码时全员可见；
+// 绑定了权限码时，账号权限码集合与绑定码存在交集即可见。命中节点的祖先路径一并返回，
+// 保证树可渲染；应用不存在或已停用返回业务错误；空清单返回空 roots。
 func (a AuthorizationService) ListMyMenuTree(ctx context.Context, request *iam_v1.ListMyMenuTreeRequest) (*iam_v1.ListResourceTreeResponse, error) {
 	var application model.Application
 	err := a.db.WithContext(ctx).
@@ -1049,33 +892,38 @@ func (a AuthorizationService) ListMyMenuTree(ctx context.Context, request *iam_v
 		return nil, ErrApplicationDisabled
 	}
 
-	// 浠呭姞杞借搴旂敤鐨?menu 绫昏祫婧愶紙display_order 鎺掑簭锛?
+	// 加载该应用的全部组件资源（display_order 排序）
 	var resources []model.Resource
 	if err := a.db.WithContext(ctx).
 		Where(model.ResourceColumnApplicationId, request.ApplicationId).
-		Where(model.ResourceColumnKind, model.PermissionKindMenu).
 		Select(model.ResourceFields).
 		Order(model.ResourceColumnDisplayOrder + " ASC, " + model.ResourceColumnId + " ASC").
 		Find(&resources).Error; err != nil {
-		slog.Warn("load menu resources failed", "application_id", request.ApplicationId, "error", err)
+		slog.Warn("load component resources failed", "application_id", request.ApplicationId, "error", err)
 		return nil, err
 	}
 
-	visible := make(map[int64]struct{}, len(resources))
-	// 管理员与普通用户同受权限约束（规格变更，原管理员全量可见分支已移除）：
-	// 菜单可见性一律按账号权限键过滤，新增菜单需绑定到某权限后才对所有人可见。
-	keys, err := a.loadAccountMenuKeys(ctx)
+	codes, err := a.loadAccountPermissionCodes(ctx)
 	if err != nil {
 		return nil, err
 	}
+	visible := make(map[int64]struct{}, len(resources))
 	byId := make(map[int64]model.Resource, len(resources))
 	for _, r := range resources {
 		byId[r.Id] = r
-		if _, ok := keys[constant.SnapshotKeyPrefixMenu+r.Key]; ok {
+		// 可见性：未绑定权限码的组件全员可见；绑定了则按码交集判定
+		if len(r.PermissionCodes) == 0 {
 			visible[r.Id] = struct{}{}
+			continue
+		}
+		for _, code := range r.PermissionCodes {
+			if _, ok := codes[code]; ok {
+				visible[r.Id] = struct{}{}
+				break
+			}
 		}
 	}
-	// 鍛戒腑鑺傜偣鐨勭鍏堣矾寰勪竴骞惰繑鍥烇紝淇濊瘉鏍戝彲娓叉煋锛坰pecs/008 research.md D3锛?
+	// 命中节点的祖先路径一并返回，保证树可渲染
 	for _, r := range resources {
 		if _, ok := visible[r.Id]; !ok {
 			continue
@@ -1084,7 +932,7 @@ func (a AuthorizationService) ListMyMenuTree(ctx context.Context, request *iam_v
 			if _, seen := visible[*parent]; seen {
 				break
 			}
-			// 绁栧厛鍙兘涓嶅湪 menu 鏌ヨ缁撴灉涓紙鐞嗚涓?menu 鏍戠埗绾у悓涓?menu锛夛紝缂哄け鍗虫
+			// 祖先可能不在查询结果中（数据异常），缺失即止
 			node, ok := byId[*parent]
 			if !ok {
 				break
@@ -1093,14 +941,12 @@ func (a AuthorizationService) ListMyMenuTree(ctx context.Context, request *iam_v
 		}
 	}
 
-	kept := make([]model.Resource, 0, len(visible))
 	byParent := make(map[int64][]model.Resource, len(resources))
 	var rootCandidates []model.Resource
 	for _, r := range resources {
 		if _, ok := visible[r.Id]; !ok {
 			continue
 		}
-		kept = append(kept, r)
 		if r.ParentId == nil {
 			rootCandidates = append(rootCandidates, r)
 		} else {
@@ -1120,7 +966,7 @@ func (a AuthorizationService) ListMyMenuTree(ctx context.Context, request *iam_v
 	return &iam_v1.ListResourceTreeResponse{Roots: roots}, nil
 }
 
-// buildMyMenuNode 浠?kept 闆嗗悎鏋勫缓鑿滃崟鏍戣妭鐐癸紙children 浠呭惈杩囨护鍚庝粛淇濈暀鐨勮妭鐐癸級
+// buildMyMenuNode 从可见集合构建组件树节点（children 仅含过滤后仍保留的节点）
 func buildMyMenuNode(r model.Resource, byParent map[int64][]model.Resource, appSummary *iam_v1.ApplicationSummary) *iam_v1.ResourceTreeNode {
 	node := &iam_v1.ResourceTreeNode{
 		Resource: resourceToPb(r, appSummary),
@@ -1132,9 +978,8 @@ func buildMyMenuNode(r model.Resource, byParent map[int64][]model.Resource, appS
 	return node
 }
 
-// loadAccountMenuKeys 璇诲彇璐﹀彿鏉冮檺閿揩鐓э紙甯?menu:/http:/rpc: 鍓嶇紑锛夈€?
-// 蹇収缂哄け鏃剁粡璇荤┛鍥炴簮閲嶅缓锛坮esearch.md D6-鈶?鍚屼竴瀹炵幇璺緞锛夈€?
-func (a AuthorizationService) loadAccountMenuKeys(ctx context.Context) (map[string]struct{}, error) {
+// loadAccountPermissionCodes 读取账号权限码集合。快照缺失时读穿回源重建（同一实现路径）。
+func (a AuthorizationService) loadAccountPermissionCodes(ctx context.Context) (map[string]struct{}, error) {
 	accountId := auth.GetAccountId(ctx)
 	if a.rdb != nil {
 		raw, err := a.rdb.Get(ctx, constant.GetAccountPermissionKey(accountId)).Result()
@@ -1144,28 +989,28 @@ func (a AuthorizationService) loadAccountMenuKeys(ctx context.Context) (map[stri
 				slog.Warn("unmarshal permission snapshot failed", "account_id", accountId, "error", err)
 				return nil, err
 			}
-			keyDict := make(map[string]struct{}, len(keys))
+			codeDict := make(map[string]struct{}, len(keys))
 			for _, key := range keys {
-				keyDict[key] = struct{}{}
+				codeDict[key] = struct{}{}
 			}
-			return keyDict, nil
+			return codeDict, nil
 		}
 		if !errors.Is(err, redis.Nil) {
 			slog.Warn("get permission snapshot failed", "account_id", accountId, "error", err)
 			return nil, err
 		}
 	}
-	// 蹇収缂哄け锛氳绌垮洖婧?
+	// 快照缺失：读穿回源
 	keys, err := NewPermissionSnapshotLoader(a.db)(ctx, accountId)
 	if err != nil {
 		slog.Warn("load permission snapshot read-through failed", "account_id", accountId, "error", err)
 		return nil, err
 	}
-	keyDict := make(map[string]struct{}, len(keys))
+	codeDict := make(map[string]struct{}, len(keys))
 	for _, key := range keys {
-		keyDict[key] = struct{}{}
+		codeDict[key] = struct{}{}
 	}
-	return keyDict, nil
+	return codeDict, nil
 }
 
 // validateParent checks that the parent exists, belongs to the same application, and
@@ -1257,29 +1102,17 @@ func (a AuthorizationService) ListSubscriptions(ctx context.Context, request *ia
 }
 
 func (a AuthorizationService) GetMyPermissions(ctx context.Context, _ *emptypb.Empty) (*iam_v1.GetMyPermissionsResponse, error) {
-	// admin 涓庢櫘閫氳处鍙风粺涓€璧板揩鐓х湡瀹炴暟鎹紙research.md D9锛夛細鍓嶇娓叉煋鏁版嵁涓?DB 鎺堟潈涓€鑷?
+	// admin 与普通账号统一走快照真实数据：前端渲染数据与 DB 授权一致
 	accountId := auth.GetAccountId(ctx)
 	permKeys, err := loadAccountPermissionSnapshot(ctx, a.rdb, a.db, accountId)
 	if err != nil {
 		return nil, err
 	}
-
-	response := &iam_v1.GetMyPermissionsResponse{
-		MenuKeyList:        []string{},
-		HttpFullMethodList: []string{},
-		RpcFullMethodList:  []string{},
-	}
-	for _, key := range permKeys {
-		switch {
-		case strings.HasPrefix(key, constant.SnapshotKeyPrefixMenu):
-			response.MenuKeyList = append(response.MenuKeyList, strings.TrimPrefix(key, constant.SnapshotKeyPrefixMenu))
-		case strings.HasPrefix(key, constant.SnapshotKeyPrefixHTTP):
-			response.HttpFullMethodList = append(response.HttpFullMethodList, strings.TrimPrefix(key, constant.SnapshotKeyPrefixHTTP))
-		case strings.HasPrefix(key, constant.SnapshotKeyPrefixRPC):
-			response.RpcFullMethodList = append(response.RpcFullMethodList, strings.TrimPrefix(key, constant.SnapshotKeyPrefixRPC))
-		}
-	}
-	return response, nil
+	codeList := make([]string, 0, len(permKeys))
+	codeList = append(codeList, permKeys...)
+	return &iam_v1.GetMyPermissionsResponse{
+		PermissionCodeList: codeList,
+	}, nil
 }
 
 func boolToStatus(disabled bool) string {

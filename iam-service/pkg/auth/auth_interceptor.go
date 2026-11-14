@@ -17,6 +17,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+
+	"iam-service/pkg/model"
 )
 
 const (
@@ -95,9 +97,9 @@ func Interceptor(rdb *redis.Client, load PermissionLoader, store *SignatureStore
 			return handler(newCtx, req)
 		}
 
-		requiredKey := requiredPermissionKey(md, info.FullMethod)
+		requiredCodes := model.MethodPermissionsFor(info.FullMethod)
 
-		if err := authorizeBySnapshot(ctx, rdb, load, cast.ToInt64(accountId), requiredKey, info.FullMethod); err != nil {
+		if err := authorizeBySnapshot(ctx, rdb, load, cast.ToInt64(accountId), requiredCodes, info.FullMethod); err != nil {
 			return nil, err
 		}
 		return handler(newCtx, req)
@@ -139,24 +141,22 @@ func authenticateBySignature(ctx context.Context, rdb *redis.Client, load Permis
 	}
 
 	// 签名鉴权不授予任何额外权限（FR-015）：以绑定用户的权限快照判定，无管理员旁路
-	requiredKey := requiredPermissionKey(md, info.FullMethod)
-	if err := authorizeBySnapshot(ctx, rdb, load, accountId, requiredKey, info.FullMethod); err != nil {
+	requiredCodes := model.MethodPermissionsFor(info.FullMethod)
+	if err := authorizeBySnapshot(ctx, rdb, load, accountId, requiredCodes, info.FullMethod); err != nil {
 		return nil, err
 	}
 	return handler(newCtx, req)
 }
 
-// requiredPermissionKey 计算执行域权限键（D3）：网关来源 → http: 键；服务间直连 → rpc: 键。
-func requiredPermissionKey(md metadata.MD, fullMethod string) string {
-	if originValues := md.Get(constant.MetadataGatewayOrigin); len(originValues) > 0 && originValues[0] == constant.GatewayOriginHTTP {
-		return constant.SnapshotKeyPrefixHTTP + fullMethod
-	}
-	return constant.SnapshotKeyPrefixRPC + fullMethod
-}
-
 // authorizeBySnapshot 权限快照判定（两轨共用）：
 // Redis 快照命中即比对；未命中/格式不符走读穿回源重建；Redis 故障 fail-closed。
-func authorizeBySnapshot(ctx context.Context, rdb *redis.Client, load PermissionLoader, accountId int64, requiredKey, fullMethod string) error {
+// requiredCodes 须全部命中才放行；未登记方法（nil/空）一律拒绝（fail-closed）。
+func authorizeBySnapshot(ctx context.Context, rdb *redis.Client, load PermissionLoader, accountId int64, requiredCodes []string, fullMethod string) error {
+	if len(requiredCodes) == 0 {
+		slog.Warn("permission denied: method not registered in METHOD_PERMISSIONS",
+			"account_id", accountId, "method", fullMethod)
+		return status.Error(codes.PermissionDenied, "permission denied")
+	}
 	str, err := rdb.Get(ctx, constant.GetAccountPermissionKey(accountId)).Result()
 	var permKeys []string
 	if err != nil {
@@ -186,16 +186,19 @@ func authorizeBySnapshot(ctx context.Context, rdb *redis.Client, load Permission
 		}
 	}
 
+	held := make(map[string]struct{}, len(permKeys))
 	for _, key := range permKeys {
-		if key == requiredKey {
-			return nil
+		held[key] = struct{}{}
+	}
+	for _, required := range requiredCodes {
+		if _, ok := held[required]; !ok {
+			// fail-closed：缺任一所需权限码一律拒绝（FR-010）
+			slog.Warn("permission denied",
+				"account_id", accountId, "method", fullMethod, "required_code", required)
+			return status.Error(codes.PermissionDenied, "permission denied")
 		}
 	}
-
-	// fail-closed：无匹配键一律拒绝（FR-010）
-	slog.Warn("permission denied",
-		"account_id", accountId, "method", fullMethod, "required_key", requiredKey)
-	return status.Error(codes.PermissionDenied, "permission denied")
+	return nil
 }
 
 // signatureStatusError 把语义化验签错误转成携带 ErrorInfo（reason）的 gRPC 状态。

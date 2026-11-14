@@ -1,14 +1,7 @@
 package constant
 
-// 权限快照资源键前缀（specs/005-typed-permission-model research.md D5）：
-// 快照值为带前缀的资源键数组，前缀标识执行域。
-const (
-	SnapshotKeyPrefixMenu = "menu:"
-	SnapshotKeyPrefixHTTP = "http:"
-	SnapshotKeyPrefixRPC  = "rpc:"
-)
-
-// 网关来源标记（idl/lib/gwlib 注入，拦截器据此区分 HTTP 域与服务间 gRPC 域，research.md D3）。
+// 网关来源标记（idl/lib/gwlib 注入，仅用于日志与审计标注来源，不参与权限判定：
+// 权限码模型下 HTTP 网关与服务间 gRPC 共用同一 full method → 权限码映射）。
 const (
 	MetadataGatewayOrigin = "x-gateway-origin"
 	GatewayOriginHTTP     = "http"

@@ -142,13 +142,6 @@
             "in": "query",
             "required": false,
             "type": "string"
-          },
-          {
-            "name": "kind",
-            "description": "按类型过滤：menu | http_api | grpc；空为不过滤",
-            "in": "query",
-            "required": false,
-            "type": "string"
           }
         ],
         "tags": [
@@ -290,20 +283,6 @@
                 "version": {
                   "type": "string",
                   "format": "int64"
-                },
-                "resourceKeyList": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  },
-                  "title": "资源绑定替换式更新：提供的 key 清单整体替换既有绑定；不提供则不动绑定。\r\nkind 不可修改，请求中无 kind 字段。"
-                },
-                "resourceIdList": {
-                  "type": "array",
-                  "items": {
-                    "type": "string",
-                    "format": "int64"
-                  }
                 }
               }
             }
@@ -387,7 +366,7 @@
           },
           {
             "name": "kind",
-            "description": "按类型过滤：menu | http_api | grpc",
+            "description": "按组件类型过滤：menu | page | button",
             "in": "query",
             "required": false,
             "type": "string"
@@ -548,9 +527,6 @@
                 "name": {
                   "type": "string"
                 },
-                "rpcFullMethod": {
-                  "type": "string"
-                },
                 "disabled": {
                   "type": "boolean"
                 },
@@ -561,6 +537,13 @@
                 "displayOrder": {
                   "type": "integer",
                   "format": "int32"
+                },
+                "permissionCodeList": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "绑定的权限码清单（替换式更新）"
                 }
               }
             }
@@ -1016,31 +999,11 @@
           "type": "string"
         },
         "code": {
-          "type": "string"
-        },
-        "value": {
-          "type": "string"
+          "type": "string",
+          "title": "权限码是唯一授权词汇，格式为 服务.模块.操作，如 iam.account.delete"
         },
         "description": {
           "type": "string"
-        },
-        "kind": {
-          "type": "string",
-          "title": "权限类型：menu | http_api | grpc（创建后不可变）"
-        },
-        "resourceKeyList": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "title": "绑定资源键，≥1 且须与 kind 同类型"
-        },
-        "resourceIdList": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "format": "int64"
-          }
         }
       }
     },
@@ -1056,15 +1019,13 @@
           "format": "int64"
         },
         "kind": {
-          "type": "string"
+          "type": "string",
+          "title": "组件类型：menu | page | button"
         },
         "key": {
           "type": "string"
         },
         "name": {
-          "type": "string"
-        },
-        "rpcFullMethod": {
           "type": "string"
         },
         "disabled": {
@@ -1073,6 +1034,13 @@
         "displayOrder": {
           "type": "integer",
           "format": "int32"
+        },
+        "permissionCodeList": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "绑定的权限码清单（替换式写入；空清单表示不绑定权限）"
         }
       }
     },
@@ -1116,28 +1084,7 @@
           "items": {
             "type": "string"
           },
-          "title": "兼容期保留，不再填充真实值（语义已升级为资源键，见 menu_key_list 等字段）"
-        },
-        "menuKeyList": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "title": "可见菜单键（前端导航/路由渲染数据源）"
-        },
-        "httpFullMethodList": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "title": "可调用的 HTTP 接口（映射后的 full method）"
-        },
-        "rpcFullMethodList": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "title": "服务间可调用的 gRPC 方法"
+          "title": "当前账号持有的全部权限码（前端组件展示/置灰与导航渲染的唯一数据源）"
         }
       }
     },
@@ -1280,21 +1227,9 @@
           "type": "string",
           "format": "date-time",
           "title": "修改时间"
-        },
-        "kind": {
-          "type": "string",
-          "title": "权限类型：menu | http_api | grpc（创建后不可变）"
-        },
-        "resourceList": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "$ref": "#/definitions/v1Resource"
-          },
-          "title": "绑定的资源清单（列表/详情回传，请求侧不含）"
         }
       },
-      "title": "权限信息"
+      "title": "权限信息。权限码（permission_code）是唯一授权词汇，\r\n格式为 服务.模块.操作（如 iam.account.delete）。"
     },
     "v1PermissionSummary": {
       "type": "object",
@@ -1309,9 +1244,6 @@
         "permissionCode": {
           "type": "string"
         },
-        "kind": {
-          "type": "string"
-        },
         "enabledStatus": {
           "type": "string"
         }
@@ -1324,17 +1256,14 @@
           "type": "string"
         },
         "kind": {
-          "type": "string"
+          "type": "string",
+          "title": "组件类型：menu | page | button"
         },
         "key": {
           "type": "string"
         },
         "name": {
           "type": "string"
-        },
-        "rpcFullMethod": {
-          "type": "string",
-          "title": "仅 http_api 有值：该 HTTP 路由经网关映射的目标 RPC full method"
         },
         "enabledStatus": {
           "type": "string"
@@ -1365,9 +1294,16 @@
         },
         "application": {
           "$ref": "#/definitions/v1ApplicationSummary"
+        },
+        "permissionCodeList": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "绑定的权限码清单（前端展示/置灰判定依据）"
         }
       },
-      "title": "被保护的具体资源。key 全局唯一：\r\n  menu     → 路由键，如 \"authorization_management.permission_list\"\r\n  http_api → \"\u003cMETHOD\u003e \u003cpath\u003e\"，如 \"GET /authorization/permissions\"\r\n  grpc     → full method，如 \"/iam.v1.AccountService/ListAccounts\""
+      "title": "前端组件资源（页面结构注册表）：结构归代码、展示归管理员。\r\nkey 全局唯一（应用内唯一），格式随 kind：\r\n  menu   → 菜单层级键，如 \"authorization_management\"\r\n  page   → 页面路由键，如 \"permission_list\"\r\n  button → 按钮/操作键，如 \"account_list.delete\"\r\npermission_code_list 是组件绑定的权限码：前端按「组件绑定码 ∩ 用户持有码」\r\n决定展示或置灰；空清单表示不绑定权限（所有人可见）。"
     },
     "v1ResourceTreeNode": {
       "type": "object",

@@ -1,14 +1,12 @@
 // Do not Edit Generated File.
-// Generated at: 2026-09-05 03:54:20
+// Generated at: 2026-09-05 03:54:20 (manually fixed: kind/value 已废除)
 
 package model
 
 const (
 	PermissionColumnId            = "id"
 	PermissionColumnName          = "name"
-	PermissionColumnKind          = "kind"
 	PermissionColumnCode          = "code"
-	PermissionColumnValue         = "value"
 	PermissionColumnDescription   = "description"
 	PermissionColumnApplicationId = "application_id"
 	PermissionColumnDisabled      = "disabled"

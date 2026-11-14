@@ -21,7 +21,7 @@ func setupResourceTreeTestDB(t *testing.T) (*gorm.DB, *AuthorizationService) {
 	}
 	if err := db.AutoMigrate(
 		&model.Application{}, &model.Role{}, &model.Permission{},
-		&model.RRolePermission{}, &model.Resource{}, &model.PermissionResource{},
+		&model.RRolePermission{}, &model.Resource{},
 	); err != nil {
 		t.Fatalf("migrate sqlite: %v", err)
 	}
@@ -43,26 +43,26 @@ func TestResourceOwnershipHierarchyAndSafety(t *testing.T) {
 	createResourceTestApplication(t, db, 1, "iam")
 
 	if _, err := service.CreateResource(ctx, &iam_v1.CreateResourceRequest{
-		Kind: model.PermissionKindMenu, Key: "root", Name: "Root",
+		Kind: model.ComponentKindMenu, Key: "root", Name: "Root",
 	}); err != ErrResourceApplicationRequired {
 		t.Fatalf("CreateResource() error = %v, want %v", err, ErrResourceApplicationRequired)
 	}
 	root, err := service.CreateResource(ctx, &iam_v1.CreateResourceRequest{
-		ApplicationId: 1, Kind: model.PermissionKindMenu, Key: "account", Name: "账号管理",
+		ApplicationId: 1, Kind: model.ComponentKindMenu, Key: "account", Name: "账号管理",
 	})
 	if err != nil {
 		t.Fatalf("create root: %v", err)
 	}
 	rootId := castResourceID(root.Id)
 	child, err := service.CreateResource(ctx, &iam_v1.CreateResourceRequest{
-		ApplicationId: 1, ParentId: rootId, Kind: model.PermissionKindMenu, Key: "account.list", Name: "用户列表",
+		ApplicationId: 1, ParentId: rootId, Kind: model.ComponentKindMenu, Key: "account.list", Name: "用户列表",
 	})
 	if err != nil {
 		t.Fatalf("create child: %v", err)
 	}
 	childId := castResourceID(child.Id)
 	grandchild, err := service.CreateResource(ctx, &iam_v1.CreateResourceRequest{
-		ApplicationId: 1, ParentId: childId, Kind: model.PermissionKindHTTPAPI, Key: "GET /account/list", Name: "用户列表接口",
+		ApplicationId: 1, ParentId: childId, Kind: model.ComponentKindPage, Key: "account_list_page", Name: "用户列表页",
 	})
 	if err != nil {
 		t.Fatalf("create grandchild: %v", err)
@@ -70,7 +70,7 @@ func TestResourceOwnershipHierarchyAndSafety(t *testing.T) {
 	grandchildId := castResourceID(grandchild.Id)
 
 	if _, err := service.CreateResource(ctx, &iam_v1.CreateResourceRequest{
-		ApplicationId: 1, Kind: model.PermissionKindMenu, Key: "account", Name: "重复资源",
+		ApplicationId: 1, Kind: model.ComponentKindMenu, Key: "account", Name: "重复资源",
 	}); err != ErrResourceKeyDuplicated {
 		t.Fatalf("duplicate key error = %v, want %v", err, ErrResourceKeyDuplicated)
 	}
@@ -94,18 +94,9 @@ func TestResourceOwnershipHierarchyAndSafety(t *testing.T) {
 		t.Fatalf("resource application summary = %+v", tree.Roots[0].Resource.Application)
 	}
 
-	permission, err := service.CreatePermission(ctx, &iam_v1.CreatePermissionRequest{
-		ApplicationId: 1, Name: "用户列表", Code: "account.list", Kind: model.PermissionKindMenu,
-		ResourceIdList: []int64{grandchildId, childId},
-	})
-	if err != nil {
-		t.Fatalf("create permission with mixed hierarchy: %v", err)
-	}
-	if len(permission.ResourceList) != 3 {
-		t.Fatalf("selected resource count = %d, want root, child, and grandchild", len(permission.ResourceList))
-	}
-	if _, err := service.DeleteResource(ctx, &iam_v1.DeleteResourceRequest{Id: grandchildId}); err != ErrResourceReferenced {
-		t.Fatalf("delete bound resource error = %v, want %v", err, ErrResourceReferenced)
+	// 无子级叶节点可直接删除（权限码绑定不再是资源删除的引用障碍）
+	if _, err := service.DeleteResource(ctx, &iam_v1.DeleteResourceRequest{Id: grandchildId}); err != nil {
+		t.Fatalf("delete leaf resource error = %v", err)
 	}
 }
 
@@ -113,10 +104,6 @@ func TestRoleCreationAndListSummaries(t *testing.T) {
 	db, service := setupResourceTreeTestDB(t)
 	ctx := context.Background()
 	createResourceTestApplication(t, db, 1, "iam")
-	resource := model.Resource{Id: 100, ApplicationId: 1, Kind: model.PermissionKindMenu, Key: "account.list", Name: "用户列表"}
-	if err := db.Create(&resource).Error; err != nil {
-		t.Fatalf("create resource: %v", err)
-	}
 
 	role, err := service.CreateRole(ctx, &iam_v1.CreateRoleRequest{ApplicationId: 1, Name: "管理员", RoleCode: "admin"})
 	if err != nil {
@@ -126,8 +113,7 @@ func TestRoleCreationAndListSummaries(t *testing.T) {
 		t.Fatalf("new role permissions = %d, want 0", len(role.PermissionList))
 	}
 	permission, err := service.CreatePermission(ctx, &iam_v1.CreatePermissionRequest{
-		ApplicationId: 1, Name: "用户列表", Code: "account.list", Kind: model.PermissionKindMenu,
-		ResourceIdList: []int64{resource.Id},
+		ApplicationId: 1, Name: "权限列表", Code: "iam.permission.list",
 	})
 	if err != nil {
 		t.Fatalf("CreatePermission() error = %v", err)
@@ -149,7 +135,7 @@ func TestRoleCreationAndListSummaries(t *testing.T) {
 	if roles.Roles[0].Application.Name != "iam Application" {
 		t.Fatalf("application name = %q", roles.Roles[0].Application.Name)
 	}
-	if len(roles.Roles[0].PermissionList) != 1 || roles.Roles[0].PermissionList[0].Name != "用户列表" {
+	if len(roles.Roles[0].PermissionList) != 1 || roles.Roles[0].PermissionList[0].Name != "权限列表" {
 		t.Fatalf("permission summaries = %+v", roles.Roles[0].PermissionList)
 	}
 }

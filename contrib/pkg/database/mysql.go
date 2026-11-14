@@ -11,7 +11,9 @@ import (
 // NewMySQL 创建 gorm MySQL 连接并执行一次 Ping，连接失败立即返回错误。
 func NewMySQL(dsn string) (*gorm.DB, error) {
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
-		// 宪法 XIV：完整性约束由业务层保证，禁止通过 AutoMigrate 生成物理外键。
+		// 宪法 XIV：完整性约束由业务层保证，禁止生成物理外键。
+		// Schema 变更由 golang-migrate 迁移管理（iam-service/pkg/migration），
+		// 禁止在服务启动路径调用 AutoMigrate。
 		DisableForeignKeyConstraintWhenMigrating: true,
 	})
 	if err != nil {

@@ -82,43 +82,6 @@ func loadRolePermissions(ctx context.Context, db *gorm.DB, role *model.Role) err
 	return nil
 }
 
-func loadPermissionResources(ctx context.Context, db *gorm.DB, permission *model.Permission) error {
-	var bindings []permissionResourceBinding
-	if err := db.WithContext(ctx).
-		Table("t_r_permission_resource").
-		Where(model.PermissionResourceColumnPermissionId, permission.Id).
-		Select([]string{model.PermissionResourceColumnPermissionId, model.PermissionResourceColumnResourceId}).
-		Find(&bindings).Error; err != nil {
-		return err
-	}
-	if len(bindings) == 0 {
-		permission.ResourceList = []*model.Resource{}
-		return nil
-	}
-	resourceIds := make([]int64, 0, len(bindings))
-	for _, binding := range bindings {
-		resourceIds = append(resourceIds, binding.ResourceId)
-	}
-	var resources []*model.Resource
-	if err := db.WithContext(ctx).
-		Where(model.ResourceColumnId+" IN ?", resourceIds).
-		Select(model.ResourceFields).
-		Find(&resources).Error; err != nil {
-		return err
-	}
-	resourceById := make(map[int64]*model.Resource, len(resources))
-	for _, resource := range resources {
-		resourceById[resource.Id] = resource
-	}
-	permission.ResourceList = make([]*model.Resource, 0, len(bindings))
-	for _, binding := range bindings {
-		if resource, exists := resourceById[binding.ResourceId]; exists {
-			permission.ResourceList = append(permission.ResourceList, resource)
-		}
-	}
-	return nil
-}
-
 func loadAccountPermissionGraph(ctx context.Context, db *gorm.DB, account *model.Account) error {
 	if err := loadAccountRoles(ctx, db, account); err != nil {
 		return err
@@ -153,46 +116,14 @@ func loadAccountPermissionGraph(ctx context.Context, db *gorm.DB, account *model
 	for _, permission := range permissions {
 		permissionById[permission.Id] = permission
 	}
-	var permissionBindings []permissionResourceBinding
-	if err := db.WithContext(ctx).
-		Table("t_r_permission_resource").
-		Where(model.PermissionResourceColumnPermissionId+" IN ?", permissionIds).
-		Select([]string{model.PermissionResourceColumnPermissionId, model.PermissionResourceColumnResourceId}).
-		Find(&permissionBindings).Error; err != nil {
-		return err
-	}
-	resourceIds := make([]int64, 0, len(permissionBindings))
-	for _, binding := range permissionBindings {
-		resourceIds = append(resourceIds, binding.ResourceId)
-	}
-	var resources []*model.Resource
-	if err := db.WithContext(ctx).
-		Where(model.ResourceColumnId+" IN ?", resourceIds).
-		Select(model.ResourceFields).
-		Find(&resources).Error; err != nil {
-		return err
-	}
-	resourceById := make(map[int64]*model.Resource, len(resources))
-	for _, resource := range resources {
-		resourceById[resource.Id] = resource
-	}
 	permissionsByRole := make(map[int64][]*model.Permission)
 	for _, binding := range roleBindings {
 		if permission, exists := permissionById[binding.PermissionId]; exists {
 			permissionsByRole[binding.RoleId] = append(permissionsByRole[binding.RoleId], permission)
 		}
 	}
-	resourcesByPermission := make(map[int64][]*model.Resource)
-	for _, binding := range permissionBindings {
-		if resource, exists := resourceById[binding.ResourceId]; exists {
-			resourcesByPermission[binding.PermissionId] = append(resourcesByPermission[binding.PermissionId], resource)
-		}
-	}
 	for _, role := range account.RoleList {
 		role.PermissionList = permissionsByRole[role.Id]
-	}
-	for _, permission := range permissions {
-		permission.ResourceList = resourcesByPermission[permission.Id]
 	}
 	return nil
 }
@@ -253,11 +184,6 @@ func loadRolePermissionsForRoles(ctx context.Context, db *gorm.DB, roles []model
 type rolePermissionBinding struct {
 	RoleId       int64
 	PermissionId int64
-}
-
-type permissionResourceBinding struct {
-	PermissionId int64
-	ResourceId   int64
 }
 
 // loadApplicationSummaries batch-loads application summaries for the given IDs.

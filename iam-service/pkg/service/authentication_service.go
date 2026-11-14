@@ -58,7 +58,7 @@ func (a AuthenticationService) PasswordAuth(ctx context.Context, request *iam_v1
 
 	if err = a.db.WithContext(ctx).Model(model.Account{}).
 		Where(model.AccountColumnId, account.Id).
-		Preload("RoleList.PermissionList.ResourceList").
+		Preload("RoleList.PermissionList").
 		Preload("RoleList.Application").
 		Find(&account).Error; err != nil {
 		return nil, err
@@ -74,7 +74,7 @@ func (a AuthenticationService) PasswordAuth(ctx context.Context, request *iam_v1
 	}
 	// 鏉冮檺骞堕泦璁＄畻涓庤绌垮洖婧愬叡鐢ㄥ悓涓€瀹炵幇锛坮esearch.md D6-鈶★級
 	// 蹇収鍊间负甯︾被鍨嬪墠缂€鐨勮祫婧愰敭骞堕泦锛坢enu:/http:/rpc:锛?
-	keys := collectAccountResourceKeys(account)
+	keys := collectAccountPermissionCodes(account)
 	jsonData, err := json.Marshal(keys)
 	if err != nil {
 		return nil, err
