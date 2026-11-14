@@ -2,19 +2,23 @@
 -- + 点式权限码词汇（服务.模块.操作）+ 菜单树种子 + admin 全量绑定。
 -- 幂等：INSERT ... WHERE NOT EXISTS，重复执行不产生重复行。
 
--- ── 角色 ────────────────────────────────────────────────────────────────
-INSERT INTO t_role (id, code, name, description, status, version, created_by, updated_by, create_time, update_time)
-SELECT 1, 'admin', '系统管理员', '内置超级管理员角色', 'enabled', 1, 'system', 'system', NOW(3), NOW(3)
+-- ── 角色（按 code 幂等，不写死 id：存量库可能有任意自增数据）──────────────
+INSERT INTO t_role (code, name, description, status, version, created_by, updated_by, create_time, update_time)
+SELECT 'admin', '系统管理员', '内置超级管理员角色', 'enabled', 1, 'system', 'system', NOW(3), NOW(3)
 WHERE NOT EXISTS (SELECT 1 FROM t_role WHERE code = 'admin');
 
--- ── 用户（初始密码 admin123，bcrypt）─────────────────────────────────────
-INSERT INTO t_user (id, username, password_hash, nickname, status, version, created_by, updated_by, create_time, update_time)
-SELECT 1, 'admin', '$2a$10$Fo73nnjx6c606EGLmXq0uuiZJRnbXOUqiWI9.Mn.vT4coClo79lcq', '系统管理员', 'enabled', 1, 'system', 'system', NOW(3), NOW(3)
+-- ── 用户（按 username 幂等；种子保证 admin 具有已知初始密码 admin123）──────
+INSERT INTO t_user (username, password_hash, nickname, status, version, created_by, updated_by, create_time, update_time)
+SELECT 'admin', '$2a$10$Fo73nnjx6c606EGLmXq0uuiZJRnbXOUqiWI9.Mn.vT4coClo79lcq', '系统管理员', 'enabled', 1, 'system', 'system', NOW(3), NOW(3)
 WHERE NOT EXISTS (SELECT 1 FROM t_user WHERE username = 'admin');
 
+UPDATE t_user SET password_hash = '$2a$10$Fo73nnjx6c606EGLmXq0uuiZJRnbXOUqiWI9.Mn.vT4coClo79lcq', update_time = NOW(3)
+WHERE username = 'admin' AND password_hash <> '$2a$10$Fo73nnjx6c606EGLmXq0uuiZJRnbXOUqiWI9.Mn.vT4coClo79lcq';
+
 INSERT INTO t_r_user_role (user_id, role_id)
-SELECT 1, 1
-WHERE NOT EXISTS (SELECT 1 FROM t_r_user_role WHERE user_id = 1 AND role_id = 1);
+SELECT u.id, r.id FROM t_user u JOIN t_role r ON r.code = 'admin'
+WHERE u.username = 'admin'
+  AND NOT EXISTS (SELECT 1 FROM t_r_user_role x WHERE x.user_id = u.id AND x.role_id = r.id);
 
 -- ── 权限码词汇（与 pkg/model/permission_codes.go 镜像）───────────────────
 INSERT INTO t_permission (code, name, type, description, status, version, created_by, updated_by, create_time, update_time)
@@ -186,11 +190,13 @@ INSERT INTO t_menu (id, parent_id, name, path, icon, sort, permission_code, stat
 SELECT 1011, 1005, '权限订阅', '/iam/authorization/subscriptions', 'SubscriptionOutlined', 3, 'iam.subscription.list', 'enabled', 1, 'system', 'system', NOW(3), NOW(3)
 WHERE NOT EXISTS (SELECT 1 FROM t_menu WHERE id = 1011);
 
--- ── admin 角色全量绑定（权限 + 菜单）─────────────────────────────────────
+-- ── admin 角色全量绑定（权限 + 菜单；role_id 按 code 动态查找）────────────
 INSERT INTO t_r_role_permission (role_id, permission_id)
-SELECT 1, p.id FROM t_permission p
-WHERE NOT EXISTS (SELECT 1 FROM t_r_role_permission rp WHERE rp.role_id = 1 AND rp.permission_id = p.id);
+SELECT r.id, p.id FROM t_role r CROSS JOIN t_permission p
+WHERE r.code = 'admin'
+  AND NOT EXISTS (SELECT 1 FROM t_r_role_permission rp WHERE rp.role_id = r.id AND rp.permission_id = p.id);
 
 INSERT INTO t_r_role_menu (role_id, menu_id)
-SELECT 1, m.id FROM t_menu m
-WHERE NOT EXISTS (SELECT 1 FROM t_r_role_menu rm WHERE rm.role_id = 1 AND rm.menu_id = m.id);
+SELECT r.id, m.id FROM t_role r CROSS JOIN t_menu m
+WHERE r.code = 'admin'
+  AND NOT EXISTS (SELECT 1 FROM t_r_role_menu rm WHERE rm.role_id = r.id AND rm.menu_id = m.id);
