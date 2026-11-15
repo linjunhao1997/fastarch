@@ -1,7 +1,6 @@
-﻿import { Form, Input, Button, Radio, Select, Card, message } from "antd";
+﻿import { Form, Input, Button, Radio, Card, message } from "antd";
 import { useNavigate } from "react-router-dom";
 import { accountApi } from "../../api/iam";
-import { useApplicationOptions } from "../../hooks/useApplicationOptions";
 import { useApiErrorNotification } from "../../hooks/useApiError";
 import { useSubmitLock } from "../../hooks/useSubmitLock";
 import { ACTIONS } from "../../types/copywriting";
@@ -11,34 +10,31 @@ export default function CreateAccountPage() {
   const navigate = useNavigate();
   const showNotification = useApiErrorNotification();
   const { isSubmitting, run } = useSubmitLock();
-  const { applications, loading: applicationsLoading } = useApplicationOptions();
 
   const onFinish = async (values: {
-    name: string;
-    email: string;
+    username: string;
+    nickname?: string;
+    email?: string;
     password: string;
-    kind: string;
     status: string;
-    applicationIdList?: string[];
   }) => {
     run(async () => {
-      const kindStr = values.kind === "user" ? "0" : "1";
+      // 初始密码必填（后端 bcrypt 摘要落库）；email 可空，留空即不设置
       await accountApi.create({
-        name: values.name,
+        username: values.username,
+        nickname: values.nickname,
         email: values.email,
         password: values.password,
-        kind: kindStr,
         status: values.status,
-        applicationIdList: values.applicationIdList ?? [],
       });
       message.success(`${ACTIONS.create}成功`);
       navigate('/account_management/account_list');
-    }).catch((error) => showNotification(error, "账号创建失败"));
+    }).catch((error) => showNotification(error, "用户创建失败"));
   };
 
   return (
     <div>
-      <Card title="创建账号">
+      <Card title="创建用户">
         <Form
           form={form}
           layout="vertical"
@@ -46,41 +42,34 @@ export default function CreateAccountPage() {
           onFinish={onFinish}
         >
           <Form.Item
-            label="姓名"
-            name="name"
-            rules={[{ required: true, message: "请输入姓名!" }]}
+            label="用户名"
+            name="username"
+            rules={[{ required: true, message: "请输入用户名!" }]}
           >
-            <Input placeholder="请输入姓名" />
+            <Input placeholder="唯一登录名" />
+          </Form.Item>
+
+          <Form.Item label="昵称" name="nickname">
+            <Input placeholder="显示名（可留空）" />
           </Form.Item>
 
           <Form.Item
             label="邮箱"
             name="email"
+            rules={[{ type: "email", message: "请输入有效的邮箱格式!" }]}
+          >
+            <Input placeholder="可留空；设置后可用邮箱登录" />
+          </Form.Item>
+
+          <Form.Item
+            label="初始密码"
+            name="password"
             rules={[
-              { required: true, message: "请输入邮箱!" },
-              { type: "email", message: "请输入有效的邮箱格式!" }
+              { required: true, message: "请输入初始密码" },
+              { min: 8, message: "密码至少 8 位" },
             ]}
           >
-            <Input placeholder="请输入邮箱" />
-          </Form.Item>
-
-          <Form.Item
-            label="密码"
-            name="password"
-            rules={[{ required: true, message: "请输入密码" }]}
-          >
-            <Input.Password placeholder="请输入密码" />
-          </Form.Item>
-
-          <Form.Item
-            label="类型"
-            name="kind"
-            rules={[{ required: true, message: "请选择类型!" }]}
-          >
-            <Select placeholder="请选择类型">
-              <Select.Option value="user">用户</Select.Option>
-              <Select.Option value="service">服务</Select.Option>
-            </Select>
+            <Input.Password placeholder="至少 8 位" />
           </Form.Item>
 
           <Form.Item label="状态" name="status" rules={[{ required: true, message: "请选择状态" }]}>
@@ -88,19 +77,6 @@ export default function CreateAccountPage() {
               <Radio value="enabled">启用</Radio>
               <Radio value="disabled">禁用</Radio>
             </Radio.Group>
-          </Form.Item>
-
-          <Form.Item label="所属应用" name="applicationIdList">
-            <Select
-              mode="multiple"
-              placeholder="请选择所属应用（可多选，可留空）"
-              loading={applicationsLoading}
-              options={applications.map((app) => ({
-                value: app.id,
-                label: app.enabledStatus === 'enabled' ? app.name : `${app.name}（已停用）`,
-                disabled: app.enabledStatus !== 'enabled',
-              }))}
-            />
           </Form.Item>
 
           <Form.Item>

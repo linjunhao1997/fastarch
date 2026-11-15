@@ -9,10 +9,16 @@ import type {
   CreateAccessCredentialResponse,
   CreateAccountRequest,
   CreateApplicationRequest,
+  CreateMenuRequest,
   CreatePermissionRequest,
   CreateResourceRequest,
   CreateRoleRequest,
+  ListMenuTreeResponse,
   ListResourceTreeResponse,
+  Menu,
+  ResetAccountPasswordRequest,
+  UpdateMenuRequest,
+  UpdateRoleMenusRequest,
   MyProfile,
   Permission,
   PermissionKind,
@@ -41,14 +47,8 @@ export type {
 };
 
 export interface GetMyPermissionsResponse {
-  /** 兼容期保留，不再填充真实值 */
+  /** 当前用户持有的全部权限码（唯一授权词汇；驱动 hasPermission 判定） */
   permissionCodeList: string[];
-  /** 可见菜单键（前端导航/路由渲染数据源） */
-  menuKeyList: string[];
-  /** 可调用的 HTTP 接口（映射后的 full method） */
-  httpFullMethodList: string[];
-  /** 服务间可调用的 gRPC 方法 */
-  rpcFullMethodList: string[];
 }
 
 interface ListResourcesResponse {
@@ -124,7 +124,7 @@ const buildListUrl = (baseUrl: string, currentPage: number, pageSize: number, ke
 };
 
 export const authApi = {
-  login: (data: { email: string; password: string }) =>
+  login: (data: { identifier: string; password: string }) =>
     request<PasswordAuthResponse>('/authentication/password-auth', {
       method: 'POST',
       body: data,
@@ -179,6 +179,9 @@ export const accountApi = {
     request<void>(`/account/accounts/${id}`, { method: 'PATCH', body: data }),
   updateRoles: (id: string, data: UpdateAccountRolesRequest) =>
     request<void>(`/account/accounts/${id}/roles`, { method: 'PATCH', body: data }),
+  /** 管理员重置用户密码（无需旧密码；新密码 ≥8 位） */
+  resetPassword: (id: string, data: ResetAccountPasswordRequest) =>
+    request<void>(`/account/accounts/${id}/reset-password`, { method: 'POST', body: data }),
   delete: (id: string) => request<void>(`/account/accounts/${id}`, { method: 'DELETE' }),
 };
 
@@ -255,8 +258,22 @@ export const profileApi = {
   get: () => request<MyProfile>('/authentication/my-profile'),
 };
 
-/** 左侧菜单树：按当前应用 + 登录态权限过滤（服务端裁决，US3） */
+/**
+ * 菜单（t_menu 语义）：结构与展示由服务端下发，可见性 = 角色菜单绑定（t_r_role_menu）。
+ * listMyTree 为当前登录用户的可见菜单树（含停用应用的祖先回补由服务端完成，
+ * 管理员返回全量启用菜单）。id/parentId 一律 string。
+ */
 export const menuApi = {
-  listMyTree: (applicationId: string) =>
-    request<ListResourceTreeResponse>(`/authorization/my-menu-tree?application_id=${applicationId}`),
+  listMyTree: () => request<ListMenuTreeResponse>('/menu/my-menu-tree'),
+  /** 全量菜单树（管理员视角，含停用） */
+  listTree: () => request<ListMenuTreeResponse>('/menu/menu-tree'),
+  create: (data: CreateMenuRequest) =>
+    request<Menu>('/menu/menus', { method: 'POST', body: data }),
+  get: (id: string) => request<Menu>(`/menu/menus/${id}`),
+  update: (id: string, data: UpdateMenuRequest) =>
+    request<void>(`/menu/menus/${id}`, { method: 'PATCH', body: data }),
+  delete: (id: string) => request<void>(`/menu/menus/${id}`, { method: 'DELETE' }),
+  /** 角色菜单绑定：全量覆盖语义（空数组 = 清空绑定） */
+  updateRoleMenus: (roleId: string, data: UpdateRoleMenusRequest) =>
+    request<void>(`/menu/roles/${roleId}/menus`, { method: 'PUT', body: data }),
 };

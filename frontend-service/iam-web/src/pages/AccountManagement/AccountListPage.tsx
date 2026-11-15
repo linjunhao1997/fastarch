@@ -1,13 +1,12 @@
 ﻿import { useMemo, useState } from 'react';
 import { Button, Flex, Input, message, Table, Tag } from 'antd';
-import { CheckCircleOutlined, RobotOutlined, StopOutlined, UserOutlined } from '@ant-design/icons';
+import { CheckCircleOutlined, StopOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router';
 import { accountApi } from '../../api/iam';
 import { useConfirmDelete } from '../../components/ConfirmDelete';
 import { BindRolesModal } from '../../components/BindRolesModal';
 import { EmptyState, ErrorState } from '../../components/states';
 import { useApiErrorNotification } from '../../hooks/useApiError';
-import { useApplicationOptions } from '../../hooks/useApplicationOptions';
 import { usePermissions } from '../../hooks/permission-context';
 import { useTableQuery } from '../../hooks/useTableQuery';
 import type { Account } from '../../types';
@@ -21,13 +20,6 @@ export default function AccountListPage() {
   const { reload } = usePermissions();
   const [bindRolesAccount, setBindRolesAccount] = useState<Account | null>(null);
   const confirmDelete = useConfirmDelete();
-  // 应用名映射：列表仅返回应用 id，名称经应用列表映射展示
-  const { applications } = useApplicationOptions();
-  const applicationNameById = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const app of applications) map.set(app.id, app.name);
-    return map;
-  }, [applications]);
 
   const tableQuery = useTableQuery({
     domain: 'accounts',
@@ -37,16 +29,9 @@ export default function AccountListPage() {
 
   const columns = useMemo(() => [
     { title: 'ID', dataIndex: 'id', key: 'id' },
-    { title: '姓名', dataIndex: 'name', key: 'name' },
-    { title: '邮箱', dataIndex: 'email', key: 'email' },
-    {
-      title: '类型',
-      dataIndex: 'kind',
-      key: 'kind',
-      render: (kind: string) => kind === '0'
-        ? <Tag icon={<UserOutlined />}>用户</Tag>
-        : <Tag icon={<RobotOutlined />}>系统</Tag>,
-    },
+    { title: '用户名', dataIndex: 'username', key: 'username' },
+    { title: '昵称', dataIndex: 'nickname', key: 'nickname', render: (value: string) => value || '—' },
+    { title: '邮箱', dataIndex: 'email', key: 'email', render: (value: string) => value || '—' },
     {
       title: '状态',
       dataIndex: 'status',
@@ -62,21 +47,6 @@ export default function AccountListPage() {
       render: (roleCodeList: string[] | undefined) =>
         roleCodeList && roleCodeList.length > 0
           ? <Flex gap={4} wrap>{roleCodeList.map((code) => <Tag key={code}>{code}</Tag>)}</Flex>
-          : '—',
-    },
-    {
-      title: '所属应用',
-      dataIndex: 'applicationIdList',
-      key: 'applicationIdList',
-      render: (applicationIdList: string[] | undefined) =>
-        applicationIdList && applicationIdList.length > 0
-          ? (
-            <Flex gap={4} wrap>
-              {applicationIdList.map((id) => (
-                <Tag key={id}>{applicationNameById.get(id) ?? id}</Tag>
-              ))}
-            </Flex>
-          )
           : '—',
     },
     { title: '创建人', dataIndex: 'createdBy', key: 'createdBy' },
@@ -97,7 +67,7 @@ export default function AccountListPage() {
             danger
             onClick={() => confirmDelete({
               entityType: '账号',
-              entityName: record.name,
+              entityName: record.username,
               onDelete: async () => {
                 await accountApi.delete(record.id);
                 await tableQuery.refresh();
@@ -111,13 +81,13 @@ export default function AccountListPage() {
         </Flex>
       ),
     },
-  ], [navigate, showNotification, tableQuery, applicationNameById]);
+  ], [navigate, showNotification, tableQuery]);
 
   return (
     <div>
       <Flex gap={16} style={{ marginBottom: 16 }}>
         <Search
-          placeholder="搜索姓名或邮箱"
+          placeholder="搜索用户名、昵称或邮箱"
           defaultValue={new URLSearchParams(window.location.search).get('keyword') ?? ''}
           onSearch={tableQuery.setKeyword}
           style={{ width: 240 }}

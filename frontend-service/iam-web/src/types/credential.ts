@@ -2,7 +2,7 @@
  * 访问凭证（AK/SK）类型（specs/009-ak-sk-auth）。
  *
  * 字段名与后端 grpc-gateway（protojson，默认 camelCase JSON 名）实际下发格式一致，
- * 与既有 types/account.ts 等保持同一惯例；id/accountId 等雪花 ID 一律 string 编码。
+ * 与既有 types/account.ts 等保持同一惯例；id/userId 等雪花 ID 一律 string 编码。
  */
 
 /** 凭证状态：与账号状态取值一致 */
@@ -21,9 +21,9 @@ export interface AccessCredential {
   /** AK，FAK 前缀，全局唯一，创建后不可变 */
   accessKey: string;
   /** 绑定账号 id（string 编码） */
-  accountId: string;
+  userId: string;
   /** 绑定账号名（服务端组装，只读） */
-  accountName: string;
+  userName: string;
   remark: string;
   status: AccessCredentialStatus;
   /** 过期时间（ISO 字符串），null = 永不过期 */
@@ -40,7 +40,7 @@ export interface AccessCredential {
 
 export interface CreateAccessCredentialRequest {
   /** 绑定账号 id；账号必须存在且启用（FR-004） */
-  accountId: string;
+  userId: string;
   /** 备注用途，最长 255 */
   remark: string;
   /** 过期时间（ISO 字符串）；不传/null = 永不过期 */
@@ -78,7 +78,7 @@ export interface ListAccessCredentialsRequest {
   currentPage: number;
   pageSize: number;
   /** 按绑定账号筛选（string 编码雪花 ID） */
-  accountId?: string;
+  userId?: string;
   /** 按 AK 精确/前缀筛选 */
   accessKey?: string;
   /** 按状态筛选，'' = 不筛 */

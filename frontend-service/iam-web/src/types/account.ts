@@ -1,13 +1,12 @@
+/** 用户（t_user 语义；username 为唯一登录名，email 可空唯一） */
 export interface Account {
   id: string;
-  name: string;
+  username: string;
   email: string;
-  kind: string;
-  /** 账号状态：enabled 启用 / disabled 禁用 */
+  nickname: string;
+  /** 用户状态：enabled 启用 / disabled 禁用 */
   status: string;
   roleCodeList: string[];
-  /** 所属应用 id 列表（string 编码，与 id 惯例一致） */
-  applicationIdList: string[];
   version: number;
   createdBy: string;
   updatedBy: string;
@@ -16,30 +15,29 @@ export interface Account {
 }
 
 export interface CreateAccountRequest {
-  name: string;
-  email: string;
+  username: string;
+  nickname?: string;
+  /** 邮箱可选；传了后端校验格式且唯一 */
+  email?: string;
+  /** 初始密码必填（≥8 位，bcrypt 摘要落库） */
   password: string;
-  kind: string;
-  /** 账号状态，缺省 enabled */
+  /** 用户状态，缺省 enabled */
   status?: string;
-  /** 归属应用 id 列表，可为空（无归属账号） */
-  applicationIdList?: string[];
+  /** 初始角色 id 集合（string 编码），可为空 */
+  roleIds?: string[];
 }
 
 export interface UpdateAccountRequest {
-  name?: string;
+  nickname?: string;
   email?: string;
-  password?: string;
-  kind?: string;
-  /** 账号状态：enabled / disabled */
+  /** 用户状态：enabled / disabled；缺省不修改 */
   status?: string;
-  /**
-   * 归属应用 id 列表，全量替换语义：
-   * - 不传（undefined）= 不修改归属；
-   * - 传（含空数组）= 以该集合全量替换既有归属。
-   */
-  applicationIdList?: string[];
   version: number;
+}
+
+export interface ResetAccountPasswordRequest {
+  id: string;
+  newPassword: string;
 }
 
 export interface MyProfileApplication {
@@ -51,9 +49,9 @@ export interface MyProfileApplication {
 
 export interface MyProfile {
   id: string;
-  name: string;
+  username: string;
+  nickname: string;
   email: string;
-  kind: string;
   status: string;
   createdBy: string;
   createTime: string;

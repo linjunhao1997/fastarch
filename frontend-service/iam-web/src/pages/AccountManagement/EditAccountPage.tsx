@@ -1,34 +1,36 @@
 ﻿import { useCallback, useEffect, useState } from "react";
-import { Form, Input, Button, Card, Radio, Select, message } from "antd";
+import { Form, Input, Button, Card, Divider, Radio, message } from "antd";
 import { useNavigate, useParams } from "react-router-dom";
 import { accountApi } from "../../api/iam";
-import { useApplicationOptions } from "../../hooks/useApplicationOptions";
 import { useApiErrorNotification } from "../../hooks/useApiError";
 import { useSubmitLock } from "../../hooks/useSubmitLock";
 import { ACTIONS } from "../../types/copywriting";
 
 export default function EditAccountPage() {
   const [form] = Form.useForm();
+  const [pwdForm] = Form.useForm();
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const showNotification = useApiErrorNotification();
   const { isSubmitting, run } = useSubmitLock();
+  const { isSubmitting: isPwdSubmitting, run: runPwd } = useSubmitLock();
   const [version, setVersion] = useState<number>(0);
-  const { applications, loading: applicationsLoading } = useApplicationOptions();
+  const [username, setUsername] = useState<string>("");
 
   const fetchAccount = useCallback(async () => {
     try {
       const response = await accountApi.get(id || "");
       form.setFieldsValue({
-        name: response.name,
+        username: response.username,
+        nickname: response.nickname,
         email: response.email,
         status: response.status || "enabled",
-        applicationIdList: response.applicationIdList ?? [],
       });
+      setUsername(response.username);
       setVersion(response.version);
     } catch (error) {
-      showNotification(error, "获取账号信息失败");
+      showNotification(error, "获取用户信息失败");
     } finally {
       setLoading(false);
     }
@@ -39,73 +41,56 @@ export default function EditAccountPage() {
   }, [fetchAccount]);
 
   const onFinish = async (values: {
-    name?: string;
+    nickname?: string;
     email?: string;
     status?: string;
-    applicationIdList?: string[];
   }) => {
     run(async () => {
-      // application_id_list 为全量替换语义：始终提交当前选中集合（含空数组=清空归属）
+      // username 不可变更（唯一登录标识）；仅昵称/邮箱/状态可编辑
       await accountApi.update(id || "", {
-        ...values,
+        nickname: values.nickname,
+        email: values.email,
         status: values.status,
-        applicationIdList: values.applicationIdList ?? [],
         version,
       });
       message.success(`${ACTIONS.save}成功`);
       navigate('/account_management/account_list');
-    }).catch((error) => showNotification(error, "账号保存失败"));
+    }).catch((error) => showNotification(error, "用户保存失败"));
+  };
+
+  const onResetPassword = async (values: { newPassword: string }) => {
+    runPwd(async () => {
+      await accountApi.resetPassword(id || "", { id: id || "", newPassword: values.newPassword });
+      message.success("密码重置成功");
+      pwdForm.resetFields();
+    }).catch((error) => showNotification(error, "密码重置失败"));
   };
 
   return (
     <div>
-      <Card title="编辑账号">
-        <Form
-          form={form}
-          layout="vertical"
-          onFinish={onFinish}
-        >
-          <Form.Item
-            label="姓名"
-            name="name"
-            rules={[{ required: true, message: "请输入姓名!" }]}
-          >
-            <Input placeholder="请输入姓名" />
+      <Card title={`编辑用户${username ? `：${username}` : ""}`}>
+        <Form form={form} layout="vertical" onFinish={onFinish}>
+          <Form.Item label="用户名" name="username">
+            <Input disabled title="用户名为唯一登录标识，不可修改" />
+          </Form.Item>
+
+          <Form.Item label="昵称" name="nickname">
+            <Input placeholder="显示名（可留空）" />
           </Form.Item>
 
           <Form.Item
             label="邮箱"
             name="email"
-            rules={[
-              { required: true, message: "请输入邮箱!" },
-              { type: "email", message: "请输入有效的邮箱格式!" }
-            ]}
+            rules={[{ type: "email", message: "请输入有效的邮箱格式!" }]}
           >
-          <Input placeholder="请输入邮箱" />
-        </Form.Item>
-
-        <Form.Item label="版本" name="version" hidden initialValue={version}>
-          <Input />
-        </Form.Item>
+            <Input placeholder="可留空；设置后可用邮箱登录" />
+          </Form.Item>
 
           <Form.Item label="状态" name="status" rules={[{ required: true, message: "请选择状态" }]}>
             <Radio.Group>
               <Radio value="enabled">启用</Radio>
               <Radio value="disabled">禁用</Radio>
             </Radio.Group>
-          </Form.Item>
-
-          <Form.Item label="所属应用" name="applicationIdList">
-            <Select
-              mode="multiple"
-              placeholder="请选择所属应用（可多选，可留空）"
-              loading={applicationsLoading}
-              options={applications.map((app) => ({
-                value: app.id,
-                label: app.enabledStatus === 'enabled' ? app.name : `${app.name}（已停用）`,
-                disabled: app.enabledStatus !== 'enabled',
-              }))}
-            />
           </Form.Item>
 
           <Form.Item>
@@ -117,6 +102,27 @@ export default function EditAccountPage() {
             </Button>
           </Form.Item>
         </Form>
+
+        <Divider />
+
+        <Card size="small" title="重置密码">
+          <Form form={pwdForm} layout="inline" onFinish={onResetPassword}>
+            <Form.Item
+              name="newPassword"
+              rules={[
+                { required: true, message: "请输入新密码" },
+                { min: 8, message: "密码至少 8 位" },
+              ]}
+            >
+              <Input.Password placeholder="新密码（至少 8 位）" style={{ width: 240 }} />
+            </Form.Item>
+            <Form.Item>
+              <Button type="primary" htmlType="submit" loading={isPwdSubmitting}>
+                重置密码
+              </Button>
+            </Form.Item>
+          </Form>
+        </Card>
       </Card>
     </div>
   );

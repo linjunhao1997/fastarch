@@ -3,11 +3,24 @@ import { Link, createBrowserRouter } from 'react-router-dom';
 import type { RouteObject } from 'react-router-dom';
 import { Spin } from 'antd';
 import type { MenuProps } from 'antd';
-import { AppstoreOutlined, KeyOutlined, SafetyOutlined, SecurityScanOutlined, UserSwitchOutlined } from '@ant-design/icons';
+import {
+  ApiOutlined,
+  AppstoreOutlined,
+  BookOutlined,
+  KeyOutlined,
+  LockOutlined,
+  MenuOutlined,
+  SafetyOutlined,
+  SecurityScanOutlined,
+  TeamOutlined,
+  UnorderedListOutlined,
+  UserOutlined,
+  UserSwitchOutlined,
+} from '@ant-design/icons';
 import AuthWrapper from '../components/AuthWrapper';
 import { layoutTokens } from '../theme';
-import { MENU_KEYS } from '../types/permissions';
-import type { ResourceTreeNode } from '../types';
+import { PERMISSIONS } from '../types/permissions';
+import type { MenuTreeNode } from '../types';
 
 const IndexPage = lazy(() => import('../pages/IndexPage'));
 const LoginPage = lazy(() => import('../pages/LoginPage'));
@@ -40,73 +53,75 @@ type MenuItem = NonNullable<MenuProps['items']>[number] & {
   children?: MenuItem[];
 };
 
+/**
+ * 路由表：叶子 handle.permission 声明访问所需的权限码（词汇 = 后端
+ * permission_codes.go PERMISSION_CODES），直访守卫据此判定；
+ * 菜单可见性另由服务端 my-menu-tree（角色菜单绑定）决定，路由表仅作兜底。
+ */
 export const routes: RouteObject[] = [
   { path: '/login', element: withSuspense(<LoginPage />) },
   {
     path: '/',
-    handle: { key: 'iam', icon: <SafetyOutlined />, label: '身份访问管理', breadcrumb: '身份访问管理' },
+    handle: { label: '身份访问管理', breadcrumb: '身份访问管理' },
     element: withSuspense(<AuthWrapper><IndexPage /></AuthWrapper>),
     children: [
       {
         path: 'account_management',
-        handle: { key: 'account_management', icon: <UserSwitchOutlined />, label: '账号管理', breadcrumb: '账号管理' },
+        handle: { label: '用户管理', breadcrumb: '用户管理' },
         children: [
           {
             path: 'account_list',
             handle: {
-              key: 'account_list',
               label: <Link to="/account_management/account_list">用户列表</Link>,
               breadcrumb: '用户列表',
-              permission: MENU_KEYS.accountList,
+              permission: PERMISSIONS.userList,
             },
             element: withSuspense(<AccountListPage />),
           },
           {
             path: 'create_account',
-            handle: { breadcrumb: '创建账号', permission: MENU_KEYS.accountList },
+            handle: { breadcrumb: '创建用户', permission: PERMISSIONS.userList },
             element: withSuspense(<CreateAccountPage />),
           },
           {
             path: 'edit_account/:id',
-            handle: { breadcrumb: '编辑账号', permission: MENU_KEYS.accountList },
+            handle: { breadcrumb: '编辑用户', permission: PERMISSIONS.userList },
             element: withSuspense(<EditAccountPage />),
           },
         ],
       },
       {
         path: 'application_management',
-        handle: { key: 'application_management', icon: <AppstoreOutlined />, label: '应用管理', breadcrumb: '应用管理' },
+        handle: { label: '应用管理', breadcrumb: '应用管理' },
         children: [
           {
             path: 'application_list',
             handle: {
-              key: 'application_list',
               label: <Link to="/application_management/application_list">应用列表</Link>,
               breadcrumb: '应用列表',
-              permission: MENU_KEYS.applicationList,
+              permission: PERMISSIONS.applicationList,
             },
             element: withSuspense(<ApplicationListPage />),
           },
           {
             path: 'create_application',
-            handle: { breadcrumb: '创建应用', permission: MENU_KEYS.applicationList },
+            handle: { breadcrumb: '创建应用', permission: PERMISSIONS.applicationList },
             element: withSuspense(<CreateApplicationPage />),
           },
           {
             path: 'edit_application/:id',
-            handle: { breadcrumb: '编辑应用', permission: MENU_KEYS.applicationList },
+            handle: { breadcrumb: '编辑应用', permission: PERMISSIONS.applicationList },
             element: withSuspense(<EditApplicationPage />),
           },
         ],
       },
       {
         path: 'authentication_management',
-        handle: { key: 'authentication_management', icon: <SecurityScanOutlined />, label: '认证管理', breadcrumb: '认证管理' },
+        handle: { label: '认证管理', breadcrumb: '认证管理' },
         children: [
           {
             path: 'authentication_policy_list',
             handle: {
-              key: 'authentication_policy_list',
               label: <Link to="/authentication_management/authentication_policy_list">认证策略</Link>,
               breadcrumb: '认证策略',
             },
@@ -115,10 +130,9 @@ export const routes: RouteObject[] = [
           {
             path: 'access_credential_list',
             handle: {
-              key: 'access_credential_list',
               label: <Link to="/authentication_management/access_credential_list">访问凭证</Link>,
               breadcrumb: '访问凭证',
-              permission: MENU_KEYS.accessCredential,
+              permission: PERMISSIONS.credentialList,
             },
             element: withSuspense(<AccessCredentialListPage />),
           },
@@ -136,65 +150,62 @@ export const routes: RouteObject[] = [
       },
       {
         path: 'authorization_management',
-        handle: { key: 'authorization_management', icon: <KeyOutlined />, label: '权限管理', breadcrumb: '权限管理' },
+        handle: { label: '权限管理', breadcrumb: '权限管理' },
         children: [
           {
             path: 'permission_list',
             handle: {
-              key: 'permission_list',
               label: <Link to="/authorization_management/permission_list">权限列表</Link>,
               breadcrumb: '权限列表',
-              permission: MENU_KEYS.permissionList,
+              permission: PERMISSIONS.permissionList,
             },
             element: withSuspense(<PermissionListPage />),
           },
           {
             path: 'permission_create',
-            handle: { breadcrumb: '创建权限', permission: MENU_KEYS.permissionList },
+            handle: { breadcrumb: '创建权限', permission: PERMISSIONS.permissionList },
             element: withSuspense(<CreatePermissionPage />),
           },
           {
             path: 'permission_edit/:id',
-            handle: { breadcrumb: '编辑权限', permission: MENU_KEYS.permissionList },
+            handle: { breadcrumb: '编辑权限', permission: PERMISSIONS.permissionList },
             element: withSuspense(<EditPermissionPage />),
           },
           {
             path: 'role_management',
             handle: {
-              key: 'role_management',
               label: <Link to="/authorization_management/role_management">角色管理</Link>,
               breadcrumb: '角色管理',
-              permission: MENU_KEYS.roleManagement,
+              permission: PERMISSIONS.roleList,
             },
             element: withSuspense(<RoleManagementPage />),
           },
           {
             path: 'role_create',
-            handle: { breadcrumb: '创建角色', permission: MENU_KEYS.roleManagement },
+            handle: { breadcrumb: '创建角色', permission: PERMISSIONS.roleList },
             element: withSuspense(<CreateRolePage />),
           },
           {
             path: 'role_edit/:id',
-            handle: { breadcrumb: '编辑角色', permission: MENU_KEYS.roleManagement },
+            handle: { breadcrumb: '编辑角色', permission: PERMISSIONS.roleList },
             element: withSuspense(<EditRolePage />),
           },
           {
             path: 'permission_subscription',
             handle: {
-              key: 'permission_subscription',
               label: <Link to="/authorization_management/permission_subscription">权限订阅</Link>,
               breadcrumb: '权限订阅',
-              permission: MENU_KEYS.permissionSubscription,
+              permission: PERMISSIONS.roleList,
             },
             element: withSuspense(<PermissionSubscriptionPage />),
           },
           {
             path: 'resource_management',
             handle: {
-              key: 'resource_management',
               label: <Link to="/authorization_management/resource_management">资源管理</Link>,
               breadcrumb: '资源管理',
-              permission: MENU_KEYS.resourceManagement,
+              // 资源模型已废弃（重构 #4）：码不在词汇表，守卫恒拒绝
+              permission: 'iam.resource.list',
             },
             element: withSuspense(<ResourceManagementPage />),
           },
@@ -206,34 +217,29 @@ export const routes: RouteObject[] = [
 
 export const router = createBrowserRouter(routes);
 
-export const convertRoutesToMenuItems = (
-  routeList: RouteObject[],
-  hasPermission: (permission?: string) => boolean,
-) : MenuItem[] => routeList
-  .map((route): MenuItem | null => {
-    const handle = route.handle as { key?: string; icon?: ReactNode; label?: ReactNode } | undefined;
-    const key = handle?.key || route.path || '';
+/** 菜单树 icon 字段（AntD 图标名）→ 图标组件（t_menu.icon 的取值域） */
+export const MENU_ICONS: Record<string, ReactNode> = {
+  SafetyOutlined: <SafetyOutlined />,
+  UserOutlined: <UserOutlined />,
+  UserSwitchOutlined: <UserSwitchOutlined />,
+  AppstoreOutlined: <AppstoreOutlined />,
+  SecurityScanOutlined: <SecurityScanOutlined />,
+  LockOutlined: <LockOutlined />,
+  KeyOutlined: <KeyOutlined />,
+  ApiOutlined: <ApiOutlined />,
+  MenuOutlined: <MenuOutlined />,
+  BookOutlined: <BookOutlined />,
+  UnorderedListOutlined: <UnorderedListOutlined />,
+  TeamOutlined: <TeamOutlined />,
+};
 
-    if (route.children && route.children.length > 0) {
-      const childMenuItems = convertRoutesToMenuItems(route.children, hasPermission);
-      if (childMenuItems.length > 0) {
-    return { key, icon: handle?.icon, label: handle?.label, children: childMenuItems };
-      }
-      return null;
-    }
-
-    const permission = (route.handle as { permission?: string } | undefined)?.permission;
-    if (!handle?.label || !hasPermission(permission)) return null;
-    return { key, icon: handle.icon, label: handle.label };
-  })
-  .filter((item): item is NonNullable<typeof item> => item !== null);
-
-/** 路由元数据：key → 跳转路径与图标（菜单树节点不含路径/图标，仍取自路由表） */
+/**
+ * 路由元数据：绝对 path → 面包屑/权限码等。菜单渲染仅按 path 对齐，
+ * path 不在路由表中的菜单节点（如未开发的页面）会被跳过并告警。
+ */
 export interface RouteMeta {
-  path: string;
-  icon?: ReactNode;
-  /** 叶子路由（无 children），可作为菜单点击跳转目标 */
-  navigable: boolean;
+  /** 权限码（直访守卫使用） */
+  permission?: string;
 }
 
 const joinPath = (parent: string, child?: string): string => {
@@ -241,16 +247,14 @@ const joinPath = (parent: string, child?: string): string => {
   return `${parent.replace(/\/$/, '')}/${child}`.replace(/\/\/+/g, '/');
 };
 
-/** 按 handle.key 收集路由元数据，path 按父子拼接为绝对路径 */
+/** 遍历路由表收集 path → meta（仅叶子路由有意义） */
 export const collectRouteMeta = (routeList: RouteObject[]): Map<string, RouteMeta> => {
   const meta = new Map<string, RouteMeta>();
-  const walk = (routes: RouteObject[], parentPath: string) => {
-    for (const route of routes) {
-      const handle = route.handle as { key?: string; icon?: ReactNode } | undefined;
+  const walk = (routeList: RouteObject[], parentPath: string) => {
+    for (const route of routeList) {
       const path = joinPath(parentPath, route.path);
-      if (handle?.key && !meta.has(handle.key)) {
-        meta.set(handle.key, { path, icon: handle.icon, navigable: !route.children?.length });
-      }
+      const handle = route.handle as { permission?: string } | undefined;
+      if (!route.children?.length && handle?.permission) meta.set(path, { permission: handle.permission });
       if (route.children) walk(route.children, path);
     }
   };
@@ -259,28 +263,38 @@ export const collectRouteMeta = (routeList: RouteObject[]): Map<string, RouteMet
 };
 
 /**
- * 以服务端菜单树（specs/008-account-app-context US3）直接构建菜单：
- * label 取 resource.name，层级与顺序按服务端返回（display_order 排序），
- * 图标与跳转路径按 resource.key 从路由表元数据补齐；未知键告警并跳过。
+ * 以服务端菜单树（my-menu-tree，t_menu 语义）直接构建左侧菜单：
+ * 层级/名称/图标/顺序均取自服务端（结构与展示归管理员维护），
+ * 跳转按 menu.path 匹配路由表；未知 path 告警并跳过（页面未开发时隐藏入口）。
  */
 export const buildMenuItemsFromTree = (
-  nodes: ResourceTreeNode[],
+  nodes: MenuTreeNode[],
   routeMeta: ReadonlyMap<string, RouteMeta>,
 ): MenuItem[] => {
   const items: MenuItem[] = [];
   for (const node of nodes) {
-    const meta = routeMeta.get(node.resource.key);
-    if (!meta) {
-      console.warn(`[menu] 菜单树键 "${node.resource.key}" 在路由表中无对应 handle.key，已跳过`);
-      continue;
-    }
+    const icon = MENU_ICONS[node.menu.icon];
     if (node.children.length > 0) {
       const children = buildMenuItemsFromTree(node.children, routeMeta);
       if (children.length === 0) continue;
-      items.push({ key: node.resource.key, icon: meta.icon, label: node.resource.name, children });
+      items.push({ key: `dir-${node.menu.id}`, icon, label: node.menu.name, children });
     } else {
-      items.push({ key: node.resource.key, icon: meta.icon, label: node.resource.name });
+      const meta = routeMeta.get(node.menu.path);
+      if (!meta) {
+        console.warn(`[menu] 菜单 "${node.menu.name}" 的路径 "${node.menu.path}" 在路由表中无对应页面，已跳过`);
+        continue;
+      }
+      items.push({ key: node.menu.path, icon, label: node.menu.name });
     }
   }
   return items;
+};
+
+/** 收集菜单树全部叶子 path（选中态高亮与直访守卫的合法路径集合） */
+export const collectMenuLeafPaths = (nodes: MenuTreeNode[], out: string[] = []): string[] => {
+  for (const node of nodes) {
+    if (node.children.length > 0) collectMenuLeafPaths(node.children, out);
+    else out.push(node.menu.path);
+  }
+  return out;
 };

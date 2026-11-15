@@ -19,7 +19,7 @@ export default function LoginPage() {
   const queryClient = useQueryClient();
   const { message } = App.useApp();
 
-  const onFinish = (values: { email: string; password: string }) => {
+  const onFinish = (values: { identifier: string; password: string }) => {
     setErrorMsg(null);
     run(async () => {
       const response = await authApi.login(values);
@@ -39,7 +39,7 @@ export default function LoginPage() {
     }).catch((error) => {
       clearCookie('access_token');
       localStorage.removeItem('access_token');
-      const errorMessage = error instanceof Error ? error.message : '登录失败，请检查邮箱和密码';
+      const errorMessage = error instanceof Error ? error.message : '登录失败，请检查账号和密码';
       setErrorMsg(errorMessage);
       message.error(errorMessage);
     });
@@ -93,14 +93,11 @@ export default function LoginPage() {
         <Form form={form} layout="vertical" onFinish={onFinish} onFinishFailed={onFinishFailed}>
           {errorMsg ? <Alert message={errorMsg} type="error" showIcon style={{ marginBottom: 16 }} /> : null}
           <Form.Item
-            label="邮箱"
-            name="email"
-            rules={[
-              { required: true, message: '请输入邮箱' },
-              { type: 'email', message: '请输入有效的邮箱格式' },
-            ]}
+            label="账号"
+            name="identifier"
+            rules={[{ required: true, message: '请输入用户名或邮箱' }]}
           >
-            <Input placeholder="请输入邮箱" size="large" />
+            <Input placeholder="用户名或邮箱" size="large" />
           </Form.Item>
           <Form.Item label="密码" name="password" rules={[{ required: true, message: '请输入密码' }]}>
             <Input.Password placeholder="请输入密码" size="large" />

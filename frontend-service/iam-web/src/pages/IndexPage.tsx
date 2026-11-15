@@ -6,6 +6,7 @@ import { Navigate, Outlet, useLocation, useMatches, useNavigate } from 'react-ro
 import AutoBreadcrumb from '../components/AutoBreadcrumb';
 import {
   buildMenuItemsFromTree,
+  collectMenuLeafPaths,
   collectRouteMeta,
   routes,
 } from '../routers/router';
@@ -27,10 +28,10 @@ function handleLogout(navigate: ReturnType<typeof useNavigate>) {
   navigate('/login');
 }
 
-// 路由直访守卫（specs/005-typed-permission-model T038）：未授权
-// handle.permission 的路由重定向首页并提示无权限（quickstart §2 SC-003）。
+// 路由直访守卫（重构 #4：权限码是唯一授权词汇）：未持有 handle.permission
+// 声明的权限码时重定向首页并提示无权限；菜单可见性另由服务端 my-menu-tree 过滤。
 function PermissionGate() {
-  const { hasMenuPermission, loading } = usePermissions();
+  const { hasPermission, loading } = usePermissions();
   const location = useLocation();
   const permission = useMatches()
     .map((match) => (match.handle as { permission?: string } | undefined)?.permission)
@@ -44,7 +45,7 @@ function PermissionGate() {
       </Flex>
     );
   }
-  if (permission && !hasMenuPermission(permission)) {
+  if (permission && !hasPermission(permission)) {
     return <UnauthorizedRedirect />;
   }
   return <Outlet key={location.pathname} />;
@@ -60,34 +61,33 @@ function UnauthorizedRedirect() {
 export default function IndexPage() {
   const [collapsed, setCollapsed] = useState(false);
   const navigate = useNavigate();
-  const {
-    applications,
-    currentApplicationId,
-    setCurrentApplicationId,
-    loading: contextLoading,
-    error: contextError,
-    refetch: refetchContext,
-  } = useApplicationContext();
+  const { applications, currentApplicationId, setCurrentApplicationId } = useApplicationContext();
 
-  // 菜单树：按当前应用 + 登录态权限由服务端过滤（specs/008 T024）。
-  // 切换应用时 placeholderData 保留原菜单，配合 Spin 呈现平滑过渡。
+  // 菜单树：服务端按角色菜单绑定（t_r_role_menu）过滤下发，管理员全量；
+  // 不再依赖应用上下文（重构 #6：应用与用户解绑）。
   const menuTreeQuery = useQuery({
-    queryKey: ['my-menu-tree', currentApplicationId],
-    queryFn: () => menuApi.listMyTree(currentApplicationId as string),
-    enabled: !!currentApplicationId,
+    queryKey: ['my-menu-tree'],
+    queryFn: () => menuApi.listMyTree(),
     placeholderData: (previous) => previous,
     retry: 1,
   });
 
-  // 菜单由服务端菜单树直接渲染（specs/008 US3）：label/层级/顺序（display_order）
-  // 均来自接口，路由表仅按 resource.key 补齐图标与跳转路径。
+  // 菜单由服务端菜单树直接渲染（重构 #6）：层级/名称/图标/顺序取自 t_menu，
+  // 跳转按 menu.path 匹配路由表；未知 path 跳过并告警。
   const routeMeta = useMemo(() => collectRouteMeta(routes), []);
   const menuItems = useMemo(
     () => buildMenuItemsFromTree(menuTreeQuery.data?.roots ?? [], routeMeta),
     [menuTreeQuery.data, routeMeta],
   );
 
-  const selectedKeys = location.pathname.split('/').filter(Boolean).slice(0, 2).join('/');
+  // 选中态：取当前 pathname 的最长已注册菜单 path 前缀（create/edit 等子页高亮列表项）
+  const selectedKeys = useMemo(() => {
+    const leafPaths = collectMenuLeafPaths(menuTreeQuery.data?.roots ?? []);
+    const hit = leafPaths
+      .filter((p) => location.pathname === p || location.pathname.startsWith(`${p}/`))
+      .sort((a, b) => b.length - a.length)[0];
+    return hit ? [hit] : [];
+  }, [menuTreeQuery.data, location.pathname]);
 
   const appOptions = useMemo(
     () =>
@@ -111,32 +111,14 @@ export default function IndexPage() {
   );
 
   const renderSiderBody = () => {
-    // 个人信息加载中/失败、无归属应用：上下文级状态优先
-    if (contextLoading) {
+    // 菜单树加载中（且无旧数据可保留）
+    if (menuTreeQuery.isPending && !menuTreeQuery.data) {
       return (
         <Flex justify="center" align="center" style={{ padding: 32 }}>
-          <Spin tip="加载应用列表..." />
+          <Spin tip="加载菜单..." />
         </Flex>
       );
     }
-    if (contextError) {
-      return (
-        <Flex vertical gap={8} align="center" style={{ padding: 24 }}>
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="获取个人信息失败" />
-          <Button size="small" onClick={() => void refetchContext()}>重试</Button>
-        </Flex>
-      );
-    }
-    if (applications.length === 0 || !currentApplicationId) {
-      return (
-        <Empty
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description="暂无可用应用，请联系管理员分配"
-          style={{ padding: 24 }}
-        />
-      );
-    }
-
     // 菜单树异常（且无旧菜单可保留）时给出可重试的错误态
     if (menuTreeQuery.isError && !menuTreeQuery.data) {
       return (
@@ -150,7 +132,7 @@ export default function IndexPage() {
       return (
         <Empty
           image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description="当前应用暂无可用菜单"
+          description="暂无可用菜单，请联系管理员分配角色菜单"
           style={{ padding: 24 }}
         />
       );
@@ -158,11 +140,11 @@ export default function IndexPage() {
     return (
       <Menu
         mode="inline"
-        selectedKeys={[selectedKeys]}
+        selectedKeys={selectedKeys}
         items={menuItems}
         onClick={({ key }) => {
-          const meta = routeMeta.get(String(key));
-          if (meta?.navigable) navigate(meta.path);
+          // 叶子菜单 key = menu.path（绝对路径），目录节点 key 以 dir- 前缀不可跳转
+          if (typeof key === 'string' && key.startsWith('/')) navigate(key);
         }}
         style={{ height: `calc(100vh - ${layoutTokens.headerHeight}px)`, borderRight: 0 }}
       />

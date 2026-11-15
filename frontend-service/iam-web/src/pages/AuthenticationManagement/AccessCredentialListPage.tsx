@@ -103,7 +103,7 @@ function SecretRevealModal({ reveal, onClose }: { reveal: SecretRevealState | nu
 }
 
 interface CreateCredentialFormValues {
-  accountId: string;
+  userId: string;
   remark?: string;
   expireTime?: Dayjs | null;
 }
@@ -132,7 +132,7 @@ function CreateCredentialModal({
   const handleFinish = (values: CreateCredentialFormValues) => {
     run(async () => {
       const response = await accessCredentialApi.create({
-        accountId: values.accountId,
+        userId: values.userId,
         remark: values.remark ?? '',
         expireTime: values.expireTime ? values.expireTime.toISOString() : null,
       });
@@ -156,7 +156,7 @@ function CreateCredentialModal({
       <Form form={form} layout="vertical" onFinish={handleFinish}>
         <Form.Item
           label="绑定用户"
-          name="accountId"
+          name="userId"
           rules={[{ required: true, message: '请选择绑定用户' }]}
         >
           <Select
@@ -167,7 +167,7 @@ function CreateCredentialModal({
             notFoundContent={accountsLoading ? <Spin size="small" /> : '暂无启用账号'}
             options={accounts.map((account) => ({
               value: account.id,
-              label: `${account.name}（${account.email}）`,
+              label: `${account.username}（${account.nickname}）`,
             }))}
           />
         </Form.Item>
@@ -294,22 +294,22 @@ export default function AccessCredentialListPage() {
   const { message, modal } = App.useApp();
   const showNotification = useApiErrorNotification();
   const confirmDelete = useConfirmDelete();
-  const { hasHttpPermission } = usePermissions();
+  const { hasPermission } = usePermissions();
   const [searchParams, setSearchParams] = useSearchParams();
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<AccessCredential | null>(null);
   const [secretReveal, setSecretReveal] = useState<SecretRevealState | null>(null);
   const { accounts, loading: accountsLoading } = useEnabledAccountOptions();
 
-  const canCreate = hasHttpPermission(PERMISSIONS.credentialCreate);
-  const canUpdate = hasHttpPermission(PERMISSIONS.credentialUpdate);
-  const canChangeStatus = hasHttpPermission(PERMISSIONS.credentialChangeStatus);
-  const canResetSecret = hasHttpPermission(PERMISSIONS.credentialResetSecret);
-  const canDelete = hasHttpPermission(PERMISSIONS.credentialDelete);
+  const canCreate = hasPermission(PERMISSIONS.credentialCreate);
+  const canUpdate = hasPermission(PERMISSIONS.credentialUpdate);
+  const canChangeStatus = hasPermission(PERMISSIONS.credentialChangeStatus);
+  const canResetSecret = hasPermission(PERMISSIONS.credentialResetSecret);
+  const canDelete = hasPermission(PERMISSIONS.credentialDelete);
 
   const tableQuery = useTableQuery({
     domain: 'access-credentials',
-    filterKeys: ['account_id', 'status'],
+    filterKeys: ['user_id', 'status'],
     fetcher: (currentPage, pageSize, keyword, filters) => {
       const listFilters: Record<string, string> = { ...filters };
       const accessKey = keyword.trim();
@@ -328,7 +328,7 @@ export default function AccessCredentialListPage() {
     setSearchParams(nextParams, { replace: true });
   }, [searchParams, setSearchParams]);
 
-  const accountIdFilter = searchParams.get('account_id') ?? undefined;
+  const userIdFilter = searchParams.get('user_id') ?? undefined;
   const statusParam = searchParams.get('status');
   const statusFilter: AccessCredentialStatus | undefined =
     statusParam === 'enabled' || statusParam === 'disabled' ? statusParam : undefined;
@@ -418,7 +418,7 @@ export default function AccessCredentialListPage() {
         <Typography.Text copyable={{ text: accessKey }}>{accessKey}</Typography.Text>
       ),
     },
-    { title: '绑定用户', dataIndex: 'accountName', key: 'accountName', width: 140, ellipsis: true },
+    { title: '绑定用户', dataIndex: 'userName', key: 'userName', width: 140, ellipsis: true },
     { title: '备注', dataIndex: 'remark', key: 'remark', ellipsis: true, render: (remark: string) => remark || '—' },
     {
       title: '状态',
@@ -508,11 +508,11 @@ export default function AccessCredentialListPage() {
               optionFilterProp="label"
               style={{ width: 200 }}
               loading={accountsLoading}
-              value={accountIdFilter}
-              onChange={(value) => setFilter('account_id', value)}
+              value={userIdFilter}
+              onChange={(value) => setFilter('user_id', value)}
               options={accounts.map((account) => ({
                 value: account.id,
-                label: account.name,
+                label: account.username,
               }))}
             />
             <Select
