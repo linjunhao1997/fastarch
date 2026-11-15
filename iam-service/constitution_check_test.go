@@ -11,6 +11,7 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/glebarez/sqlite"
 	"github.com/redis/go-redis/v9"
+	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -47,28 +48,33 @@ func TestServiceQueriesDoNotUseSelectStar(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(model.Models...); err != nil {
+	if err := model.AutoMigrateModels(db); err != nil {
 		t.Fatal(err)
 	}
 	if err := model.Seed(context.Background(), db); err != nil {
 		t.Fatal(err)
 	}
-	account := model.Account{Code: "test-user", Name: "Test User", Email: "test@example.com", Status: "enabled", Kind: model.AccountKindIdUser}
-	if err := db.Select(model.AccountFields).Create(&account).Error; err != nil {
+	// 用户种子（bcrypt 密码摘要）
+	hash, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.DefaultCost)
+	if err != nil {
 		t.Fatal(err)
 	}
-	var role model.Role
-	if err := db.Select(model.RoleFields).First(&role).Error; err != nil {
+	user := model.User{Username: "test-user", Nickname: "Test User", PasswordHash: string(hash), Status: model.StatusEnabled, Version: 1}
+	if err := db.Select(model.UserFields).Create(&user).Error; err != nil {
 		t.Fatal(err)
 	}
-	var permission model.Permission
-	if err := db.Select(model.PermissionFields).First(&permission).Error; err != nil {
+	role := model.Role{Code: "test-role", Name: "Test Role", Status: model.StatusEnabled, Version: 1}
+	if err := db.Select(model.RoleFields).Create(&role).Error; err != nil {
+		t.Fatal(err)
+	}
+	permission := model.Permission{Code: "test.perm.one", Name: "Test Permission", Type: "api", Status: model.StatusEnabled, Version: 1}
+	if err := db.Select(model.PermissionFields).Create(&permission).Error; err != nil {
 		t.Fatal(err)
 	}
 
 	capture := &sqlCapture{}
 	db.Logger = capture
-	ctx := auth.WithAccountId(context.Background(), account.Id)
+	ctx := auth.WithAccountId(context.Background(), user.Id)
 	services := service.NewAuthorizationService(db, redisClient)
 	if _, err := services.GetRole(ctx, &commonv1.GetRequest{Id: role.Id}); err != nil {
 		t.Fatal(err)
@@ -79,34 +85,25 @@ func TestServiceQueriesDoNotUseSelectStar(t *testing.T) {
 	if _, err := services.GetMyPermissions(ctx, &emptypb.Empty{}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.NewAccountService(db, redisClient).GetAccount(ctx, &commonv1.GetRequest{Id: account.Id}); err != nil {
+	if _, err := service.NewAccountService(db, redisClient).GetAccount(ctx, &commonv1.GetRequest{Id: user.Id}); err != nil {
 		t.Fatal(err)
 	}
-	if _, authErr := service.NewAuthenticationService(db, redisClient).PasswordAuth(ctx, &iamv1.PasswordAuthRequest{Email: account.Email, Password: "invalid"}); authErr != nil {
+	if _, authErr := service.NewAuthenticationService(db, redisClient).PasswordAuth(ctx, &iamv1.PasswordAuthRequest{Username: user.Username, Password: "invalid"}); authErr != nil {
 		if !errors.Is(authErr, service.ErrInvalidAccountPassword) {
 			t.Fatal(authErr)
 		}
 	}
 	loader := service.NewPermissionSnapshotLoader(db)
-	if _, err := loader(ctx, account.Id); err != nil {
+	if _, err := loader(ctx, user.Id); err != nil {
 		t.Fatal(err)
 	}
 
-	// Test resource queries don't use SELECT *
-	capture.queries = nil
-	app := model.Application{Code: "test-app", Name: "Test App"}
-	if err := db.Select(model.ApplicationFields).Create(&app).Error; err != nil {
-		t.Fatal(err)
+	// 资源接口已废弃（011 模型）：断言直接返回 Unimplemented 语义错误
+	if _, err := services.GetResource(ctx, &commonv1.GetRequest{Id: 1}); !errors.Is(err, service.ErrResourceModelDeprecated) {
+		t.Fatalf("GetResource() error = %v, want ErrResourceModelDeprecated", err)
 	}
-	resource := model.Resource{ApplicationId: app.Id, Kind: "menu", Key: "test.menu", Name: "Test Menu"}
-	if err := db.Select(model.ResourceFields).Create(&resource).Error; err != nil {
-		t.Fatal(err)
-	}
-	if _, err := services.GetResource(ctx, &commonv1.GetRequest{Id: resource.Id}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := services.ListResourceTree(ctx, &iamv1.ListResourceTreeRequest{ApplicationId: app.Id}); err != nil {
-		t.Fatal(err)
+	if _, err := services.ListResourceTree(ctx, &iamv1.ListResourceTreeRequest{}); !errors.Is(err, service.ErrResourceModelDeprecated) {
+		t.Fatalf("ListResourceTree() error = %v, want ErrResourceModelDeprecated", err)
 	}
 
 	for _, query := range capture.queries {

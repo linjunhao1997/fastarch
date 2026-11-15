@@ -53,7 +53,7 @@ func accessCredentialToPb(c model.AccessCredential, accountName string) *iam_v1.
 	return &iam_v1.AccessCredential{
 		Id:           cast.ToString(c.Id),
 		AccessKey:    c.AccessKey,
-		AccountId:    cast.ToString(c.AccountId),
+		AccountId:    cast.ToString(c.UserId),
 		AccountName:  accountName,
 		Remark:       c.Remark,
 		Status:       c.Status,
@@ -105,10 +105,10 @@ func (service *AccessCredentialService) CreateAccessCredential(ctx context.Conte
 	var plainSecret string
 	err := service.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// 绑定账号必须存在且启用（FR-004）；行锁防止并发删除/停用窗口内的校验竞态
-		var account model.Account
+		var account model.User
 		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-			Select(model.AccountFields).
-			Where(model.AccountColumnId, request.AccountId).
+			Select(model.UserFields).
+			Where(model.UserColumnId, request.AccountId).
 			First(&account).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return ErrAccessCredentialAccountInvalid
@@ -122,7 +122,7 @@ func (service *AccessCredentialService) CreateAccessCredential(ctx context.Conte
 		// 单账号凭证上限（FR-010）；行锁下计数，规避并发创建的 check-then-act 放大
 		var count int64
 		err = tx.Model(model.AccessCredential{}).
-			Where(model.AccessCredentialColumnAccountId, request.AccountId).
+			Where(model.AccessCredentialColumnUserId, request.AccountId).
 			Count(&count).Error
 		if err != nil {
 			return err
@@ -146,15 +146,16 @@ func (service *AccessCredentialService) CreateAccessCredential(ctx context.Conte
 				Id:              krand.NewID(),
 				AccessKey:       generateAccessKey(),
 				SecretKeyCipher: cipherText,
-				AccountId:       request.AccountId,
-				Remark:          request.Remark,
-				Status:          constant.AccessCredentialStatusEnabled,
-				ExpireTime:      tsToTimePtr(request.ExpireTime),
-				CreateTime:      now,
-				UpdateTime:      now,
-				CreatedBy:       operator,
-				UpdatedBy:       operator,
-				Version:         1,
+				UserId:          request.AccountId,
+
+				Remark:     request.Remark,
+				Status:     constant.AccessCredentialStatusEnabled,
+				ExpireTime: tsToTimePtr(request.ExpireTime),
+				CreateTime: now,
+				UpdateTime: now,
+				CreatedBy:  operator,
+				UpdatedBy:  operator,
+				Version:    1,
 			}
 			var exists int64
 			err = tx.Model(model.AccessCredential{}).
@@ -186,9 +187,9 @@ func (service *AccessCredentialService) CreateAccessCredential(ctx context.Conte
 		"operator", operator,
 		"credential_id", created.Id,
 		"access_key", created.AccessKey,
-		"account_id", created.AccountId)
+		"account_id", created.UserId)
 	return &iam_v1.CreateAccessCredentialResponse{
-		Credential: accessCredentialToPb(created, accountNameById(ctx, service.db, created.AccountId)),
+		Credential: accessCredentialToPb(created, accountNameById(ctx, service.db, created.UserId)),
 		SecretKey:  plainSecret, // 一次性明文 SK（FR-002）
 	}, nil
 }
@@ -211,7 +212,7 @@ func (service *AccessCredentialService) GetAccessCredential(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
-	return accessCredentialToPb(credential, accountNameById(ctx, service.db, credential.AccountId)), nil
+	return accessCredentialToPb(credential, accountNameById(ctx, service.db, credential.UserId)), nil
 }
 
 func (service *AccessCredentialService) ListAccessCredentials(ctx context.Context, request *iam_v1.ListAccessCredentialsRequest) (*iam_v1.ListAccessCredentialsResponse, error) {
@@ -221,7 +222,7 @@ func (service *AccessCredentialService) ListAccessCredentials(ctx context.Contex
 	buildQuery := func() *gorm.DB {
 		query := service.db.WithContext(ctx).Model(model.AccessCredential{})
 		if request.AccountId > 0 {
-			query = query.Where(model.AccessCredentialColumnAccountId, request.AccountId)
+			query = query.Where(model.AccessCredentialColumnUserId, request.AccountId)
 		}
 		if len(request.AccessKey) > 0 {
 			query = query.Where(model.AccessCredentialColumnAccessKey+" LIKE ?", request.AccessKey+"%")
@@ -245,15 +246,15 @@ func (service *AccessCredentialService) ListAccessCredentials(ctx context.Contex
 	accountIds := make([]int64, 0, len(res))
 	seen := make(map[int64]struct{}, len(res))
 	for _, c := range res {
-		if _, ok := seen[c.AccountId]; !ok {
-			seen[c.AccountId] = struct{}{}
-			accountIds = append(accountIds, c.AccountId)
+		if _, ok := seen[c.UserId]; !ok {
+			seen[c.UserId] = struct{}{}
+			accountIds = append(accountIds, c.UserId)
 		}
 	}
 	nameById := accountNamesByIds(ctx, service.db, accountIds)
 	list := make([]*iam_v1.AccessCredential, 0, len(res))
 	for _, c := range res {
-		list = append(list, accessCredentialToPb(c, nameById[c.AccountId]))
+		list = append(list, accessCredentialToPb(c, nameById[c.UserId]))
 	}
 	return &iam_v1.ListAccessCredentialsResponse{
 		Page:              helper.GetPage(request.CurrentPage, request.PageSize, count),
@@ -364,7 +365,7 @@ func (service *AccessCredentialService) ResetAccessCredentialSecret(ctx context.
 	slog.Info("access credential secret reset",
 		"operator", operator, "credential_id", request.Id, "access_key", credential.AccessKey)
 	return &iam_v1.ResetAccessCredentialSecretResponse{
-		Credential: accessCredentialToPb(credential, accountNameById(ctx, service.db, credential.AccountId)),
+		Credential: accessCredentialToPb(credential, accountNameById(ctx, service.db, credential.UserId)),
 		SecretKey:  plainSecret,
 	}, nil
 }
@@ -385,7 +386,7 @@ func (service *AccessCredentialService) DeleteAccessCredential(ctx context.Conte
 	}
 	slog.Info("access credential deleted",
 		"operator", operator, "credential_id", request.Id, "access_key", credential.AccessKey,
-		"account_id", credential.AccountId)
+		"account_id", credential.UserId)
 	return &emptypb.Empty{}, nil
 }
 
@@ -395,23 +396,23 @@ func accountNameById(ctx context.Context, db *gorm.DB, accountId int64) string {
 	return names[accountId]
 }
 
-// accountNamesByIds 批量查询账号名（IN 一次查询，禁 N+1）。
+// accountNamesByIds 批量查询账号名（IN 一次查询，禁 N+1）。011 模型：账号名即 username。
 func accountNamesByIds(ctx context.Context, db *gorm.DB, accountIds []int64) map[int64]string {
 	nameById := make(map[int64]string, len(accountIds))
 	if len(accountIds) == 0 {
 		return nameById
 	}
-	var rows []model.Account
+	var rows []model.User
 	err := db.WithContext(ctx).
-		Select(model.AccountColumnId, model.AccountColumnName).
-		Where(model.AccountColumnId+" IN ?", accountIds).
+		Select(model.UserColumnId, model.UserColumnUsername).
+		Where(model.UserColumnId+" IN ?", accountIds).
 		Find(&rows).Error
 	if err != nil {
 		slog.Warn("load account names failed", "account_ids", accountIds, "error", err)
 		return nameById
 	}
 	for _, row := range rows {
-		nameById[row.Id] = row.Name
+		nameById[row.Id] = row.Username
 	}
 	return nameById
 }

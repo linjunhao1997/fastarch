@@ -1,18 +1,21 @@
 // Do not Edit Generated File.
-// Generated at: 2026-09-05 03:54:20
+// Generated at: 2026-11-15 08:49:50
 
 package model
 
 const (
-	RoleColumnId            = "id"
-	RoleColumnName          = "name"
-	RoleColumnCode          = "code"
-	RoleColumnDescription   = "description"
-	RoleColumnApplicationId = "application_id"
-	RoleColumnDisabled      = "disabled"
-	RoleColumnCreateTime    = "create_time"
-	RoleColumnUpdateTime    = "update_time"
-	RoleColumnCreatedBy     = "created_by"
-	RoleColumnUpdatedBy     = "updated_by"
-	RoleColumnVersion       = "version"
+	RoleColumnId         = "id"
+	RoleColumnVersion    = "version"
+	RoleColumnCreateTime = "create_time"
+	RoleColumnUpdateTime = "update_time"
+)
+
+// 手工补回：contrib 生成器会丢失 string 类列与 uniqueIndex 列常量（项目已知问题）
+const (
+	RoleColumnCode        = "code"
+	RoleColumnName        = "name"
+	RoleColumnDescription = "description"
+	RoleColumnStatus      = "status"
+	RoleColumnCreatedBy   = "created_by"
+	RoleColumnUpdatedBy   = "updated_by"
 )

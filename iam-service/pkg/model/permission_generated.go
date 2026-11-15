@@ -1,18 +1,22 @@
 // Do not Edit Generated File.
-// Generated at: 2026-09-05 03:54:20 (manually fixed: kind/value 已废除)
+// Generated at: 2026-11-15 08:49:50
 
 package model
 
 const (
-	PermissionColumnId            = "id"
-	PermissionColumnName          = "name"
-	PermissionColumnCode          = "code"
-	PermissionColumnDescription   = "description"
-	PermissionColumnApplicationId = "application_id"
-	PermissionColumnDisabled      = "disabled"
-	PermissionColumnCreateTime    = "create_time"
-	PermissionColumnUpdateTime    = "update_time"
-	PermissionColumnCreatedBy     = "created_by"
-	PermissionColumnUpdatedBy     = "updated_by"
-	PermissionColumnVersion       = "version"
+	PermissionColumnId         = "id"
+	PermissionColumnVersion    = "version"
+	PermissionColumnCreateTime = "create_time"
+	PermissionColumnUpdateTime = "update_time"
+)
+
+// 手工补回：contrib 生成器会丢失 string 类列与 uniqueIndex 列常量（项目已知问题）
+const (
+	PermissionColumnCode        = "code"
+	PermissionColumnName        = "name"
+	PermissionColumnType        = "type"
+	PermissionColumnDescription = "description"
+	PermissionColumnStatus      = "status"
+	PermissionColumnCreatedBy   = "created_by"
+	PermissionColumnUpdatedBy   = "updated_by"
 )

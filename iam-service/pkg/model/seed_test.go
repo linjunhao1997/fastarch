@@ -2,13 +2,11 @@ package model
 
 import (
 	"context"
-	"slices"
 	"testing"
 
 	"github.com/glebarez/sqlite"
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
-
-	"iam-service/pkg/constant"
 )
 
 func setupSeedTestDB(t *testing.T) *gorm.DB {
@@ -17,7 +15,7 @@ func setupSeedTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	if err := db.AutoMigrate(Models...); err != nil {
+	if err := AutoMigrateModels(db); err != nil {
 		t.Fatalf("migrate sqlite: %v", err)
 	}
 	return db
@@ -31,99 +29,65 @@ func TestSeedIdempotent(t *testing.T) {
 	if err := Seed(ctx, db); err != nil {
 		t.Fatalf("Seed() #1 error = %v", err)
 	}
-	snapshots := []struct {
-		label string
-		model interface{}
-	}{{"resource", &Resource{}}, {"permission", &Permission{}}, {"role", &Role{}}, {"role_permission", struct{}{}}}
-	countResource := func() (int64, int64, int64, int64) {
-		var resources, permissions, roles, grants int64
-		if err := db.Model(&Resource{}).Count(&resources).Error; err != nil {
-			t.Fatalf("count resource: %v", err)
-		}
-		if err := db.Model(&Permission{}).Count(&permissions).Error; err != nil {
-			t.Fatalf("count permission: %v", err)
+	count := func() (int64, int64, int64, int64, int64) {
+		var users, roles, permissions, grants, menus int64
+		if err := db.Model(&User{}).Count(&users).Error; err != nil {
+			t.Fatalf("count user: %v", err)
 		}
 		if err := db.Model(&Role{}).Count(&roles).Error; err != nil {
 			t.Fatalf("count role: %v", err)
 		}
+		if err := db.Model(&Permission{}).Count(&permissions).Error; err != nil {
+			t.Fatalf("count permission: %v", err)
+		}
 		if err := db.Raw("SELECT COUNT(1) FROM t_r_role_permission").Scan(&grants).Error; err != nil {
 			t.Fatalf("count grants: %v", err)
 		}
-		return resources, permissions, roles, grants
+		if err := db.Model(&Menu{}).Count(&menus).Error; err != nil {
+			t.Fatalf("count menu: %v", err)
+		}
+		return users, roles, permissions, grants, menus
 	}
-	r1, p1, ro1, g1 := countResource()
+	u1, r1, p1, g1, m1 := count()
 
 	if err := Seed(ctx, db); err != nil {
 		t.Fatalf("Seed() #2 error = %v", err)
 	}
-	r2, p2, ro2, g2 := countResource()
-	if r1 != r2 || p1 != p2 || ro1 != ro2 || g1 != g2 {
-		t.Fatalf("counts changed after re-seed: resource %d->%d, permission %d->%d, role %d->%d, grant %d->%d",
-			r1, r2, p1, p2, ro1, ro2, g1, g2)
+	u2, r2, p2, g2, m2 := count()
+	if u1 != u2 || r1 != r2 || p1 != p2 || g1 != g2 || m1 != m2 {
+		t.Fatalf("counts changed after re-seed: user %d->%d, role %d->%d, permission %d->%d, grant %d->%d, menu %d->%d",
+			u1, u2, r1, r2, p1, p2, g1, g2, m1, m2)
 	}
-	_ = snapshots
 }
 
-// TestMigrateLegacyAdminRole 已随运行时 Go 迁移移除：遗留 admin 角色改名/合并
-// 由 pkg/migration 000004_seed 在真实 MySQL 上承担。此处仅保留遗留角色共存的幂等验证。
-func TestSeedMigratesLegacyAdminRole(t *testing.T) {
+// 种子管理员：admin 用户存在、密码 admin123 可经 bcrypt 校验、绑定 admin 角色。
+func TestSeedAdminUser(t *testing.T) {
 	db := setupSeedTestDB(t)
-	ctx := context.Background()
-
-	legacyRole := Role{Id: 1, Name: "管理员", Code: RoleAdminLegacy, ApplicationId: 1}
-	if err := db.Create(&legacyRole).Error; err != nil {
-		t.Fatalf("create legacy role: %v", err)
-	}
-	account := Account{Id: 100, Email: "legacy-admin@example.com"}
-	if err := db.Create(&account).Error; err != nil {
-		t.Fatalf("create account: %v", err)
-	}
-	if err := db.Exec("INSERT INTO t_r_account_role (account_id, role_id) VALUES (?, ?)", account.Id, legacyRole.Id).Error; err != nil {
-		t.Fatalf("bind account to legacy role: %v", err)
-	}
-
-	if err := Seed(ctx, db); err != nil {
+	if err := Seed(context.Background(), db); err != nil {
 		t.Fatalf("Seed() error = %v", err)
 	}
 
-	// 遗留角色行原地保留（改名/合并由 pkg/migration 000004 承担，夹具不做迁移），
-	// 新建管理员角色与遗留角色并存，遗留角色的账号绑定不受影响
-	var legacy Role
-	if err := db.Where(RoleColumnId, legacyRole.Id).First(&legacy).Error; err != nil {
-		t.Fatalf("get legacy role: %v", err)
+	var user User
+	if err := db.Where(UserColumnUsername, SeedAdminUsername).First(&user).Error; err != nil {
+		t.Fatalf("get admin user: %v", err)
 	}
-	if legacy.Code != RoleAdminLegacy {
-		t.Fatalf("legacy role code = %q, want unchanged %q", legacy.Code, RoleAdminLegacy)
-	}
-	var count int64
-	if err := db.Raw("SELECT COUNT(1) FROM t_r_account_role WHERE account_id = ? AND role_id = ?", account.Id, legacyRole.Id).Scan(&count).Error; err != nil {
-		t.Fatalf("count account binding: %v", err)
-	}
-	if count != 1 {
-		t.Fatalf("account binding to legacy role = %d, want 1", count)
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte("admin123")); err != nil {
+		t.Fatalf("seed admin password mismatch: %v", err)
 	}
 
-	// 幂等：再次 Seed 无变化
-	var rolesBefore, permissionsBefore int64
-	if err := db.Model(&Role{}).Count(&rolesBefore).Error; err != nil {
-		t.Fatalf("count roles: %v", err)
+	var adminRole Role
+	if err := db.Where(RoleColumnCode, RoleAdmin).First(&adminRole).Error; err != nil {
+		t.Fatalf("get admin role: %v", err)
 	}
-	if err := db.Model(&Permission{}).Count(&permissionsBefore).Error; err != nil {
-		t.Fatalf("count permissions: %v", err)
+	var bindings int64
+	if err := db.Model(&RUserRole{}).
+		Where(RUserRoleColumnUserId, user.Id).
+		Where(RUserRoleColumnRoleId, adminRole.Id).
+		Count(&bindings).Error; err != nil {
+		t.Fatalf("count binding: %v", err)
 	}
-	if err := Seed(ctx, db); err != nil {
-		t.Fatalf("Seed() #2 error = %v", err)
-	}
-	var rolesAfter, permissionsAfter int64
-	if err := db.Model(&Role{}).Count(&rolesAfter).Error; err != nil {
-		t.Fatalf("count roles after re-seed: %v", err)
-	}
-	if err := db.Model(&Permission{}).Count(&permissionsAfter).Error; err != nil {
-		t.Fatalf("count permissions after re-seed: %v", err)
-	}
-	if rolesBefore != rolesAfter || permissionsBefore != permissionsAfter {
-		t.Fatalf("counts changed after re-seed: role %d->%d, permission %d->%d",
-			rolesBefore, rolesAfter, permissionsBefore, permissionsAfter)
+	if bindings != 1 {
+		t.Fatalf("admin user bindings = %d, want 1", bindings)
 	}
 }
 
@@ -142,7 +106,7 @@ func TestSeedAdminRole(t *testing.T) {
 	}
 }
 
-// 权限码词汇表：全部 PERMISSION_CODES 建权限行且全量授予管理员角色（011 裁决）。
+// 权限码词汇表：全部 PERMISSION_CODES 建权限行且全量授予 admin 角色（011 裁决）。
 func TestSeedVocabularyPermissions(t *testing.T) {
 	db := setupSeedTestDB(t)
 	if err := Seed(context.Background(), db); err != nil {
@@ -172,93 +136,54 @@ func TestSeedVocabularyPermissions(t *testing.T) {
 	}
 }
 
-// 组件资源种子：COMPONENT_SEEDS 全部存在（固定 id）、kind 合法、绑定码合法（与迁移 SQL 镜像）。
-func TestSeedComponents(t *testing.T) {
+// 菜单树种子：MENU_SEEDS 全部存在（固定 id）、绑定码合法且在词汇表内；
+// admin 角色全量绑定菜单。
+func TestSeedMenus(t *testing.T) {
 	db := setupSeedTestDB(t)
 	if err := Seed(context.Background(), db); err != nil {
 		t.Fatalf("Seed() error = %v", err)
 	}
 
-	app := Application{}
-	if err := db.Where(ApplicationColumnCode, constant.ApplicationCode).First(&app).Error; err != nil {
-		t.Fatalf("get builtin application: %v", err)
-	}
-
-	for _, seed := range COMPONENT_SEEDS {
-		var resource Resource
-		if err := db.Where(ResourceColumnId, seed.Id).First(&resource).Error; err != nil {
-			t.Fatalf("component %s (id=%d) missing: %v", seed.Key, seed.Id, err)
-		}
-		if resource.Key != seed.Key || resource.Kind != seed.Kind {
-			t.Fatalf("component id=%d key/kind = %s/%s, want %s/%s", seed.Id, resource.Key, resource.Kind, seed.Key, seed.Kind)
-		}
-		if resource.ApplicationId != app.Id {
-			t.Fatalf("component id=%d application_id = %d, want %d", seed.Id, resource.ApplicationId, app.Id)
-		}
-		if !IsValidComponentKind(resource.Kind) {
-			t.Fatalf("component id=%d invalid kind %q", seed.Id, resource.Kind)
-		}
-		for _, code := range resource.PermissionCodes {
-			if !IsValidPermissionCode(code) {
-				t.Fatalf("component id=%d has invalid permission code %q", seed.Id, code)
-			}
-			if !slices.Contains(PERMISSION_CODES, code) {
-				t.Fatalf("component id=%d binds code %q outside vocabulary", seed.Id, code)
-			}
-		}
-	}
-
-	// 幂等：重复 Seed 资源零新增
-	var before, after int64
-	if err := db.Model(Resource{}).Count(&before).Error; err != nil {
-		t.Fatalf("count resources: %v", err)
-	}
-	if err := Seed(context.Background(), db); err != nil {
-		t.Fatalf("Seed() #2 error = %v", err)
-	}
-	if err := db.Model(Resource{}).Count(&after).Error; err != nil {
-		t.Fatalf("count resources after re-seed: %v", err)
-	}
-	if before != after {
-		t.Fatalf("resource count changed after re-seed: %d -> %d", before, after)
-	}
-}
-
-// 账号-应用关系：绑定启用角色的账号自动获得应用可见性。
-func TestSeedAccountApplications(t *testing.T) {
-	db := setupSeedTestDB(t)
-	ctx := context.Background()
-	if err := Seed(ctx, db); err != nil {
-		t.Fatalf("Seed() error = %v", err)
-	}
-
-	app := Application{}
-	if err := db.Where(ApplicationColumnCode, constant.ApplicationCode).First(&app).Error; err != nil {
-		t.Fatalf("get builtin application: %v", err)
-	}
 	adminRole := Role{}
 	if err := db.Where(RoleColumnCode, RoleAdmin).First(&adminRole).Error; err != nil {
 		t.Fatalf("get admin role: %v", err)
 	}
-	account := Account{Id: 200, Email: "bound@example.com"}
-	if err := db.Create(&account).Error; err != nil {
-		t.Fatalf("create account: %v", err)
-	}
-	if err := db.Exec("INSERT INTO t_r_account_role (account_id, role_id) VALUES (?, ?)", account.Id, adminRole.Id).Error; err != nil {
-		t.Fatalf("bind role: %v", err)
+
+	for _, seed := range MENU_SEEDS {
+		var menu Menu
+		if err := db.Where(MenuColumnId, seed.Id).First(&menu).Error; err != nil {
+			t.Fatalf("menu %s (id=%d) missing: %v", seed.Name, seed.Id, err)
+		}
+		if menu.Name != seed.Name || menu.Path != seed.Path {
+			t.Fatalf("menu id=%d name/path = %s/%s, want %s/%s", seed.Id, menu.Name, menu.Path, seed.Name, seed.Path)
+		}
+		if len(seed.PermissionCode) > 0 && !IsValidPermissionCode(menu.PermissionCode) {
+			t.Fatalf("menu id=%d invalid permission code %q", seed.Id, menu.PermissionCode)
+		}
+		var bound int64
+		if err := db.Raw(
+			"SELECT COUNT(1) FROM t_r_role_menu WHERE role_id = ? AND menu_id = ?",
+			adminRole.Id, seed.Id,
+		).Scan(&bound).Error; err != nil {
+			t.Fatalf("count menu binding: %v", err)
+		}
+		if bound != 1 {
+			t.Fatalf("menu id=%d bound to admin %d times, want 1", seed.Id, bound)
+		}
 	}
 
-	if err := Seed(ctx, db); err != nil {
+	// 幂等：重复 Seed 菜单零新增
+	var before, after int64
+	if err := db.Model(Menu{}).Count(&before).Error; err != nil {
+		t.Fatalf("count menus: %v", err)
+	}
+	if err := Seed(context.Background(), db); err != nil {
 		t.Fatalf("Seed() #2 error = %v", err)
 	}
-	var count int64
-	if err := db.Model(&RAccountApplication{}).
-		Where(RAccountApplicationColumnAccountId, account.Id).
-		Where(RAccountApplicationColumnApplicationId, app.Id).
-		Count(&count).Error; err != nil {
-		t.Fatalf("count account application: %v", err)
+	if err := db.Model(Menu{}).Count(&after).Error; err != nil {
+		t.Fatalf("count menus after re-seed: %v", err)
 	}
-	if count != 1 {
-		t.Fatalf("account application rows = %d, want 1", count)
+	if before != after {
+		t.Fatalf("menu count changed after re-seed: %d -> %d", before, after)
 	}
 }

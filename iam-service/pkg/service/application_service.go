@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/go-dev-frame/sponge/pkg/krand"
@@ -11,6 +12,7 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 	"gorm.io/gorm"
 
+	"iam-service/pkg/auth"
 	"iam-service/pkg/constant"
 	"iam-service/pkg/helper"
 	"iam-service/pkg/model"
@@ -26,44 +28,40 @@ func NewApplicationService(db *gorm.DB) iam_v1.ApplicationServiceServer {
 	return &ApplicationService{db: db}
 }
 
+// applicationToPb 模型转 pb：proto 未随 011 模型更新，AppCode 映射 app_id；
+// description 随列删除留空；EnabledStatus 映射 status。
 func applicationToPb(a model.Application) *iam_v1.Application {
 	return &iam_v1.Application{
 		Id:            cast.ToString(a.Id),
 		Name:          a.Name,
-		AppCode:       a.Code,
-		Description:   a.Description,
-		EnabledStatus: disabledToStatus(a.Disabled),
+		AppCode:       a.AppId,
+		EnabledStatus: a.Status,
 	}
-}
-
-func disabledToStatus(disabled int) string {
-	if disabled == 0 {
-		return "enabled"
-	}
-	return "disabled"
-}
-
-func statusToDisabled(status string) int {
-	if status == "" || status == constant.ApplicationStatusEnabled {
-		return 0
-	}
-	return 1
 }
 
 func (s *ApplicationService) CreateApplication(ctx context.Context, request *iam_v1.CreateApplicationRequest) (*iam_v1.Application, error) {
 	pkId := krand.NewID()
 	now := time.Now()
-	app := model.Application{
-		Id:          pkId,
-		Code:        cast.ToString(pkId),
-		Name:        request.Name,
-		Description: request.Description,
-		Disabled:    statusToDisabled(request.EnabledStatus),
-		CreateTime:  now,
-		UpdateTime:  now,
+	// 审计字段服务端注入（宪法 XII）
+	operator := cast.ToString(auth.GetAccountId(ctx))
+	status := request.EnabledStatus
+	if status == "" {
+		status = constant.ApplicationStatusEnabled
 	}
-	err := s.db.WithContext(ctx).Model(model.Application{}).Create(&app).Error
+	app := model.Application{
+		Id:         pkId,
+		AppId:      cast.ToString(pkId),
+		Name:       request.Name,
+		Status:     status,
+		Version:    1,
+		CreatedBy:  operator,
+		UpdatedBy:  operator,
+		CreateTime: now,
+		UpdateTime: now,
+	}
+	err := s.db.WithContext(ctx).Select(model.ApplicationFields).Create(&app).Error
 	if err != nil {
+		slog.Warn("create application failed", "app_name", request.Name, "error", err)
 		return nil, err
 	}
 	return applicationToPb(app), nil
@@ -71,7 +69,9 @@ func (s *ApplicationService) CreateApplication(ctx context.Context, request *iam
 
 func (s *ApplicationService) GetApplication(ctx context.Context, request *common_v1.GetRequest) (*iam_v1.Application, error) {
 	var app model.Application
-	err := s.db.WithContext(ctx).Where(model.ApplicationColumnId, request.Id).First(&app).Error
+	err := s.db.WithContext(ctx).
+		Select(model.ApplicationFields).
+		Where(model.ApplicationColumnId, request.Id).First(&app).Error
 	if err != nil {
 		return nil, err
 	}
@@ -80,13 +80,24 @@ func (s *ApplicationService) GetApplication(ctx context.Context, request *common
 
 func (s *ApplicationService) ListApplications(ctx context.Context, request *iam_v1.ListApplicationsRequest) (*iam_v1.ListApplicationsResponse, error) {
 	limit, offset := helper.GetLimitAndOffset(request.CurrentPage, request.PageSize)
-	filter := applyKeywordFilter(s.db.WithContext(ctx), []string{
+	keywordConditions := []string{
 		model.ApplicationColumnName + " LIKE ?",
-		model.ApplicationColumnCode + " LIKE ?",
-	}, request.Keyword)
+		model.ApplicationColumnAppId + " LIKE ?",
+	}
+	buildQuery := func() *gorm.DB {
+		return applyKeywordFilter(s.db.WithContext(ctx).Model(model.Application{}), keywordConditions, request.Keyword)
+	}
 	var count int64
+	err := buildQuery().Count(&count).Error
+	if err != nil {
+		return nil, err
+	}
 	var apps []model.Application
-	err := filter.Model(model.Application{}).Count(&count).Limit(limit).Offset(offset).Find(&apps).Error
+	err = buildQuery().
+		Order(model.ApplicationColumnId + " ASC").
+		Limit(limit).
+		Offset(offset).
+		Find(&apps).Error
 	if err != nil {
 		return nil, err
 	}
@@ -105,13 +116,13 @@ func (s *ApplicationService) UpdateApplication(ctx context.Context, request *iam
 	if len(request.Name) > 0 {
 		updates[model.ApplicationColumnName] = request.Name
 	}
-	if len(request.Description) > 0 {
-		updates[model.ApplicationColumnDescription] = request.Description
-	}
 	if len(request.EnabledStatus) > 0 {
-		updates[model.ApplicationColumnDisabled] = statusToDisabled(request.EnabledStatus)
+		updates[model.ApplicationColumnStatus] = request.EnabledStatus
 	}
 	updates[model.ApplicationColumnUpdateTime] = time.Now()
+	// 审计字段服务端注入：仅更新修改人与修改时间
+	updates[model.ApplicationColumnUpdatedBy] = cast.ToString(auth.GetAccountId(ctx))
+	updates[model.ApplicationColumnVersion] = gorm.Expr(model.ApplicationColumnVersion + " + 1")
 	result := s.db.WithContext(ctx).Model(model.Application{}).
 		Where(model.ApplicationColumnId, request.Id).
 		Updates(updates)
@@ -125,34 +136,13 @@ func (s *ApplicationService) UpdateApplication(ctx context.Context, request *iam
 }
 
 func (s *ApplicationService) DeleteApplication(ctx context.Context, request *iam_v1.DeleteApplicationRequest) (*emptypb.Empty, error) {
-	var roleCount int64
-	err := s.db.WithContext(ctx).Model(model.Role{}).
-		Where(model.RoleColumnApplicationId, request.Id).
-		Count(&roleCount).Error
-	if err != nil {
-		return nil, err
-	}
-	var permissionCount int64
-	err = s.db.WithContext(ctx).Model(model.Permission{}).
-		Where(model.PermissionColumnApplicationId, request.Id).
-		Count(&permissionCount).Error
-	if err != nil {
-		return nil, err
-	}
-	// specs/008-account-app-context锛氳处鍙熺被搴旂敤鍏宠仈涔熸瀯鎴愬紩鐢紝瀛樺湪鏃舵嫆缁濆垹闄わ紙FR-014锛?
-	var accountAssociationCount int64
-	err = s.db.WithContext(ctx).Model(model.RAccountApplication{}).
-		Where(model.RAccountApplicationColumnApplicationId, request.Id).
-		Count(&accountAssociationCount).Error
-	if err != nil {
-		return nil, err
-	}
-	if roleCount > 0 || permissionCount > 0 || accountAssociationCount > 0 {
-		return nil, ErrApplicationReferenced
-	}
-
-	result := s.db.WithContext(ctx).Where(model.ApplicationColumnId, request.Id).Delete(model.Application{})
+	// 011 模型：角色/权限不再归属应用，应用为叶子资源直接物理删除
+	// （删除策略: 基础架构型，物理删除 + 审计日志）
+	result := s.db.WithContext(ctx).
+		Where(model.ApplicationColumnId, request.Id).
+		Delete(model.Application{})
 	if result.Error != nil {
+		slog.Warn("delete application failed", "app_id", request.Id, "error", result.Error)
 		return nil, result.Error
 	}
 	if result.RowsAffected == 0 {

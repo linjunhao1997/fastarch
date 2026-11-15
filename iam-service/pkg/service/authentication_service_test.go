@@ -5,10 +5,9 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
-	"time"
 
 	iam_v1 "github.com/linjunhao1997/idl/pb/iam"
-	"github.com/spf13/cast"
+	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -18,80 +17,43 @@ import (
 
 	"iam-service/pkg/auth"
 	"iam-service/pkg/constant"
-	"iam-service/pkg/helper"
 	"iam-service/pkg/model"
 )
 
-// setupProfileTestDB 构造 GetMyProfile 测试库（specs/008-account-app-context T016）。
+// setupProfileTestDB 构造 GetMyProfile 测试库。
 func setupProfileTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db := setupAccountTestDB(t)
-	return db
+	return setupAccountTestDB(t)
 }
 
-func createProfileApplication(t *testing.T, db *gorm.DB, id int64, name, statusCode string) model.Application {
+// createTestUserWithPassword 创建带 bcrypt 密码摘要的测试用户。
+func createTestUserWithPassword(t *testing.T, db *gorm.DB, id int64, username, password, status string) model.User {
 	t.Helper()
-	now := time.Now()
-	app := model.Application{
-		Id:         id,
-		Code:       cast.ToString(id),
-		Name:       name,
-		Disabled:   cast.ToInt(statusCode != constant.ApplicationStatusEnabled),
-		CreateTime: now,
-		UpdateTime: now,
+	user := createTestUser(t, db, id, username, 1)
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		t.Fatalf("hash password: %v", err)
 	}
-	if err := db.Create(&app).Error; err != nil {
-		t.Fatalf("create application: %v", err)
+	user.PasswordHash = string(hash)
+	user.Status = status
+	if err := db.Save(&user).Error; err != nil {
+		t.Fatalf("save user: %v", err)
 	}
-	return app
-}
-
-func bindAccountApplication(t *testing.T, db *gorm.DB, accountId, applicationId int64) {
-	t.Helper()
-	if err := db.Create(&model.RAccountApplication{AccountId: accountId, ApplicationId: applicationId}).Error; err != nil {
-		t.Fatalf("bind account application: %v", err)
-	}
+	return user
 }
 
 func TestGetMyProfile(t *testing.T) {
 	db := setupProfileTestDB(t)
-	createTestAccount(t, db, 1, "one@example.com", 1)
-	createProfileApplication(t, db, 101, "应用A", constant.ApplicationStatusEnabled)
-	createProfileApplication(t, db, 102, "应用B停用", constant.ApplicationStatusDisabled)
-	bindAccountApplication(t, db, 1, 101)
-	bindAccountApplication(t, db, 1, 102)
+	createTestUser(t, db, 1, "one", 1)
 	service := NewAuthenticationService(db, nil)
 
 	resp, err := service.GetMyProfile(auth.WithAccountId(context.Background(), 1), &emptypb.Empty{})
 	if err != nil {
 		t.Fatalf("GetMyProfile() error = %v", err)
 	}
-	if resp.Id != "1" || resp.Name != "account" || resp.Email != "one@example.com" {
+	// 011 模型：Name 映射 username；email/kind/应用归属已随模型删除
+	if resp.Id != "1" || resp.Name != "one" || resp.Email != "" || resp.Kind != "" {
 		t.Fatalf("GetMyProfile() basic info = %+v", resp)
-	}
-	if len(resp.Applications) != 2 {
-		t.Fatalf("applications = %d, want 2（含停用应用）", len(resp.Applications))
-	}
-	// 含停用应用（前端置灰不可选）
-	var hasDisabled bool
-	for _, app := range resp.Applications {
-		if app.Id == "102" && app.Status == constant.ApplicationStatusDisabled {
-			hasDisabled = true
-		}
-	}
-	if !hasDisabled {
-		t.Fatalf("disabled application missing from profile: %+v", resp.Applications)
-	}
-}
-
-func TestGetMyProfileNoApplications(t *testing.T) {
-	db := setupProfileTestDB(t)
-	createTestAccount(t, db, 1, "one@example.com", 1)
-	service := NewAuthenticationService(db, nil)
-
-	resp, err := service.GetMyProfile(auth.WithAccountId(context.Background(), 1), &emptypb.Empty{})
-	if err != nil {
-		t.Fatalf("GetMyProfile() error = %v", err)
 	}
 	if len(resp.Applications) != 0 {
 		t.Fatalf("applications = %v, want empty", resp.Applications)
@@ -100,7 +62,7 @@ func TestGetMyProfileNoApplications(t *testing.T) {
 
 func TestGetMyProfileWithoutSensitiveFields(t *testing.T) {
 	db := setupProfileTestDB(t)
-	createTestAccount(t, db, 1, "one@example.com", 1)
+	createTestUser(t, db, 1, "one", 1)
 	service := NewAuthenticationService(db, nil)
 
 	resp, err := service.GetMyProfile(auth.WithAccountId(context.Background(), 1), &emptypb.Empty{})
@@ -112,7 +74,7 @@ func TestGetMyProfileWithoutSensitiveFields(t *testing.T) {
 		t.Fatalf("marshal response: %v", err)
 	}
 	lower := strings.ToLower(string(raw))
-	for _, banned := range []string{"password", "salt", `"ak"`, `"sk"`} {
+	for _, banned := range []string{"password", "password_hash", "salt", `"ak"`, `"sk"`} {
 		if strings.Contains(lower, banned) {
 			t.Fatalf("profile response contains sensitive field %q: %s", banned, raw)
 		}
@@ -121,7 +83,7 @@ func TestGetMyProfileWithoutSensitiveFields(t *testing.T) {
 
 func TestGetMyProfileUnauthenticated(t *testing.T) {
 	db := setupProfileTestDB(t)
-	createTestAccount(t, db, 1, "one@example.com", 1)
+	createTestUser(t, db, 1, "one", 1)
 	service := NewAuthenticationService(db, nil)
 
 	_, err := service.GetMyProfile(context.Background(), &emptypb.Empty{})
@@ -131,22 +93,16 @@ func TestGetMyProfileUnauthenticated(t *testing.T) {
 }
 
 // TestPasswordAuthDisabledAccountRejected 禁用账号即使密码正确也拒绝登录
-//（账号状态表单项配套的服务端裁决，宪法 IV：安全决策在服务端）。
+// （账号状态表单项配套的服务端裁决，宪法 IV：安全决策在服务端）。
 func TestPasswordAuthDisabledAccountRejected(t *testing.T) {
 	db := setupProfileTestDB(t)
 	rdb, _ := setupTestRedis(t)
-	account := createTestAccount(t, db, 1, "disabled@example.com", 1)
-	account.Status = constant.AccountStatusDisabled
-	account.Salt = "salt"
-	account.Password = helper.HashPasswordWithSalt("password123", "salt")
-	if err := db.Save(&account).Error; err != nil {
-		t.Fatalf("save account: %v", err)
-	}
+	createTestUserWithPassword(t, db, 1, "disabled", "password123", constant.AccountStatusDisabled)
 
 	service := NewAuthenticationService(db, rdb)
 	ctx := grpc.NewContextWithServerTransportStream(auth.WithAdmin(context.Background()), stubServerTransportStream{})
 	_, err := service.PasswordAuth(ctx, &iam_v1.PasswordAuthRequest{
-		Email:    "disabled@example.com",
+		Username: "disabled",
 		Password: "password123",
 	})
 	if err == nil {
@@ -171,18 +127,12 @@ func (stubServerTransportStream) SetTrailer(metadata.MD) error { return nil }
 func TestPasswordAuthEnabledAccountAllowed(t *testing.T) {
 	db := setupProfileTestDB(t)
 	rdb, _ := setupTestRedis(t)
-	account := createTestAccount(t, db, 1, "enabled@example.com", 1)
-	account.Status = constant.AccountStatusEnabled
-	account.Salt = "salt"
-	account.Password = helper.HashPasswordWithSalt("password123", "salt")
-	if err := db.Save(&account).Error; err != nil {
-		t.Fatalf("save account: %v", err)
-	}
+	createTestUserWithPassword(t, db, 1, "enabled", "password123", constant.AccountStatusEnabled)
 
 	service := NewAuthenticationService(db, rdb)
 	ctx := grpc.NewContextWithServerTransportStream(auth.WithAdmin(context.Background()), stubServerTransportStream{})
 	resp, err := service.PasswordAuth(ctx, &iam_v1.PasswordAuthRequest{
-		Email:    "enabled@example.com",
+		Username: "enabled",
 		Password: "password123",
 	})
 	if err != nil {
@@ -190,5 +140,33 @@ func TestPasswordAuthEnabledAccountAllowed(t *testing.T) {
 	}
 	if resp.GetAccessToken() == "" {
 		t.Fatal("expected non-empty access token")
+	}
+}
+
+// 密码错误与用户不存在统一语义（不泄露账号存在性），均返回 ErrInvalidAccountPassword。
+func TestPasswordAuthInvalidCredentials(t *testing.T) {
+	db := setupProfileTestDB(t)
+	rdb, _ := setupTestRedis(t)
+	createTestUserWithPassword(t, db, 1, "enabled", "password123", constant.AccountStatusEnabled)
+
+	service := NewAuthenticationService(db, rdb)
+	ctx := grpc.NewContextWithServerTransportStream(auth.WithAdmin(context.Background()), stubServerTransportStream{})
+
+	// 密码错误
+	_, err := service.PasswordAuth(ctx, &iam_v1.PasswordAuthRequest{
+		Username: "enabled",
+		Password: "wrong-password",
+	})
+	if err != ErrInvalidAccountPassword {
+		t.Fatalf("wrong password error = %v, want %v", err, ErrInvalidAccountPassword)
+	}
+
+	// 用户不存在：与密码错误同语义
+	_, err = service.PasswordAuth(ctx, &iam_v1.PasswordAuthRequest{
+		Username: "missing-user",
+		Password: "password123",
+	})
+	if err != ErrInvalidAccountPassword {
+		t.Fatalf("missing user error = %v, want %v", err, ErrInvalidAccountPassword)
 	}
 }

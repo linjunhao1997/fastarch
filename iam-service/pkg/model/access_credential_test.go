@@ -14,7 +14,7 @@ func setupAccessCredentialTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	if err := db.AutoMigrate(Models...); err != nil {
+	if err := AutoMigrateModels(db); err != nil {
 		t.Fatalf("auto migrate: %v", err)
 	}
 	return db
@@ -27,7 +27,7 @@ func TestAccessCredentialAutoMigrate(t *testing.T) {
 		Id:              1,
 		AccessKey:       "FAKtest000000000000000001",
 		SecretKeyCipher: "cipher-text",
-		AccountId:       100,
+		UserId:          100,
 		Remark:          "ci",
 		Status:          "enabled",
 		CreateTime:      now,
@@ -52,14 +52,14 @@ func TestAccessCredentialUniqueAccessKey(t *testing.T) {
 	db := setupAccessCredentialTestDB(t)
 	now := time.Now()
 	first := AccessCredential{
-		Id: 1, AccessKey: "FAKdup", SecretKeyCipher: "c", AccountId: 100,
+		Id: 1, AccessKey: "FAKdup", SecretKeyCipher: "c", UserId: 100,
 		Status: "enabled", CreateTime: now, UpdateTime: now, Version: 1,
 	}
 	if err := db.Create(&first).Error; err != nil {
 		t.Fatalf("create first: %v", err)
 	}
 	duplicate := AccessCredential{
-		Id: 2, AccessKey: "FAKdup", SecretKeyCipher: "c", AccountId: 101,
+		Id: 2, AccessKey: "FAKdup", SecretKeyCipher: "c", UserId: 101,
 		Status: "enabled", CreateTime: now, UpdateTime: now, Version: 1,
 	}
 	if err := db.Create(&duplicate).Error; err == nil {

@@ -12,7 +12,7 @@ type AccessCredential struct {
 	Id              int64      `gorm:"column:id;primaryKey"`
 	AccessKey       string     `gorm:"column:access_key;size:64;uniqueIndex"`
 	SecretKeyCipher string     `gorm:"column:secret_key_cipher;size:256"`
-	AccountId       int64      `gorm:"column:account_id;index"`
+	UserId          int64      `gorm:"column:user_id;index"`
 	Remark          string     `gorm:"column:remark;size:255"`
 	Status          string     `gorm:"column:status;size:16"`
 	ExpireTime      *time.Time `gorm:"column:expire_time"`
@@ -28,13 +28,9 @@ func (a *AccessCredential) TableName() string {
 	return "t_access_credential"
 }
 
-func init() {
-	migrate(AccessCredential{})
-}
-
 var AccessCredentialFields = []string{
 	AccessCredentialColumnId, AccessCredentialColumnAccessKey, AccessCredentialColumnSecretKeyCipher,
-	AccessCredentialColumnAccountId, AccessCredentialColumnRemark, AccessCredentialColumnStatus,
+	AccessCredentialColumnUserId, AccessCredentialColumnRemark, AccessCredentialColumnStatus,
 	AccessCredentialColumnExpireTime, AccessCredentialColumnLastUsedTime,
 	AccessCredentialColumnCreateTime, AccessCredentialColumnUpdateTime,
 	AccessCredentialColumnCreatedBy, AccessCredentialColumnUpdatedBy, AccessCredentialColumnVersion,

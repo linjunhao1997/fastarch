@@ -52,7 +52,7 @@ func parseCredentialID(t *testing.T, id string) int64 {
 // 落库为密文，审计字段服务端注入（specs/009-ak-sk-auth T010 / FR-002）。
 func TestCreateAccessCredentialReturnsOneTimeSecret(t *testing.T) {
 	service, aes := newTestCredentialService(t, 20)
-	createTestAccount(t, service.db, 1, "cred@example.com", 1)
+	createTestUser(t, service.db, 1, "cred", 1)
 
 	resp, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{
 		AccountId: 1,
@@ -106,10 +106,10 @@ func TestCreateAccessCredentialReturnsOneTimeSecret(t *testing.T) {
 // FR-004：绑定账号必须存在且启用。
 func TestCreateAccessCredentialAccountInvalid(t *testing.T) {
 	service, _ := newTestCredentialService(t, 20)
-	createTestAccount(t, service.db, 1, "one@example.com", 1)
+	createTestUser(t, service.db, 1, "one", 1)
 	// 停用账号
-	if err := service.db.Model(&model.Account{}).Where(model.AccountColumnId, 1).
-		Update(model.AccountColumnStatus, constant.AccountStatusDisabled).Error; err != nil {
+	if err := service.db.Model(&model.User{}).Where(model.UserColumnId, 1).
+		Update(model.UserColumnStatus, constant.AccountStatusDisabled).Error; err != nil {
 		t.Fatalf("disable account: %v", err)
 	}
 
@@ -139,7 +139,7 @@ func TestCreateAccessCredentialAccountInvalid(t *testing.T) {
 // FR-010：单账号凭证上限。
 func TestCreateAccessCredentialLimitExceeded(t *testing.T) {
 	service, _ := newTestCredentialService(t, 2)
-	createTestAccount(t, service.db, 1, "limit@example.com", 1)
+	createTestUser(t, service.db, 1, "limit", 1)
 
 	for i := 0; i < 2; i++ {
 		if _, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{AccountId: 1}); err != nil {
@@ -162,8 +162,8 @@ func TestCreateAccessCredentialLimitExceeded(t *testing.T) {
 // T010：列表分页与字段全量断言（含账号名批量组装，禁 N+1）。
 func TestListAccessCredentialsPaging(t *testing.T) {
 	service, _ := newTestCredentialService(t, 20)
-	createTestAccount(t, service.db, 1, "a@example.com", 1)
-	createTestAccount(t, service.db, 2, "b@example.com", 1)
+	createTestUser(t, service.db, 1, "a-user", 1)
+	createTestUser(t, service.db, 2, "b-user", 1)
 	for i := 0; i < 3; i++ {
 		accountId := int64(1)
 		if i == 2 {
@@ -206,8 +206,8 @@ func TestListAccessCredentialsPaging(t *testing.T) {
 // T019：account_id / access_key 前缀 / status 筛选与组合条件。
 func TestListAccessCredentialsFilters(t *testing.T) {
 	service, _ := newTestCredentialService(t, 20)
-	createTestAccount(t, service.db, 1, "a@example.com", 1)
-	createTestAccount(t, service.db, 2, "b@example.com", 1)
+	createTestUser(t, service.db, 1, "a-user", 1)
+	createTestUser(t, service.db, 2, "b-user", 1)
 
 	// 两个账号各 1 条启用 + 账号 1 追加 1 条禁用
 	enabledOne, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{AccountId: 1, Remark: "keep"})
@@ -263,7 +263,7 @@ func TestListAccessCredentialsFilters(t *testing.T) {
 // T021：启停往返、幂等、乐观锁版本推进与审计赋值。
 func TestChangeAccessCredentialStatus(t *testing.T) {
 	service, _ := newTestCredentialService(t, 20)
-	createTestAccount(t, service.db, 1, "a@example.com", 1)
+	createTestUser(t, service.db, 1, "a-user", 1)
 	created, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{AccountId: 1})
 	if err != nil {
 		t.Fatalf("create: %v", err)
@@ -316,7 +316,7 @@ func TestChangeAccessCredentialStatus(t *testing.T) {
 // T023：重置 SK 往返——AK 不变、旧 SK 失效、新 SK 可解密、版本推进。
 func TestResetAccessCredentialSecret(t *testing.T) {
 	service, aes := newTestCredentialService(t, 20)
-	createTestAccount(t, service.db, 1, "a@example.com", 1)
+	createTestUser(t, service.db, 1, "a-user", 1)
 	created, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{AccountId: 1})
 	if err != nil {
 		t.Fatalf("create: %v", err)
@@ -363,7 +363,7 @@ func TestResetAccessCredentialSecret(t *testing.T) {
 // T024：物理删除——列表消失、二次删除 NotFound、操作审计。
 func TestDeleteAccessCredential(t *testing.T) {
 	service, _ := newTestCredentialService(t, 20)
-	createTestAccount(t, service.db, 1, "a@example.com", 1)
+	createTestUser(t, service.db, 1, "a-user", 1)
 	created, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{AccountId: 1})
 	if err != nil {
 		t.Fatalf("create: %v", err)
@@ -388,7 +388,7 @@ func TestDeleteAccessCredential(t *testing.T) {
 // GetAccessCredential：详情返回全量业务字段与账号名。
 func TestGetAccessCredential(t *testing.T) {
 	service, _ := newTestCredentialService(t, 20)
-	createTestAccount(t, service.db, 1, "a@example.com", 1)
+	createTestUser(t, service.db, 1, "a-user", 1)
 	created, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{AccountId: 1, Remark: "detail"})
 	if err != nil {
 		t.Fatalf("create: %v", err)
@@ -413,7 +413,7 @@ func TestGetAccessCredential(t *testing.T) {
 // 过期时间写入与回读（创建时可指定 expire_time）。
 func TestCreateAccessCredentialWithExpireTime(t *testing.T) {
 	service, _ := newTestCredentialService(t, 20)
-	createTestAccount(t, service.db, 1, "a@example.com", 1)
+	createTestUser(t, service.db, 1, "a-user", 1)
 	expire := time.Now().Add(24 * time.Hour).Round(time.Second).UTC()
 
 	resp, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{

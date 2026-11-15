@@ -5,20 +5,20 @@ import (
 
 	"iam-service/pkg/model"
 
-	iam_v1 "github.com/linjunhao1997/idl/pb/iam"
 	"gorm.io/gorm"
 )
 
-func loadAccountRoles(ctx context.Context, db *gorm.DB, account *model.Account) error {
-	var bindings []model.RAccountRole
+// loadUserRoles 加载用户的角色列表（经 t_r_user_role 关联，按绑定顺序）。
+func loadUserRoles(ctx context.Context, db *gorm.DB, user *model.User) error {
+	var bindings []model.RUserRole
 	if err := db.WithContext(ctx).
-		Where(model.RAccountRoleColumnAccountId, account.Id).
-		Select(model.RAccountRoleFields).
+		Where(model.RUserRoleColumnUserId, user.Id).
+		Select(model.RUserRoleFields).
 		Find(&bindings).Error; err != nil {
 		return err
 	}
 	if len(bindings) == 0 {
-		account.RoleList = []*model.Role{}
+		user.RoleList = []*model.Role{}
 		return nil
 	}
 	roleIds := make([]int64, 0, len(bindings))
@@ -36,21 +36,20 @@ func loadAccountRoles(ctx context.Context, db *gorm.DB, account *model.Account) 
 	for _, role := range roles {
 		roleById[role.Id] = role
 	}
-	account.RoleList = make([]*model.Role, 0, len(bindings))
+	user.RoleList = make([]*model.Role, 0, len(bindings))
 	for _, binding := range bindings {
 		if role, exists := roleById[binding.RoleId]; exists {
-			account.RoleList = append(account.RoleList, role)
+			user.RoleList = append(user.RoleList, role)
 		}
 	}
 	return nil
 }
 
 func loadRolePermissions(ctx context.Context, db *gorm.DB, role *model.Role) error {
-	var bindings []rolePermissionBinding
+	var bindings []model.RRolePermission
 	if err := db.WithContext(ctx).
-		Table("t_r_role_permission").
 		Where(model.RRolePermissionColumnRoleId, role.Id).
-		Select([]string{model.RRolePermissionColumnRoleId, model.RRolePermissionColumnPermissionId}).
+		Select(model.RRolePermissionFields).
 		Find(&bindings).Error; err != nil {
 		return err
 	}
@@ -82,27 +81,38 @@ func loadRolePermissions(ctx context.Context, db *gorm.DB, role *model.Role) err
 	return nil
 }
 
-func loadAccountPermissionGraph(ctx context.Context, db *gorm.DB, account *model.Account) error {
-	if err := loadAccountRoles(ctx, db, account); err != nil {
+// loadUserPermissionGraph 一次批量加载用户的全部角色及其权限集合。
+func loadUserPermissionGraph(ctx context.Context, db *gorm.DB, user *model.User) error {
+	if err := loadUserRoles(ctx, db, user); err != nil {
 		return err
 	}
-	if len(account.RoleList) == 0 {
+	if len(user.RoleList) == 0 {
 		return nil
 	}
-	roleIds := make([]int64, 0, len(account.RoleList))
-	for _, role := range account.RoleList {
+	roleIds := make([]int64, 0, len(user.RoleList))
+	for _, role := range user.RoleList {
 		roleIds = append(roleIds, role.Id)
 	}
-	var roleBindings []rolePermissionBinding
+	var bindings []model.RRolePermission
 	if err := db.WithContext(ctx).
-		Table("t_r_role_permission").
 		Where(model.RRolePermissionColumnRoleId+" IN ?", roleIds).
-		Select([]string{model.RRolePermissionColumnRoleId, model.RRolePermissionColumnPermissionId}).
-		Find(&roleBindings).Error; err != nil {
+		Select(model.RRolePermissionFields).
+		Find(&bindings).Error; err != nil {
 		return err
 	}
-	permissionIds := make([]int64, 0, len(roleBindings))
-	for _, binding := range roleBindings {
+	if len(bindings) == 0 {
+		for _, role := range user.RoleList {
+			role.PermissionList = []*model.Permission{}
+		}
+		return nil
+	}
+	permissionIds := make([]int64, 0, len(bindings))
+	bindingSeen := make(map[int64]struct{}, len(bindings))
+	for _, binding := range bindings {
+		if _, exists := bindingSeen[binding.PermissionId]; exists {
+			continue
+		}
+		bindingSeen[binding.PermissionId] = struct{}{}
 		permissionIds = append(permissionIds, binding.PermissionId)
 	}
 	var permissions []*model.Permission
@@ -117,17 +127,18 @@ func loadAccountPermissionGraph(ctx context.Context, db *gorm.DB, account *model
 		permissionById[permission.Id] = permission
 	}
 	permissionsByRole := make(map[int64][]*model.Permission)
-	for _, binding := range roleBindings {
+	for _, binding := range bindings {
 		if permission, exists := permissionById[binding.PermissionId]; exists {
 			permissionsByRole[binding.RoleId] = append(permissionsByRole[binding.RoleId], permission)
 		}
 	}
-	for _, role := range account.RoleList {
+	for _, role := range user.RoleList {
 		role.PermissionList = permissionsByRole[role.Id]
 	}
 	return nil
 }
 
+// loadRolePermissionsForRoles 批量加载角色集合的权限列表（角色列表页使用）。
 func loadRolePermissionsForRoles(ctx context.Context, db *gorm.DB, roles []model.Role) error {
 	if len(roles) == 0 {
 		return nil
@@ -181,40 +192,57 @@ func loadRolePermissionsForRoles(ctx context.Context, db *gorm.DB, roles []model
 	return nil
 }
 
-type rolePermissionBinding struct {
-	RoleId       int64
-	PermissionId int64
-}
-
-// loadApplicationSummaries batch-loads application summaries for the given IDs.
-func loadApplicationSummaries(ctx context.Context, db *gorm.DB, ids []int64) (map[int64]*iam_v1.ApplicationSummary, error) {
-	if len(ids) == 0 {
-		return make(map[int64]*iam_v1.ApplicationSummary), nil
+// loadUsersRoles 批量加载多个用户的角色列表（列表页组装，禁 N+1，
+// 绕开 Preload 生成 SELECT *）。
+func loadUsersRoles(ctx context.Context, db *gorm.DB, users []model.User) error {
+	if len(users) == 0 {
+		return nil
 	}
-	seen := make(map[int64]struct{}, len(ids))
-	unique := make([]int64, 0, len(ids))
-	for _, id := range ids {
-		if _, exists := seen[id]; !exists {
-			seen[id] = struct{}{}
-			unique = append(unique, id)
-		}
+	userIds := make([]int64, 0, len(users))
+	for _, user := range users {
+		userIds = append(userIds, user.Id)
 	}
-	var applications []model.Application
+	var bindings []model.RUserRole
 	if err := db.WithContext(ctx).
-		Where(model.ApplicationColumnId+" IN ?", unique).
-		Select(model.ApplicationFields).
-		Find(&applications).Error; err != nil {
-		return nil, err
+		Where(model.RUserRoleColumnUserId+" IN ?", userIds).
+		Select(model.RUserRoleFields).
+		Find(&bindings).Error; err != nil {
+		return err
 	}
-	result := make(map[int64]*iam_v1.ApplicationSummary, len(applications))
-	for _, app := range applications {
-		result[app.Id] = &iam_v1.ApplicationSummary{
-			Id:            app.Id,
-			Name:          app.Name,
-			Code:          app.Code,
-			EnabledStatus: func() string { if app.Disabled == 0 { return "enabled" }; return "disabled" }(),
-			Description:   app.Description,
+	if len(bindings) == 0 {
+		for index := range users {
+			users[index].RoleList = []*model.Role{}
+		}
+		return nil
+	}
+	roleIds := make([]int64, 0, len(bindings))
+	bindingSeen := make(map[int64]struct{}, len(bindings))
+	for _, binding := range bindings {
+		if _, exists := bindingSeen[binding.RoleId]; exists {
+			continue
+		}
+		bindingSeen[binding.RoleId] = struct{}{}
+		roleIds = append(roleIds, binding.RoleId)
+	}
+	var roles []*model.Role
+	if err := db.WithContext(ctx).
+		Where(model.RoleColumnId+" IN ?", roleIds).
+		Select(model.RoleFields).
+		Find(&roles).Error; err != nil {
+		return err
+	}
+	roleById := make(map[int64]*model.Role, len(roles))
+	for _, role := range roles {
+		roleById[role.Id] = role
+	}
+	rolesByUser := make(map[int64][]*model.Role, len(users))
+	for _, binding := range bindings {
+		if role, exists := roleById[binding.RoleId]; exists {
+			rolesByUser[binding.UserId] = append(rolesByUser[binding.UserId], role)
 		}
 	}
-	return result, nil
+	for index := range users {
+		users[index].RoleList = rolesByUser[users[index].Id]
+	}
+	return nil
 }

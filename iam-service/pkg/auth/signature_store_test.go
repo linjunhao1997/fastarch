@@ -48,7 +48,7 @@ func seedStoreCredential(t *testing.T, store *SignatureStore, ak, sk string, sta
 		Id:              700,
 		AccessKey:       ak,
 		SecretKeyCipher: cipherText,
-		AccountId:       7,
+		UserId:          7,
 		Status:          status,
 		Version:         1,
 	}).Error; err != nil {

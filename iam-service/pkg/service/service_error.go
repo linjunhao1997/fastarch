@@ -6,7 +6,7 @@ import (
 	"google.golang.org/grpc/codes"
 )
 
-// Error 是业务错误：Code 为业务错误码，通过 grpclib.ErrorInterceptor 转成
+// Error 是业务错误：Code 为业务错误码，通过 grpclib ErrorInterceptor 转成
 // gRPC ErrorInfo 的 reason 透传给客户端；grpcCode 决定对应的 gRPC/HTTP 状态码。
 type Error struct {
 	Code     string
@@ -46,40 +46,29 @@ func NewErrorWithCode(code string, grpcCode codes.Code, err error) *Error {
 }
 
 var (
-	ErrInvalidAccountPassword           = NewErrorWithCode("1001001", codes.Unauthenticated, errors.New("invalid account password"))
-	ErrUpdateAccountBusy                = NewErrorWithCode("1001002", codes.FailedPrecondition, errors.New("update account busy"))
-	ErrApplicationReferenced            = NewErrorWithCode("1001003", codes.FailedPrecondition, errors.New("应用已被引用，请先解除引用"))
-	ErrEmailDuplicated                  = NewErrorWithCode("1001004", codes.AlreadyExists, errors.New("邮箱已被占用"))
-	ErrRoleCodeDuplicated               = NewErrorWithCode("1001005", codes.AlreadyExists, errors.New("角色编码已被占用"))
-	ErrPermissionCodeDuplicated         = NewErrorWithCode("1001006", codes.AlreadyExists, errors.New("权限编码已被占用"))
-	ErrAccountReferenced                = NewErrorWithCode("1001007", codes.FailedPrecondition, errors.New("账号已被绑定角色，请先解除绑定"))
-	ErrAccountDisabled                  = NewErrorWithCode("1001008", codes.PermissionDenied, errors.New("账号已禁用"))
-	ErrRoleReferenced                   = NewErrorWithCode("1001008", codes.FailedPrecondition, errors.New("角色已被账号绑定，请先解除绑定"))
-	ErrPermissionReferenced             = NewErrorWithCode("1001009", codes.FailedPrecondition, errors.New("权限已被角色引用，请先解除引用"))
-	ErrRoleNotFound                     = NewErrorWithCode("1001010", codes.InvalidArgument, errors.New("角色编码不存在"))
-	ErrPermissionNotFound               = NewErrorWithCode("1001011", codes.InvalidArgument, errors.New("权限编码不存在"))
-	ErrUpdateRoleBusy                   = NewErrorWithCode("1001012", codes.FailedPrecondition, errors.New("角色已被他人修改，请刷新后重试"))
-	ErrUpdatePermissionBusy             = NewErrorWithCode("1001013", codes.FailedPrecondition, errors.New("权限已被他人修改，请刷新后重试"))
-	ErrInvalidPermissionCode            = NewErrorWithCode("1001014", codes.InvalidArgument, errors.New("权限码格式不合法，须为 服务.模块.操作（如 iam.account.delete）"))
-	ErrResourceNotFound                 = NewErrorWithCode("1001017", codes.InvalidArgument, errors.New("资源不存在或未登记"))
-	ErrRoleAdminProtected               = NewErrorWithCode("1001018", codes.FailedPrecondition, errors.New("管理员角色为系统内置，禁止删除"))
-	ErrResourceApplicationRequired      = NewErrorWithCode("1001019", codes.InvalidArgument, errors.New("资源必须归属一个应用"))
-	ErrResourceApplicationInvalid       = NewErrorWithCode("1001020", codes.InvalidArgument, errors.New("资源所属应用不存在"))
-	ErrResourceParentInvalid            = NewErrorWithCode("1001021", codes.InvalidArgument, errors.New("父级资源无效或不属于同一应用"))
-	ErrResourceHierarchyCircular        = NewErrorWithCode("1001022", codes.InvalidArgument, errors.New("资源层级不能形成循环"))
-	ErrResourceKeyDuplicated            = NewErrorWithCode("1001023", codes.AlreadyExists, errors.New("资源键在该应用内已存在"))
-	ErrResourceHasChildren              = NewErrorWithCode("1001024", codes.FailedPrecondition, errors.New("资源存在子级，请先移除或移动子级资源"))
-	ErrResourceUpdateBusy               = NewErrorWithCode("1001026", codes.FailedPrecondition, errors.New("资源已被他人修改，请刷新后重试"))
-	ErrInvalidComponentKind             = NewErrorWithCode("1001032", codes.InvalidArgument, errors.New("组件类型不合法，须为 menu/page/button 之一"))
-	ErrApplicationRequired              = NewErrorWithCode("1001028", codes.InvalidArgument, errors.New("所属应用不能为空"))
-	ErrApplicationNotFound              = NewErrorWithCode("1001029", codes.InvalidArgument, errors.New("所属应用不存在"))
-	ErrResourceHierarchyDepthExceeded    = NewErrorWithCode("1001030", codes.InvalidArgument, errors.New("资源层级深度不能超过 5 层"))
-	ErrApplicationDisabled               = NewErrorWithCode("1001031", codes.FailedPrecondition, errors.New("应用已停用"))
+	ErrInvalidAccountPassword   = NewErrorWithCode("1001001", codes.Unauthenticated, errors.New("invalid account password"))
+	ErrUpdateAccountBusy        = NewErrorWithCode("1001002", codes.FailedPrecondition, errors.New("用户已被他人修改，请刷新后重试"))
+	ErrRoleCodeDuplicated       = NewErrorWithCode("1001005", codes.AlreadyExists, errors.New("角色编码已被占用"))
+	ErrPermissionCodeDuplicated = NewErrorWithCode("1001006", codes.AlreadyExists, errors.New("权限编码已被占用"))
+	ErrAccountReferenced        = NewErrorWithCode("1001007", codes.FailedPrecondition, errors.New("用户已被绑定角色，请先解除绑定"))
+	ErrAccountDisabled          = NewErrorWithCode("1001008", codes.PermissionDenied, errors.New("账号已禁用"))
+	ErrRoleReferenced           = NewErrorWithCode("1001008", codes.FailedPrecondition, errors.New("角色已被用户绑定，请先解除绑定"))
+	ErrPermissionReferenced     = NewErrorWithCode("1001009", codes.FailedPrecondition, errors.New("权限已被角色引用，请先解除引用"))
+	ErrRoleNotFound             = NewErrorWithCode("1001010", codes.InvalidArgument, errors.New("角色编码不存在"))
+	ErrPermissionNotFound       = NewErrorWithCode("1001011", codes.InvalidArgument, errors.New("权限编码不存在"))
+	ErrUpdateRoleBusy           = NewErrorWithCode("1001012", codes.FailedPrecondition, errors.New("角色已被他人修改，请刷新后重试"))
+	ErrUpdatePermissionBusy     = NewErrorWithCode("1001013", codes.FailedPrecondition, errors.New("权限已被他人修改，请刷新后重试"))
+	ErrInvalidPermissionCode    = NewErrorWithCode("1001014", codes.InvalidArgument, errors.New("权限码格式不合法，须为 服务.模块.操作（如 iam.user.delete）"))
+	ErrRoleAdminProtected       = NewErrorWithCode("1001018", codes.FailedPrecondition, errors.New("管理员角色为系统内置，禁止删除"))
+	ErrUsernameDuplicated       = NewErrorWithCode("1001027", codes.AlreadyExists, errors.New("用户名已被占用"))
+	ErrUsernameRequired         = NewErrorWithCode("1001046", codes.InvalidArgument, errors.New("用户名不能为空"))
 	// specs/009-ak-sk-auth 访问凭证域（1001040 起）
-	ErrAccessCredentialNotFound        = NewErrorWithCode("1001040", codes.NotFound, errors.New("访问凭证不存在"))
-	ErrAccessCredentialAccountInvalid  = NewErrorWithCode("1001041", codes.FailedPrecondition, errors.New("绑定账号不存在或已停用"))
-	ErrAccessCredentialLimitExceeded   = NewErrorWithCode("1001042", codes.ResourceExhausted, errors.New("该账号凭证数量已达上限"))
-	ErrAccessCredentialSkDecrypt       = NewErrorWithCode("1001043", codes.Internal, errors.New("凭证密钥解密失败，请检查加密密钥配置"))
-	ErrAccessCredentialUpdateBusy      = NewErrorWithCode("1001044", codes.FailedPrecondition, errors.New("凭证已被他人修改，请刷新后重试"))
-	ErrAccountReferencedByCredential   = NewErrorWithCode("1001045", codes.FailedPrecondition, errors.New("账号名下存在访问凭证，请先删除凭证"))
+	ErrAccessCredentialNotFound       = NewErrorWithCode("1001040", codes.NotFound, errors.New("访问凭证不存在"))
+	ErrAccessCredentialAccountInvalid = NewErrorWithCode("1001041", codes.FailedPrecondition, errors.New("绑定用户不存在或已停用"))
+	ErrAccessCredentialLimitExceeded  = NewErrorWithCode("1001042", codes.ResourceExhausted, errors.New("该用户凭证数量已达上限"))
+	ErrAccessCredentialSkDecrypt      = NewErrorWithCode("1001043", codes.Internal, errors.New("凭证密钥解密失败，请检查加密密钥配置"))
+	ErrAccessCredentialUpdateBusy     = NewErrorWithCode("1001044", codes.FailedPrecondition, errors.New("凭证已被他人修改，请刷新后重试"))
+	ErrAccountReferencedByCredential  = NewErrorWithCode("1001045", codes.FailedPrecondition, errors.New("用户名下存在访问凭证，请先删除凭证"))
+	// 011 模型迁移：组件资源模型已废弃，菜单改由 t_menu 承担（1001047）
+	ErrResourceModelDeprecated = NewErrorWithCode("1001047", codes.Unimplemented, errors.New("组件资源模型已废弃，资源管理请使用菜单接口"))
 )

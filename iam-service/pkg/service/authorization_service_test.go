@@ -2,9 +2,7 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"slices"
 	"testing"
 	"time"
@@ -34,8 +32,7 @@ func setupAuthorizationTestDB(t *testing.T) *gorm.DB {
 		t.Fatalf("get sqlite database: %v", err)
 	}
 	sqlDB.SetMaxOpenConns(1)
-	err = db.AutoMigrate(&model.Application{}, &model.Role{}, &model.Permission{}, &model.Account{}, &model.RAccountRole{}, &model.RRolePermission{}, &model.Resource{})
-	if err != nil {
+	if err := model.AutoMigrateModels(db); err != nil {
 		t.Fatalf("migrate sqlite: %v", err)
 	}
 	return db
@@ -44,11 +41,13 @@ func setupAuthorizationTestDB(t *testing.T) *gorm.DB {
 func createTestRole(t *testing.T, db *gorm.DB, id int64, code string, version int64) model.Role {
 	t.Helper()
 	role := model.Role{
-		Id:       id,
-		Name:     "role",
-		Code:     code,
-		Version:  version,
-		Disabled: false,
+		Id:         id,
+		Name:       "role",
+		Code:       code,
+		Version:    version,
+		Status:     model.StatusEnabled,
+		CreateTime: time.Now(),
+		UpdateTime: time.Now(),
 	}
 	if err := db.Create(&role).Error; err != nil {
 		t.Fatalf("create role: %v", err)
@@ -59,11 +58,14 @@ func createTestRole(t *testing.T, db *gorm.DB, id int64, code string, version in
 func createTestPermission(t *testing.T, db *gorm.DB, id int64, code string, version int64) model.Permission {
 	t.Helper()
 	permission := model.Permission{
-		Id:       id,
-		Name:     "permission",
-		Code:     code,
-		Version:  version,
-		Disabled: false,
+		Id:         id,
+		Name:       "permission",
+		Code:       code,
+		Version:    version,
+		Status:     model.StatusEnabled,
+		Type:       "api",
+		CreateTime: time.Now(),
+		UpdateTime: time.Now(),
 	}
 	if err := db.Create(&permission).Error; err != nil {
 		t.Fatalf("create permission: %v", err)
@@ -73,7 +75,6 @@ func createTestPermission(t *testing.T, db *gorm.DB, id int64, code string, vers
 
 func TestCreateRoleCodeUnique(t *testing.T) {
 	db := setupAuthorizationTestDB(t)
-	createTestApplication(t, db, 1, "iam")
 	createTestRole(t, db, 1, "role-code", 1)
 	service := NewAuthorizationService(db, nil)
 
@@ -137,9 +138,8 @@ func TestUpdatePermission(t *testing.T) {
 	service := NewAuthorizationService(db, nil)
 
 	_, err := service.CreatePermission(context.Background(), &iam_v1.CreatePermissionRequest{
-		ApplicationId: 1,
-		Name:          "duplicate",
-		Code:          permission.Code,
+		Name: "duplicate",
+		Code: permission.Code,
 	})
 	if err != ErrPermissionCodeDuplicated {
 		t.Fatalf("CreatePermission() error = %v, want %v", err, ErrPermissionCodeDuplicated)
@@ -195,29 +195,13 @@ func TestDeletePermission(t *testing.T) {
 
 func TestDeleteRole(t *testing.T) {
 	db := setupAuthorizationTestDB(t)
-	account := model.Account{
-		Id:         1,
-		Email:      "one@example.com",
-		CreateTime: time.Now(),
-		UpdateTime: time.Now(),
-	}
-	if err := db.Create(&account).Error; err != nil {
-		t.Fatalf("create account: %v", err)
-	}
-	application := model.Application{Id: 1, Code: constant.ApplicationCode, Name: "IAM", Disabled: 0}
-	if err := db.Create(&application).Error; err != nil {
-		t.Fatalf("create application: %v", err)
-	}
+	user := createTestUser(t, db, 1, "one", 1)
 	role := createTestRole(t, db, 1, "role-code", 1)
-	role.ApplicationId = application.Id
-	if err := db.Model(&role).Update("application_id", role.ApplicationId).Error; err != nil {
-		t.Fatalf("bind role application: %v", err)
-	}
 	permission := createTestPermission(t, db, 10, "iam.permission.list", 1)
 	if err := db.Model(&role).Association("PermissionList").Append(&permission); err != nil {
 		t.Fatalf("bind permission: %v", err)
 	}
-	if err := db.Model(&account).Association("RoleList").Append(&role); err != nil {
+	if err := db.Model(&user).Association("RoleList").Append(&role); err != nil {
 		t.Fatalf("bind role: %v", err)
 	}
 	service := NewAuthorizationService(db, nil)
@@ -225,7 +209,7 @@ func TestDeleteRole(t *testing.T) {
 	if _, err := service.DeleteRole(context.Background(), &iam_v1.DeleteRoleRequest{Id: role.Id}); err != ErrRoleReferenced {
 		t.Fatalf("DeleteRole() error = %v, want %v", err, ErrRoleReferenced)
 	}
-	if err := db.Model(&account).Association("RoleList").Delete(&role); err != nil {
+	if err := db.Model(&user).Association("RoleList").Delete(&role); err != nil {
 		t.Fatalf("unbind role: %v", err)
 	}
 	if _, err := service.DeleteRole(context.Background(), &iam_v1.DeleteRoleRequest{Id: role.Id}); err != nil {
@@ -246,15 +230,7 @@ func TestDeleteRole(t *testing.T) {
 
 func TestGetRolePermissionList(t *testing.T) {
 	db := setupAuthorizationTestDB(t)
-	application := model.Application{Id: 1, Code: constant.ApplicationCode, Name: "IAM", Disabled: 0}
-	if err := db.Create(&application).Error; err != nil {
-		t.Fatalf("create application: %v", err)
-	}
 	role := createTestRole(t, db, 1, "role-code", 1)
-	role.ApplicationId = application.Id
-	if err := db.Model(&role).Update("application_id", role.ApplicationId).Error; err != nil {
-		t.Fatalf("bind role application: %v", err)
-	}
 	permission := createTestPermission(t, db, 10, "iam.permission.list", 1)
 	if err := db.Model(&role).Association("PermissionList").Append(&permission); err != nil {
 		t.Fatalf("bind permission: %v", err)
@@ -276,30 +252,14 @@ func TestUpdateRoleInvalidatesBoundAccountsCache(t *testing.T) {
 	ctx := context.Background()
 	db := setupAuthorizationTestDB(t)
 	rdb, mr := setupTestRedis(t)
-	account := model.Account{
-		Id:         1,
-		Email:      "one@example.com",
-		CreateTime: time.Now(),
-		UpdateTime: time.Now(),
-	}
-	if err := db.Create(&account).Error; err != nil {
-		t.Fatalf("create account: %v", err)
-	}
-	application := model.Application{Id: 1, Code: constant.ApplicationCode, Name: "IAM", Disabled: 0}
-	if err := db.Create(&application).Error; err != nil {
-		t.Fatalf("create application: %v", err)
-	}
+	user := createTestUser(t, db, 1, "one", 1)
 	role := createTestRole(t, db, 1, "role-code", 1)
-	role.ApplicationId = application.Id
-	if err := db.Model(&role).Update("application_id", role.ApplicationId).Error; err != nil {
-		t.Fatalf("bind role application: %v", err)
-	}
 	permission := createTestPermission(t, db, 10, "iam.permission.list", 1)
-	if err := db.Model(&account).Association("RoleList").Append(&role); err != nil {
+	if err := db.Model(&user).Association("RoleList").Append(&role); err != nil {
 		t.Fatalf("bind role: %v", err)
 	}
 
-	boundKey := constant.GetAccountPermissionKey(account.Id)
+	boundKey := constant.GetAccountPermissionKey(user.Id)
 	unboundKey := constant.GetAccountPermissionKey(2)
 	for _, key := range []string{boundKey, unboundKey} {
 		if err := rdb.Set(ctx, key, "[]", time.Minute).Err(); err != nil {
@@ -331,7 +291,6 @@ func TestRoleAuditFields(t *testing.T) {
 	updateCtx := context.WithValue(context.Background(), "accountId", "43")
 	db := setupAuthorizationTestDB(t)
 	service := NewAuthorizationService(db, nil)
-	createTestApplication(t, db, 1, "IAM")
 
 	created, err := service.CreateRole(createCtx, &iam_v1.CreateRoleRequest{
 		ApplicationId: 1,
@@ -362,8 +321,8 @@ func TestRoleAuditFields(t *testing.T) {
 	if err := db.First(&got, roleId).Error; err != nil {
 		t.Fatalf("get role: %v", err)
 	}
-	if got.CreatedBy != 42 || got.UpdatedBy != 43 {
-		t.Fatalf("created_by/updated_by = %d/%d, want 42/43", got.CreatedBy, got.UpdatedBy)
+	if got.CreatedBy != "42" || got.UpdatedBy != "43" {
+		t.Fatalf("created_by/updated_by = %q/%q, want 42/43", got.CreatedBy, got.UpdatedBy)
 	}
 	if got.CreateTime.Unix() != created.CreateTime.AsTime().Unix() {
 		t.Fatalf("create_time = %v, want unchanged %v", got.CreateTime, created.CreateTime.AsTime())
@@ -419,8 +378,8 @@ func TestPermissionAuditFields(t *testing.T) {
 	if err := db.First(&got, permissionId).Error; err != nil {
 		t.Fatalf("get permission: %v", err)
 	}
-	if got.CreatedBy != 42 || got.UpdatedBy != 43 {
-		t.Fatalf("created_by/updated_by = %d/%d, want 42/43", got.CreatedBy, got.UpdatedBy)
+	if got.CreatedBy != "42" || got.UpdatedBy != "43" {
+		t.Fatalf("created_by/updated_by = %q/%q, want 42/43", got.CreatedBy, got.UpdatedBy)
 	}
 	if got.CreateTime.Unix() != created.CreateTime.AsTime().Unix() {
 		t.Fatalf("create_time = %v, want unchanged %v", got.CreateTime, created.CreateTime.AsTime())
@@ -465,14 +424,12 @@ func TestListPermissionsKeyword(t *testing.T) {
 	}
 }
 
-func TestListSubscriptionsKeyword(t *testing.T) {
+// 权限订阅域暂未落地（011 模型无订阅表）：返回 Unimplemented。
+func TestListSubscriptionsUnimplemented(t *testing.T) {
 	service := NewAuthorizationService(setupAuthorizationTestDB(t), nil)
-	response, err := service.ListSubscriptions(context.Background(), &iam_v1.ListSubscriptionsRequest{Keyword: "alpha"})
-	if err != nil {
-		t.Fatalf("ListSubscriptions() error = %v", err)
-	}
-	if response == nil {
-		t.Fatal("ListSubscriptions() response is nil")
+	_, err := service.ListSubscriptions(context.Background(), &iam_v1.ListSubscriptionsRequest{Keyword: "alpha"})
+	if err == nil {
+		t.Fatal("ListSubscriptions() should return Unimplemented error")
 	}
 }
 
@@ -488,7 +445,7 @@ func setupPermissionCodeEnv(t *testing.T) (*gorm.DB, *AuthorizationService, int6
 
 	role := createTestRole(t, db, 1, "role-code", 1)
 	for i, code := range []string{"iam.permission.list", "iam.role.list"} {
-		perm := model.Permission{Id: int64(100 + i), Name: code, Code: code, CreateTime: time.Now(), UpdateTime: time.Now()}
+		perm := model.Permission{Id: int64(100 + i), Name: code, Code: code, Status: model.StatusEnabled, CreateTime: time.Now(), UpdateTime: time.Now()}
 		if err := db.Create(&perm).Error; err != nil {
 			t.Fatalf("create permission: %v", err)
 		}
@@ -496,14 +453,11 @@ func setupPermissionCodeEnv(t *testing.T) (*gorm.DB, *AuthorizationService, int6
 			t.Fatalf("bind permission: %v", err)
 		}
 	}
-	account := model.Account{Id: 1, Email: "user@example.com", CreateTime: time.Now(), UpdateTime: time.Now()}
-	if err := db.Create(&account).Error; err != nil {
-		t.Fatalf("create account: %v", err)
-	}
-	if err := db.Model(&account).Association("RoleList").Append(&role); err != nil {
+	user := createTestUser(t, db, 1, "user", 1)
+	if err := db.Model(&user).Association("RoleList").Append(&role); err != nil {
 		t.Fatalf("bind role: %v", err)
 	}
-	return db, &AuthorizationService{db: db, rdb: rdb}, account.Id
+	return db, &AuthorizationService{db: db, rdb: rdb}, user.Id
 }
 
 // GetMyPermissions 返回纯权限码清单（011 裁决，无域前缀）。
@@ -524,7 +478,7 @@ func TestGetMyPermissionsReturnsPermissionCodes(t *testing.T) {
 // 停用角色后其权限码即时失效。
 func TestGetMyPermissionsExcludesDisabledRole(t *testing.T) {
 	db, service, accountId := setupPermissionCodeEnv(t)
-	if err := db.Model(model.Role{}).Where(model.RoleColumnId, 1).Update(model.RoleColumnDisabled, true).Error; err != nil {
+	if err := db.Model(model.Role{}).Where(model.RoleColumnId, 1).Update(model.RoleColumnStatus, model.StatusDisabled).Error; err != nil {
 		t.Fatalf("disable role: %v", err)
 	}
 	response, err := service.GetMyPermissions(auth.WithAccountId(context.Background(), accountId), &emptypb.Empty{})
@@ -553,7 +507,7 @@ func TestCheckPermissionMatchesCode(t *testing.T) {
 
 	// 未授权码
 	resp, err = service.CheckPermission(ctx, &iam_v1.CheckPermissionRequest{
-		PermissionCode: "iam.account.delete",
+		PermissionCode: "iam.user.delete",
 	})
 	if err != nil {
 		t.Fatalf("CheckPermission() error = %v", err)
@@ -585,22 +539,6 @@ func TestDeleteRoleRejectsAdminRole(t *testing.T) {
 }
 
 // ── 权限码 CRUD ──
-
-func createTestResource(t *testing.T, db *gorm.DB, id int64, kind, key, name string) model.Resource {
-	t.Helper()
-	resource := model.Resource{
-		Id:         id,
-		Kind:       kind,
-		Key:        key,
-		Name:       name,
-		CreateTime: time.Now(),
-		UpdateTime: time.Now(),
-	}
-	if err := db.Create(&resource).Error; err != nil {
-		t.Fatalf("create resource: %v", err)
-	}
-	return resource
-}
 
 func TestCreatePermissionValidatesCodeFormat(t *testing.T) {
 	db := setupAuthorizationTestDB(t)
@@ -649,210 +587,71 @@ func TestCreatePermissionCodeDuplicated(t *testing.T) {
 	}
 }
 
-func TestListResourcesFilterAndPagination(t *testing.T) {
+// 组件资源模型已废弃：资源 CRUD 与资源树接口一律返回 Unimplemented 语义错误。
+func TestResourceMethodsDeprecated(t *testing.T) {
 	db := setupAuthorizationTestDB(t)
-	for i := 1; i <= 5; i++ {
-		createTestResource(t, db, int64(i), model.ComponentKindMenu, fmt.Sprintf("iam.menu.%d", i), fmt.Sprintf("菜单%d", i))
-	}
-	createTestResource(t, db, 6, model.ComponentKindPage, "iam.page.a", "页面A")
 	service := NewAuthorizationService(db, nil)
 	ctx := context.Background()
 
-	resp, err := service.ListResources(ctx, &iam_v1.ListResourcesRequest{Kind: model.ComponentKindMenu, CurrentPage: 1, PageSize: 2})
-	if err != nil {
-		t.Fatalf("ListResources() error = %v", err)
+	if _, err := service.CreateResource(ctx, &iam_v1.CreateResourceRequest{}); !errors.Is(err, ErrResourceModelDeprecated) {
+		t.Fatalf("CreateResource() error = %v, want ErrResourceModelDeprecated", err)
 	}
-	if len(resp.Resources) != 2 {
-		t.Fatalf("ListResources(page_size=2) len = %d, want 2", len(resp.Resources))
+	if _, err := service.GetResource(ctx, &common_v1.GetRequest{Id: 1}); !errors.Is(err, ErrResourceModelDeprecated) {
+		t.Fatalf("GetResource() error = %v, want ErrResourceModelDeprecated", err)
 	}
-	if resp.Page == nil || resp.Page.Total != 5 {
-		t.Fatalf("ListResources() page = %+v, want total 5", resp.Page)
+	if _, err := service.UpdateResource(ctx, &iam_v1.UpdateResourceRequest{}); !errors.Is(err, ErrResourceModelDeprecated) {
+		t.Fatalf("UpdateResource() error = %v, want ErrResourceModelDeprecated", err)
 	}
-
-	resp, err = service.ListResources(ctx, &iam_v1.ListResourcesRequest{Kind: model.ComponentKindPage})
-	if err != nil {
-		t.Fatalf("ListResources() error = %v", err)
+	if _, err := service.DeleteResource(ctx, &iam_v1.DeleteResourceRequest{}); !errors.Is(err, ErrResourceModelDeprecated) {
+		t.Fatalf("DeleteResource() error = %v, want ErrResourceModelDeprecated", err)
 	}
-	if len(resp.Resources) != 1 || resp.Resources[0].Kind != model.ComponentKindPage {
-		t.Fatalf("ListResources(kind=page) = %+v", resp.Resources)
+	if _, err := service.ListResources(ctx, &iam_v1.ListResourcesRequest{}); !errors.Is(err, ErrResourceModelDeprecated) {
+		t.Fatalf("ListResources() error = %v, want ErrResourceModelDeprecated", err)
 	}
-}
-
-func TestListResourcesApplicationIdFilter(t *testing.T) {
-	db := setupAuthorizationTestDB(t)
-	createMenuResource(t, db, 1, 1, nil, "iam.app1.a", "应用1菜单A", 0, nil)
-	createMenuResource(t, db, 2, 1, nil, "iam.app1.b", "应用1菜单B", 0, nil)
-	createMenuResource(t, db, 3, 2, nil, "iam.app2.a", "应用2菜单A", 0, nil)
-	service := NewAuthorizationService(db, nil)
-	ctx := context.Background()
-
-	resp, err := service.ListResources(ctx, &iam_v1.ListResourcesRequest{ApplicationId: 1})
-	if err != nil {
-		t.Fatalf("ListResources() error = %v", err)
-	}
-	if len(resp.Resources) != 2 || resp.Page == nil || resp.Page.Total != 2 {
-		t.Fatalf("ListResources(application_id=1) = %+v, page = %+v", resp.Resources, resp.Page)
-	}
-	for _, r := range resp.Resources {
-		if r.ApplicationId != 1 {
-			t.Fatalf("ListResources(application_id=1) contains resource %s with application_id %d", r.Id, r.ApplicationId)
-		}
-	}
-
-	// 不传 application_id 保持全局行为
-	resp, err = service.ListResources(ctx, &iam_v1.ListResourcesRequest{})
-	if err != nil {
-		t.Fatalf("ListResources() error = %v", err)
-	}
-	if resp.Page == nil || resp.Page.Total != 3 {
-		t.Fatalf("ListResources() page = %+v, want total 3", resp.Page)
+	if _, err := service.ListResourceTree(ctx, &iam_v1.ListResourceTreeRequest{}); !errors.Is(err, ErrResourceModelDeprecated) {
+		t.Fatalf("ListResourceTree() error = %v, want ErrResourceModelDeprecated", err)
 	}
 }
 
-// ── 组件资源的权限码绑定 CRUD ──
+// ── 我的菜单树（011 模型：t_menu + t_r_role_menu 角色绑定，管理员全量）──
 
-func TestCreateResourceValidatesKindAndCodes(t *testing.T) {
-	db := setupAuthorizationTestDB(t)
-	createTestApplication(t, db, 1, "iam")
-	service := NewAuthorizationService(db, nil)
-	ctx := context.Background()
-
-	if _, err := service.CreateResource(ctx, &iam_v1.CreateResourceRequest{
-		ApplicationId: 1, Kind: "bogus", Key: "iam.page.x", Name: "X",
-	}); !errors.Is(err, ErrInvalidComponentKind) {
-		t.Fatalf("CreateResource(kind=bogus) error = %v, want ErrInvalidComponentKind", err)
-	}
-	if _, err := service.CreateResource(ctx, &iam_v1.CreateResourceRequest{
-		ApplicationId: 1, Kind: model.ComponentKindPage, Key: "iam.page.x", Name: "X",
-		PermissionCodeList: []string{"not a code"},
-	}); !errors.Is(err, ErrInvalidPermissionCode) {
-		t.Fatalf("CreateResource(bad code) error = %v, want ErrInvalidPermissionCode", err)
-	}
-
-	created, err := service.CreateResource(ctx, &iam_v1.CreateResourceRequest{
-		ApplicationId: 1, Kind: model.ComponentKindPage, Key: "iam.page.x", Name: "X",
-		PermissionCodeList: []string{"iam.account.list", "iam.account.get"},
-	})
-	if err != nil {
-		t.Fatalf("CreateResource() error = %v", err)
-	}
-	if len(created.PermissionCodeList) != 2 {
-		t.Fatalf("PermissionCodeList = %v, want 2 codes", created.PermissionCodeList)
-	}
-}
-
-func TestUpdateResourceReplacesPermissionCodes(t *testing.T) {
-	db := setupAuthorizationTestDB(t)
-	createTestApplication(t, db, 1, "iam")
-	service := NewAuthorizationService(db, nil)
-	ctx := context.Background()
-
-	created, err := service.CreateResource(ctx, &iam_v1.CreateResourceRequest{
-		ApplicationId: 1, Kind: model.ComponentKindPage, Key: "iam.page.y", Name: "Y",
-		PermissionCodeList: []string{"iam.account.list"},
-	})
-	if err != nil {
-		t.Fatalf("CreateResource() error = %v", err)
-	}
-	// 替换式更新：[account.list] → [role.list, role.get]
-	updated, err := service.UpdateResource(ctx, &iam_v1.UpdateResourceRequest{
-		Id:                 cast.ToInt64(created.Id),
-		Version:            created.Version,
-		PermissionCodeList: []string{"iam.role.list", "iam.role.get"},
-	})
-	if err != nil {
-		t.Fatalf("UpdateResource() error = %v", err)
-	}
-	if !slices.Equal(updated.PermissionCodeList, []string{"iam.role.list", "iam.role.get"}) {
-		t.Fatalf("PermissionCodeList = %v, want [iam.role.list iam.role.get]", updated.PermissionCodeList)
-	}
-
-	// 提供空清单即解绑全部权限码
-	cleared, err := service.UpdateResource(ctx, &iam_v1.UpdateResourceRequest{
-		Id:                 cast.ToInt64(created.Id),
-		Version:            updated.Version,
-		PermissionCodeList: []string{},
-	})
-	if err != nil {
-		t.Fatalf("UpdateResource(clear) error = %v", err)
-	}
-	if len(cleared.PermissionCodeList) != 0 {
-		t.Fatalf("PermissionCodeList = %v, want empty", cleared.PermissionCodeList)
-	}
-
-	// 未提供（nil）不触碰既有绑定：先恢复绑定再仅改名
-	if _, err := service.UpdateResource(ctx, &iam_v1.UpdateResourceRequest{
-		Id:                 cast.ToInt64(created.Id),
-		Version:            cleared.Version,
-		PermissionCodeList: []string{"iam.role.list"},
-	}); err != nil {
-		t.Fatalf("UpdateResource(restore) error = %v", err)
-	}
-	renamed, err := service.UpdateResource(ctx, &iam_v1.UpdateResourceRequest{
-		Id:      cast.ToInt64(created.Id),
-		Version: cleared.Version + 1,
-		Name:    "Y2",
-	})
-	if err != nil {
-		t.Fatalf("UpdateResource(rename) error = %v", err)
-	}
-	if len(renamed.PermissionCodeList) != 1 || renamed.PermissionCodeList[0] != "iam.role.list" {
-		t.Fatalf("PermissionCodeList after rename = %v, want [iam.role.list]", renamed.PermissionCodeList)
-	}
-}
-
-// ── 我的菜单树（组件可见性按权限码交集判定）──
-
-func createMenuResource(t *testing.T, db *gorm.DB, id int64, applicationId int64, parentId *int64, key, name string, displayOrder int32, permissionCodes []string) model.Resource {
-	t.Helper()
-	now := time.Now()
-	resource := model.Resource{
-		Id:              id,
-		ApplicationId:   applicationId,
-		ParentId:        parentId,
-		Kind:            model.ComponentKindMenu,
-		Key:             key,
-		Name:            name,
-		PermissionCodes: permissionCodes,
-		DisplayOrder:    displayOrder,
-		CreateTime:      now,
-		UpdateTime:      now,
-		Version:         1,
-	}
-	if err := db.Create(&resource).Error; err != nil {
-		t.Fatalf("create menu resource: %v", err)
-	}
-	return resource
-}
-
-func setPermissionSnapshot(t *testing.T, rdb *redis.Client, accountId int64, keys []string) {
-	t.Helper()
-	raw, err := json.Marshal(keys)
-	if err != nil {
-		t.Fatalf("marshal snapshot: %v", err)
-	}
-	if err := rdb.Set(context.Background(), constant.GetAccountPermissionKey(accountId), raw, time.Minute).Err(); err != nil {
-		t.Fatalf("set snapshot: %v", err)
-	}
-}
-
-func setupMenuTreeFixture(t *testing.T) (*gorm.DB, *redis.Client, model.Application) {
+// setupMenuTreeFixture 构造菜单树测试环境（sqlite + miniredis）。
+func setupMenuTreeFixture(t *testing.T) (*gorm.DB, *redis.Client) {
 	t.Helper()
 	db := setupAuthorizationTestDB(t)
 	rdb, _ := setupTestRedis(t)
+	return db, rdb
+}
+
+// bindRoleMenus 建立角色-菜单绑定（t_r_role_menu）。
+func bindRoleMenus(t *testing.T, db *gorm.DB, roleId int64, menuIds []int64) {
+	t.Helper()
+	for _, menuId := range menuIds {
+		if err := db.Create(&model.RRoleMenu{RoleId: roleId, MenuId: menuId}).Error; err != nil {
+			t.Fatalf("bind role menu: %v", err)
+		}
+	}
+}
+
+func createMenuRow(t *testing.T, db *gorm.DB, id int64, parentId int64, path, name string, sort int32, permissionCode string) model.Menu {
+	t.Helper()
 	now := time.Now()
-	app := model.Application{
-		Id:         500,
-		Code:       "500",
-		Name:       "菜单应用",
-		Disabled:   0,
-		CreateTime: now,
-		UpdateTime: now,
+	menu := model.Menu{
+		Id:             id,
+		ParentId:       parentId,
+		Path:           path,
+		Name:           name,
+		Sort:           sort,
+		PermissionCode: permissionCode,
+		Status:         model.StatusEnabled,
+		Version:        1,
+		CreateTime:     now,
+		UpdateTime:     now,
 	}
-	if err := db.Create(&app).Error; err != nil {
-		t.Fatalf("create application: %v", err)
+	if err := db.Create(&menu).Error; err != nil {
+		t.Fatalf("create menu: %v", err)
 	}
-	return db, rdb, app
+	return menu
 }
 
 func collectMenuKeys(nodes []*iam_v1.ResourceTreeNode) map[string]bool {
@@ -868,85 +667,93 @@ func collectMenuKeys(nodes []*iam_v1.ResourceTreeNode) map[string]bool {
 	return out
 }
 
-// 普通用户：绑定码与用户权限码存在交集的组件可见，未绑定码的组件全员可见；
-// 命中节点的祖先路径一并返回。
-func TestListMyMenuTreePermissionFiltering(t *testing.T) {
-	db, rdb, app := setupMenuTreeFixture(t)
-	root := createMenuResource(t, db, 1, app.Id, nil, "account_management", "账号管理", 1, nil)
-	rootId := root.Id
-	// 子级 page 绑定 iam.account.list，用户持有 → 可见
-	createMenuResource(t, db, 2, app.Id, &rootId, "account_management.account_list", "用户列表", 1, []string{"iam.account.list"})
-	// 未绑定码的组件全员可见
-	createMenuResource(t, db, 3, app.Id, nil, "authentication_management", "认证管理", 2, nil)
-	// 绑定了用户不持有码的组件不可见
-	createMenuResource(t, db, 4, app.Id, nil, "application_management", "应用管理", 3, []string{"iam.application.list"})
-	setPermissionSnapshot(t, rdb, 2, []string{"iam.account.list"})
+// 普通用户：可见菜单为其角色绑定的菜单；命中节点的祖先路径一并返回。
+func TestListMyMenuTreeRoleBindingFiltering(t *testing.T) {
+	db, rdb := setupMenuTreeFixture(t)
+	// 根菜单 + 两个子菜单
+	createMenuRow(t, db, 1, 0, "account_management", "账号管理", 1, "")
+	createMenuRow(t, db, 2, 1, "account_management.account_list", "用户列表", 1, "iam.user.list")
+	createMenuRow(t, db, 3, 1, "account_management.application_list", "应用列表", 2, "iam.application.list")
+	createMenuRow(t, db, 4, 0, "isolated", "孤立菜单", 3, "")
+
+	user := createTestUser(t, db, 2, "viewer", 1)
+	role := createTestRole(t, db, 10, "viewer-role", 1)
+	// 用户绑定角色，角色绑定用户列表菜单（子菜单）：祖先路径应回补
+	if err := db.Create(&model.RUserRole{UserId: user.Id, RoleId: role.Id}).Error; err != nil {
+		t.Fatalf("bind user role: %v", err)
+	}
+	bindRoleMenus(t, db, role.Id, []int64{2})
 
 	service := NewAuthorizationService(db, rdb)
-	resp, err := service.ListMyMenuTree(auth.WithAccountId(context.Background(), 2), &iam_v1.ListMyMenuTreeRequest{ApplicationId: app.Id})
+	resp, err := service.ListMyMenuTree(auth.WithAccountId(context.Background(), user.Id), &iam_v1.ListMyMenuTreeRequest{})
 	if err != nil {
 		t.Fatalf("ListMyMenuTree() error = %v", err)
 	}
 
 	keys := collectMenuKeys(resp.Roots)
 	if !keys["account_management"] || !keys["account_management.account_list"] {
-		t.Fatalf("permitted component + ancestors missing: %v", keys)
+		t.Fatalf("bound menu + ancestors missing: %v", keys)
 	}
-	if !keys["authentication_management"] {
-		t.Fatalf("code-free component should be visible to all: %v", keys)
-	}
-	if keys["application_management"] {
-		t.Fatalf("component bound to unheld code visible: %v", keys)
+	// 未绑定菜单不可见
+	if keys["account_management.application_list"] || keys["isolated"] {
+		t.Fatalf("unbound menu visible: %v", keys)
 	}
 }
 
-// 管理员与普通用户同受权限码约束：无管理员全量可见分支。
-func TestListMyMenuTreeAdminFollowsPermissions(t *testing.T) {
-	db, rdb, app := setupMenuTreeFixture(t)
-	createMenuResource(t, db, 1, app.Id, nil, "account_management", "账号管理", 1, []string{"iam.account.list"})
-	createMenuResource(t, db, 2, app.Id, nil, "application_management", "应用管理", 2, []string{"iam.application.list"})
-	setPermissionSnapshot(t, rdb, 2, []string{"iam.account.list"})
+// 管理员全量可见启用菜单（无需角色绑定）。
+func TestListMyMenuTreeAdminFull(t *testing.T) {
+	db, rdb := setupMenuTreeFixture(t)
+	createMenuRow(t, db, 1, 0, "account_management", "账号管理", 1, "")
+	createMenuRow(t, db, 2, 1, "account_management.account_list", "用户列表", 1, "iam.user.list")
 
 	service := NewAuthorizationService(db, rdb)
 	resp, err := service.ListMyMenuTree(
 		auth.WithAdmin(auth.WithAccountId(context.Background(), 2)),
-		&iam_v1.ListMyMenuTreeRequest{ApplicationId: app.Id},
+		&iam_v1.ListMyMenuTreeRequest{},
 	)
 	if err != nil {
 		t.Fatalf("ListMyMenuTree() error = %v", err)
 	}
 	keys := collectMenuKeys(resp.Roots)
-	if !keys["account_management"] {
-		t.Fatalf("permitted component missing for admin: %v", keys)
-	}
-	if keys["application_management"] {
-		t.Fatalf("component bound to unheld code visible for admin: %v", keys)
+	if len(keys) != 2 || !keys["account_management"] || !keys["account_management.account_list"] {
+		t.Fatalf("admin should see all enabled menus: %v", keys)
 	}
 }
 
-// 应用停用：业务错误拒绝
-func TestListMyMenuTreeDisabledApplication(t *testing.T) {
-	db, rdb, app := setupMenuTreeFixture(t)
-	if err := db.Model(&model.Application{}).Where(model.ApplicationColumnId, app.Id).
-		Update(model.ApplicationColumnDisabled, 1).Error; err != nil {
-		t.Fatalf("disable application: %v", err)
+// 停用菜单对管理员也不可见。
+func TestListMyMenuTreeExcludesDisabledMenu(t *testing.T) {
+	db, rdb := setupMenuTreeFixture(t)
+	createMenuRow(t, db, 1, 0, "enabled_menu", "启用菜单", 1, "")
+	disabled := createMenuRow(t, db, 2, 0, "disabled_menu", "停用菜单", 2, "")
+	if err := db.Model(model.Menu{}).Where(model.MenuColumnId, disabled.Id).
+		Update(model.MenuColumnStatus, model.StatusDisabled).Error; err != nil {
+		t.Fatalf("disable menu: %v", err)
 	}
 
 	service := NewAuthorizationService(db, rdb)
-	_, err := service.ListMyMenuTree(auth.WithAccountId(context.Background(), 2), &iam_v1.ListMyMenuTreeRequest{ApplicationId: app.Id})
-	if err != ErrApplicationDisabled {
-		t.Fatalf("ListMyMenuTree() error = %v, want ErrApplicationDisabled", err)
+	resp, err := service.ListMyMenuTree(
+		auth.WithAdmin(auth.WithAccountId(context.Background(), 2)),
+		&iam_v1.ListMyMenuTreeRequest{},
+	)
+	if err != nil {
+		t.Fatalf("ListMyMenuTree() error = %v", err)
+	}
+	keys := collectMenuKeys(resp.Roots)
+	if keys["disabled_menu"] {
+		t.Fatalf("disabled menu should be hidden: %v", keys)
+	}
+	if !keys["enabled_menu"] {
+		t.Fatalf("enabled menu missing: %v", keys)
 	}
 }
 
-// 空组件清单：返回空 roots 而非报错
+// 空绑定：返回空 roots 而非报错。
 func TestListMyMenuTreeEmpty(t *testing.T) {
-	db, rdb, app := setupMenuTreeFixture(t)
-	// 读穿回源需要账号存在（正常调用链中 JWT 已保证）
-	createTestAccount(t, db, 2, "viewer@example.com", 1)
+	db, rdb := setupMenuTreeFixture(t)
+	createTestUser(t, db, 2, "viewer", 1)
 
 	service := NewAuthorizationService(db, rdb)
-	resp, err := service.ListMyMenuTree(auth.WithAccountId(context.Background(), 2), &iam_v1.ListMyMenuTreeRequest{ApplicationId: app.Id})
+	resp, err := service.ListMyMenuTree(auth.WithAccountId(context.Background(), 2), &iam_v1.ListMyMenuTreeRequest{})
 	if err != nil {
 		t.Fatalf("ListMyMenuTree() error = %v", err)
 	}

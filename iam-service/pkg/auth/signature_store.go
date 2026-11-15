@@ -120,7 +120,7 @@ func (s *SignatureStore) Authenticate(ctx context.Context, md metadata.MD) (int6
 
 	s.touchLastUsed(credential)
 
-	return credential.AccountId, nil
+	return credential.UserId, nil
 }
 
 // touchLastUsed 节流更新 last_used_time（R6）：Redis SETNX EX 60 控制每凭证每分钟

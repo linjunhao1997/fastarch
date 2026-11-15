@@ -14,7 +14,3 @@ func (r *RRolePermission) TableName() string {
 var RRolePermissionFields = []string{
 	RRolePermissionColumnId, RRolePermissionColumnRoleId, RRolePermissionColumnPermissionId,
 }
-
-func init() {
-	migrate(RRolePermission{})
-}

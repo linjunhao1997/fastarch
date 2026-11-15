@@ -23,12 +23,7 @@ func setupApplicationTestDB(t *testing.T) *gorm.DB {
 		t.Fatalf("get sqlite database: %v", err)
 	}
 	sqlDB.SetMaxOpenConns(1)
-	err = db.Migrator().DropTable(&model.Role{}, &model.Permission{}, &model.Application{})
-	if err != nil {
-		t.Fatalf("clean tables: %v", err)
-	}
-	err = db.AutoMigrate(&model.Application{}, &model.Role{}, &model.Permission{}, &model.Account{}, &model.RAccountApplication{})
-	if err != nil {
+	if err := model.AutoMigrateModels(db); err != nil {
 		t.Fatalf("migrate sqlite: %v", err)
 	}
 	return db
@@ -39,9 +34,10 @@ func createTestApplication(t *testing.T, db *gorm.DB, id int64, name string) mod
 	now := time.Now()
 	app := model.Application{
 		Id:         id,
-		Code:       "app-code",
+		AppId:      "app-code",
 		Name:       name,
-		Disabled:   0,
+		Status:     model.StatusEnabled,
+		Version:    1,
 		CreateTime: now,
 		UpdateTime: now,
 	}
@@ -73,8 +69,8 @@ func TestUpdateApplication(t *testing.T) {
 
 			service := NewApplicationService(db)
 			_, err := service.UpdateApplication(context.Background(), &iam_v1.UpdateApplicationRequest{
-				Id:          test.id,
-				Description: "updated",
+				Id:   test.id,
+				Name: "updated",
 			})
 			if (err != nil) != test.wantErr {
 				t.Fatalf("UpdateApplication() error = %v, wantErr %v", err, test.wantErr)
@@ -101,26 +97,18 @@ func TestDeleteApplication(t *testing.T) {
 	tests := []struct {
 		name       string
 		id         int64
-		withRef    bool
 		wantErr    bool
 		wantErrMsg string
 	}{
-		{name: "unreferenced application is deleted", id: 1, wantErr: false},
-		{name: "referenced application is rejected", id: 2, withRef: true, wantErr: true, wantErrMsg: "应用已被引用，请先解除引用"},
+		{name: "existing application is deleted", id: 1, wantErr: false},
 		{name: "missing application is rejected", id: 999, wantErr: true, wantErrMsg: "record not found"},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			db := setupApplicationTestDB(t)
-			if test.id == 1 || test.id == 2 {
+			if test.id == 1 {
 				createTestApplication(t, db, test.id, "应用")
-			}
-			if test.withRef {
-				role := model.Role{Id: 10, ApplicationId: test.id}
-				if err := db.Create(&role).Error; err != nil {
-					t.Fatalf("create role reference: %v", err)
-				}
 			}
 
 			service := NewApplicationService(db)
@@ -139,7 +127,7 @@ func TestDeleteApplication(t *testing.T) {
 				t.Fatalf("count application: %v", err)
 			}
 			wantCount := int64(1)
-			if test.id == 1 && !test.wantErr || test.id == 999 {
+			if test.id == 1 || test.id == 999 {
 				wantCount = 0
 			}
 			if count != wantCount {
@@ -162,45 +150,21 @@ func TestDeleteApplicationRepeated(t *testing.T) {
 	}
 }
 
-// ---- specs/008-account-app-context：应用删除时账号关联拦截（T009）----
-
-func TestDeleteApplicationBlockedByAccountAssociation(t *testing.T) {
+// 011 模型：AppCode 映射 app_id，服务端生成（krand 雪花 id 字符串化）。
+func TestCreateApplicationGeneratesAppId(t *testing.T) {
 	db := setupApplicationTestDB(t)
-	if err := db.AutoMigrate(&model.Account{}, &model.RAccountApplication{}); err != nil {
-		t.Fatalf("migrate account tables: %v", err)
-	}
-	app := createTestApplication(t, db, 201, "被关联应用")
-	now := time.Now()
-	account := model.Account{
-		Id:         1,
-		Code:       "acc",
-		Name:       "account",
-		Email:      "acc@example.com",
-		Status:     "enabled",
-		Kind:       model.AccountKindIdUser,
-		CreateTime: now,
-		UpdateTime: now,
-		Version:    1,
-	}
-	if err := db.Create(&account).Error; err != nil {
-		t.Fatalf("create account: %v", err)
-	}
-	association := model.RAccountApplication{AccountId: account.Id, ApplicationId: app.Id}
-	if err := db.Create(&association).Error; err != nil {
-		t.Fatalf("create association: %v", err)
-	}
-
 	service := NewApplicationService(db)
-	_, err := service.DeleteApplication(context.Background(), &iam_v1.DeleteApplicationRequest{Id: app.Id})
-	if err != ErrApplicationReferenced {
-		t.Fatalf("DeleteApplication() error = %v, want ErrApplicationReferenced", err)
-	}
 
-	var count int64
-	if err := db.Model(&model.Application{}).Where(model.ApplicationColumnId, app.Id).Count(&count).Error; err != nil {
-		t.Fatalf("count applications: %v", err)
+	created, err := service.CreateApplication(context.Background(), &iam_v1.CreateApplicationRequest{
+		Name: "新应用",
+	})
+	if err != nil {
+		t.Fatalf("CreateApplication() error = %v", err)
 	}
-	if count != 1 {
-		t.Fatalf("application was deleted despite account association")
+	if created.AppCode == "" {
+		t.Fatal("AppCode should be generated server-side")
+	}
+	if created.EnabledStatus != model.StatusEnabled {
+		t.Fatalf("EnabledStatus = %q, want enabled by default", created.EnabledStatus)
 	}
 }

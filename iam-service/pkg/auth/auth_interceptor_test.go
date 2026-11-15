@@ -230,7 +230,7 @@ func seedTestCredential(t *testing.T, store *SignatureStore, ak, sk, status stri
 		Id:              accountId + 1000,
 		AccessKey:       ak,
 		SecretKeyCipher: cipherText,
-		AccountId:       accountId,
+		UserId:          accountId,
 		Status:          status,
 		ExpireTime:      expire,
 		Version:         1,
@@ -243,13 +243,13 @@ func seedTestCredential(t *testing.T, store *SignatureStore, ak, sk, status stri
 // signedMetadata 按签名规范构造已签名请求元数据。
 func signedMetadata(ak, sk, method, uri, query, body string, timestamp, nonce string) metadata.MD {
 	md := metadata.New(map[string]string{
-		MetadataAccessKey:     ak,
-		MetadataTimestamp:     timestamp,
-		MetadataNonce:         nonce,
+		MetadataAccessKey:      ak,
+		MetadataTimestamp:      timestamp,
+		MetadataNonce:          nonce,
 		MetadataOriginalMethod: method,
-		MetadataOriginalURI:   uri,
-		MetadataOriginalQuery: query,
-		MetadataBodyDigest:    SHA256Hex([]byte(body)),
+		MetadataOriginalURI:    uri,
+		MetadataOriginalQuery:  query,
+		MetadataBodyDigest:     SHA256Hex([]byte(body)),
 	})
 	sts := BuildStringToSign(method, uri, CanonicalizeQuery(query), ak, timestamp, nonce, SHA256Hex([]byte(body)))
 	md.Set(MetadataSignature, ComputeSignatureHex(sts, sk))
