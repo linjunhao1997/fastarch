@@ -1,10 +1,25 @@
 ﻿import { useEffect, useState } from "react";
-import { Form, Input, Button, Select, message } from "antd";
+import { Button, Card, Form, Input, Select, Space, Tree, message } from "antd";
 import { useNavigate, useParams } from "react-router";
-import { permissionApi, roleApi } from "../../api/iam";
+import { menuApi, permissionApi, roleApi } from "../../api/iam";
 import { useApiErrorNotification } from "../../hooks/useApiError";
 import { useSubmitLock } from "../../hooks/useSubmitLock";
 import { ACTIONS } from "../../types/copywriting";
+import type { MenuTreeNode } from "../../types";
+
+/** 菜单树 → antd Tree 数据（key = menu.id） */
+interface MenuTreeData {
+  key: string;
+  title: string;
+  children?: MenuTreeData[];
+}
+
+const toTreeData = (nodes: MenuTreeNode[]): MenuTreeData[] =>
+  nodes.map((node) => ({
+    key: node.menu.id,
+    title: node.menu.name,
+    children: node.children.length > 0 ? toTreeData(node.children) : undefined,
+  }));
 
 export default function EditRolePage() {
   const navigate = useNavigate();
@@ -16,6 +31,12 @@ export default function EditRolePage() {
   const [version, setVersion] = useState<number>(0);
   const [currentPermissionCodes, setCurrentPermissionCodes] = useState<string[]>([]);
   const [permissionOptions, setPermissionOptions] = useState<{ label: string; value: string }[]>([]);
+
+  // 菜单绑定（t_r_role_menu）：全量覆盖语义，独立于基本信息表单保存
+  const [menuTreeData, setMenuTreeData] = useState<MenuTreeData[]>([]);
+  const [checkedMenuKeys, setCheckedMenuKeys] = useState<string[]>([]);
+  const [menuBindingLoading, setMenuBindingLoading] = useState(true);
+  const { isSubmitting: isMenuSubmitting, run: runMenu } = useSubmitLock();
 
   useEffect(() => {
     const fetchRole = async () => {
@@ -53,6 +74,33 @@ export default function EditRolePage() {
     fetchPermissions();
   }, [showNotification]);
 
+  useEffect(() => {
+    if (!id) return;
+    const fetchMenuBinding = async () => {
+      try {
+        const [tree, bound] = await Promise.all([
+          menuApi.listTree(),
+          menuApi.listRoleMenus(id),
+        ]);
+        setMenuTreeData(toTreeData(tree.roots || []));
+        setCheckedMenuKeys(bound.menuIds || []);
+      } catch (error) {
+        showNotification(error, "获取菜单绑定失败");
+      } finally {
+        setMenuBindingLoading(false);
+      }
+    };
+    fetchMenuBinding();
+  }, [id, showNotification]);
+
+  const onSaveMenuBinding = () => {
+    if (!id) return;
+    runMenu(async () => {
+      await menuApi.updateRoleMenus(id, checkedMenuKeys);
+      message.success("菜单绑定保存成功");
+    }).catch((error) => showNotification(error, "菜单绑定保存失败"));
+  };
+
   const onFinish = async (values: { name: string; enabledStatus: string; permissionCodeList?: string[] }) => {
     if (!id) return;
     run(async () => {
@@ -89,6 +137,38 @@ export default function EditRolePage() {
             ]}
           />
         </Form.Item>
+
+        <Card
+          size="small"
+          title="绑定菜单"
+          style={{ marginBottom: 16 }}
+          extra={
+            <Space>
+              <Button
+                size="small"
+                type="primary"
+                loading={isMenuSubmitting}
+                disabled={menuBindingLoading}
+                onClick={onSaveMenuBinding}
+              >
+                保存菜单绑定
+              </Button>
+            </Space>
+          }
+        >
+          <Tree
+            checkable
+            selectable={false}
+            disabled={menuBindingLoading}
+            treeData={menuTreeData}
+            checkedKeys={checkedMenuKeys}
+            onCheck={(checked) => {
+              const keys = Array.isArray(checked) ? checked : checked.checked;
+              setCheckedMenuKeys(keys.map(String));
+            }}
+          />
+        </Card>
+
         <Form.Item>
           <Button type="primary" htmlType="submit" loading={isSubmitting} disabled={loading}>{ACTIONS.save}</Button>
           <Button style={{ marginLeft: 8 }} onClick={() => navigate('/authorization_management/role_management')}>{ACTIONS.cancel}</Button>

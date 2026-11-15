@@ -40,8 +40,8 @@ const EditPermissionPage = lazy(() => import('../pages/AuthorizationManagement/E
 const RoleManagementPage = lazy(() => import('../pages/AuthorizationManagement/RoleManagementPage'));
 const CreateRolePage = lazy(() => import('../pages/AuthorizationManagement/CreateRolePage'));
 const EditRolePage = lazy(() => import('../pages/AuthorizationManagement/EditRolePage'));
-const PermissionSubscriptionPage = lazy(() => import('../pages/AuthorizationManagement/PermissionSubscriptionPage'));
-const ResourceManagementPage = lazy(() => import('../pages/AuthorizationManagement/ResourceManagementPage'));
+const MenuManagementPage = lazy(() => import('../pages/AuthorizationManagement/MenuManagementPage'));
+const DictManagementPage = lazy(() => import('../pages/AuthorizationManagement/DictManagementPage'));
 
 const withSuspense = (element: ReactNode) => (
   <Suspense fallback={<Spin style={{ display: 'block', margin: `${layoutTokens.sectionGap * 4}px auto` }} />}>
@@ -191,23 +191,22 @@ export const routes: RouteObject[] = [
             element: withSuspense(<EditRolePage />),
           },
           {
-            path: 'permission_subscription',
+            path: 'menu_management',
             handle: {
-              label: <Link to="/authorization_management/permission_subscription">权限订阅</Link>,
-              breadcrumb: '权限订阅',
-              permission: PERMISSIONS.roleList,
+              label: <Link to="/authorization_management/menu_management">菜单管理</Link>,
+              breadcrumb: '菜单管理',
+              permission: PERMISSIONS.menuList,
             },
-            element: withSuspense(<PermissionSubscriptionPage />),
+            element: withSuspense(<MenuManagementPage />),
           },
           {
-            path: 'resource_management',
+            path: 'dict_management',
             handle: {
-              label: <Link to="/authorization_management/resource_management">资源管理</Link>,
-              breadcrumb: '资源管理',
-              // 资源模型已废弃（重构 #4）：码不在词汇表，守卫恒拒绝
-              permission: 'iam.resource.list',
+              label: <Link to="/authorization_management/dict_management">字典管理</Link>,
+              breadcrumb: '字典管理',
+              permission: PERMISSIONS.dictList,
             },
-            element: withSuspense(<ResourceManagementPage />),
+            element: withSuspense(<DictManagementPage />),
           },
         ],
       },

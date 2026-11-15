@@ -9,29 +9,31 @@ import type {
   CreateAccessCredentialResponse,
   CreateAccountRequest,
   CreateApplicationRequest,
+  CreateDictItemRequest,
+  CreateDictTypeRequest,
   CreateMenuRequest,
   CreatePermissionRequest,
-  CreateResourceRequest,
+  DictItem,
+  DictType,
   CreateRoleRequest,
+  ListDictItemsResponse,
+  ListDictTypesResponse,
   ListMenuTreeResponse,
-  ListResourceTreeResponse,
   Menu,
   ResetAccountPasswordRequest,
+  UpdateDictItemRequest,
+  UpdateDictTypeRequest,
   UpdateMenuRequest,
-  UpdateRoleMenusRequest,
   MyProfile,
   Permission,
   PermissionKind,
   ResetAccessCredentialSecretResponse,
-  Resource,
   Role,
-  Subscription,
   UpdateAccessCredentialRequest,
   UpdateAccountRequest,
   UpdateAccountRolesRequest,
   UpdateApplicationRequest,
   UpdatePermissionRequest,
-  UpdateResourceRequest,
   UpdateRoleRequest,
 } from '../types';
 
@@ -41,9 +43,7 @@ export type {
   MyProfile,
   Permission,
   PermissionKind,
-  Resource,
   Role,
-  Subscription,
 };
 
 export interface GetMyPermissionsResponse {
@@ -51,38 +51,6 @@ export interface GetMyPermissionsResponse {
   permissionCodeList: string[];
 }
 
-interface ListResourcesResponse {
-  page: Page;
-  resources: Resource[];
-}
-
-/** 组装资源列表 query：分页 + 可空过滤（application_id/kind/keyword，snake_case 与 proto 字段一致） */
-const buildResourceListUrl = (currentPage: number, pageSize: number, filters: Record<string, string>) => {
-  const params = new URLSearchParams({
-    current_page: String(currentPage),
-    page_size: String(pageSize),
-  });
-  Object.entries(filters).forEach(([key, value]) => {
-    const trimmedValue = value.trim();
-    if (trimmedValue) params.set(key, trimmedValue);
-  });
-  return `/authorization/resources?${params.toString()}`;
-};
-
-export const resourceApi = {
-  list: (currentPage = 1, pageSize = 10, filters: Record<string, string> = {}) =>
-    request<ListResourcesResponse>(buildResourceListUrl(currentPage, pageSize, filters)),
-  listTree: (applicationId: string) =>
-    request<ListResourceTreeResponse>(
-      `/authorization/resource-tree?application_id=${applicationId}`,
-    ),
-  create: (data: CreateResourceRequest) =>
-    request<Resource>('/authorization/resources', { method: 'POST', body: data }),
-  get: (id: string) => request<Resource>(`/authorization/resources/${id}`),
-  update: (id: string, data: UpdateResourceRequest) =>
-    request<Resource>(`/authorization/resources/${id}`, { method: 'PUT', body: data }),
-  delete: (id: string) => request<void>(`/authorization/resources/${id}`, { method: 'DELETE' }),
-};
 
 interface ListAccountsResponse {
   page: Page;
@@ -102,11 +70,6 @@ interface ListPermissionsResponse {
 interface ListRolesResponse {
   page: Page;
   roles: Role[];
-}
-
-interface ListSubscriptionResponse {
-  page: Page;
-  subscriptions: Subscription[];
 }
 
 interface PasswordAuthResponse {
@@ -159,13 +122,6 @@ export const roleApi = {
   delete: (id: string) => request<void>(`/authorization/roles/${id}`, { method: 'DELETE' }),
 };
 
-export const subscriptionApi = {
-  get: (id: string) => request<Subscription>(`/authorization/subscriptions/${id}`),
-  list: (currentPage = 1, pageSize = 10, keyword = '') =>
-    request<ListSubscriptionResponse>(
-      buildListUrl('/authorization/subscriptions', currentPage, pageSize, keyword),
-    ),
-};
 
 export const accountApi = {
   create: (data: CreateAccountRequest) =>
@@ -274,6 +230,39 @@ export const menuApi = {
     request<void>(`/menu/menus/${id}`, { method: 'PATCH', body: data }),
   delete: (id: string) => request<void>(`/menu/menus/${id}`, { method: 'DELETE' }),
   /** 角色菜单绑定：全量覆盖语义（空数组 = 清空绑定） */
-  updateRoleMenus: (roleId: string, data: UpdateRoleMenusRequest) =>
-    request<void>(`/menu/roles/${roleId}/menus`, { method: 'PUT', body: data }),
+  updateRoleMenus: (roleId: string, menuIds: string[]) =>
+    request<void>(`/menu/roles/${roleId}/menus`, {
+      method: 'PATCH',
+      body: { roleId, menuIds },
+    }),
+  /** 角色已绑定菜单 id 集合（编辑角色页回显） */
+  listRoleMenus: (roleId: string) =>
+    request<{ menuIds: string[] }>(`/menu/roles/${roleId}/menus`),
+};
+
+/**
+ * 字典（t_dict_type / t_dict_item）：类型 code 唯一；条目按 type_id 归属。
+ * id/typeId 一律 string 编码（雪花 ID 惯例）。
+ */
+export const dictApi = {
+  createType: (data: CreateDictTypeRequest) =>
+    request<DictType>('/dict/types', { method: 'POST', body: data }),
+  getType: (id: string) => request<DictType>(`/dict/types/${id}`),
+  updateType: (id: string, data: UpdateDictTypeRequest) =>
+    request<void>(`/dict/types/${id}`, { method: 'PATCH', body: data }),
+  deleteType: (id: string) => request<void>(`/dict/types/${id}`, { method: 'DELETE' }),
+  listTypes: (currentPage = 1, pageSize = 10, keyword = '') =>
+    request<ListDictTypesResponse>(
+      buildListUrl('/dict/types', currentPage, pageSize, keyword),
+    ),
+  createItem: (data: CreateDictItemRequest) =>
+    request<DictItem>('/dict/items', { method: 'POST', body: data }),
+  getItem: (id: string) => request<DictItem>(`/dict/items/${id}`),
+  updateItem: (id: string, data: UpdateDictItemRequest) =>
+    request<void>(`/dict/items/${id}`, { method: 'PATCH', body: data }),
+  deleteItem: (id: string) => request<void>(`/dict/items/${id}`, { method: 'DELETE' }),
+  listItems: (typeId: string, currentPage = 1, pageSize = 50, keyword = '') =>
+    request<ListDictItemsResponse>(
+      `${buildListUrl('/dict/items', currentPage, pageSize, keyword)}&type_id=${typeId}`,
+    ),
 };

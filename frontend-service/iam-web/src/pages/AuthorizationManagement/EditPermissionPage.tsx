@@ -2,7 +2,6 @@
 import { Form, Input, Button, Select, message, Descriptions, Spin } from "antd";
 import { useNavigate, useParams } from "react-router";
 import { permissionApi } from "../../api/iam";
-import ResourceTreeSelector from "../../components/ResourceTreeSelector";
 import { useApiErrorNotification } from "../../hooks/useApiError";
 import { useSubmitLock } from "../../hooks/useSubmitLock";
 import { ACTIONS, PERMISSION_KIND_LABELS, type Permission } from "../../types";
@@ -25,7 +24,6 @@ export default function EditPermissionPage() {
         form.setFieldsValue({
           name: response.name,
           enabledStatus: response.enabledStatus,
-          resourceIds: (response.resourceList || []).map((resource) => resource.id),
         });
         setPermission(response);
         setVersion(response.version);
@@ -39,15 +37,14 @@ export default function EditPermissionPage() {
   }, [id, form, showNotification]);
 
   const kind = permission?.kind;
-  const resourceIdsValue = Form.useWatch('resourceIds', form);
 
-  const onFinish = async (values: { name: string; enabledStatus: string; resourceIds: string[] }) => {
+  // 资源模型已废弃（重构 #4）：绑定资源选择器移除，resourceIdList 不再提交
+  const onFinish = async (values: { name: string; enabledStatus: string }) => {
     if (!id) return;
     run(async () => {
       await permissionApi.update(id, {
         name: values.name,
         enabledStatus: values.enabledStatus,
-        resourceIdList: values.resourceIds,
         version,
       });
       message.success(`${ACTIONS.save}成功`);
@@ -79,13 +76,6 @@ export default function EditPermissionPage() {
               { label: "启用", value: "enabled" },
               { label: "禁用", value: "disabled" },
             ]}
-          />
-        </Form.Item>
-        <Form.Item label="绑定资源" name="resourceIds" rules={[{ required: true, message: "请绑定至少一个资源" }]}>
-          <ResourceTreeSelector
-            applicationId={permission?.applicationId ? String(permission.applicationId) : ''}
-            value={resourceIdsValue || []}
-            onChange={(value) => form.setFieldValue('resourceIds', value)}
           />
         </Form.Item>
         <Form.Item>

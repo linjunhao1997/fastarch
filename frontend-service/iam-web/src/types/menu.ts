@@ -30,7 +30,8 @@ export interface ListMenuTreeResponse {
 }
 
 export interface CreateMenuRequest {
-  parentId?: string;
+  /** 父菜单 id，顶级传 '0' */
+  parentId: string;
   name: string;
   path?: string;
   icon?: string;
@@ -40,7 +41,13 @@ export interface CreateMenuRequest {
 }
 
 export interface UpdateMenuRequest {
+  /**
+   * 父节点移动语义：
+   * - parentCleared = true：以 parentId 为准整体移动（含挂到顶级 '0'）；
+   * - false/缺省：不修改父节点。
+   */
   parentId?: string;
+  parentCleared?: boolean;
   name?: string;
   path?: string;
   icon?: string;
@@ -48,9 +55,4 @@ export interface UpdateMenuRequest {
   permissionCode?: string;
   status?: string;
   version: number;
-}
-
-export interface UpdateRoleMenusRequest {
-  roleId: string;
-  menuIds: string[];
 }

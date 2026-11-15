@@ -2,7 +2,6 @@
 import { Form, Input, Button, Radio, Select, message } from "antd";
 import { useNavigate } from "react-router";
 import { applicationApi, permissionApi } from "../../api/iam";
-import ResourceTreeSelector from "../../components/ResourceTreeSelector";
 import { useApplicationContext } from "../../context/ApplicationContext";
 import { useApiErrorNotification } from "../../hooks/useApiError";
 import { useSubmitLock } from "../../hooks/useSubmitLock";
@@ -35,16 +34,14 @@ export default function CreatePermissionPage() {
     });
   };
 
-  const selectedApplicationId = Form.useWatch('applicationId', form);
-
-  const onFinish = async (values: { applicationId: string; name: string; code: string; kind: PermissionKind; resourceIds: string[]; value?: string; description?: string }) => {
+  // 资源模型已废弃（重构 #4）：绑定资源选择器移除，resourceIdList 不再提交
+  const onFinish = async (values: { applicationId: string; name: string; code: string; kind: PermissionKind; value?: string; description?: string }) => {
     run(async () => {
       await permissionApi.create({
         applicationId: values.applicationId,
         name: values.name,
         code: values.code,
         kind: values.kind,
-        resourceIdList: values.resourceIds,
         value: values.value,
         description: values.description,
       });
@@ -68,13 +65,6 @@ export default function CreatePermissionPage() {
         </Form.Item>
         <Form.Item label="权限类型" name="kind" rules={[{ required: true, message: "请选择权限类型" }]}>
           <Radio.Group options={KIND_OPTIONS} optionType="button" buttonStyle="solid" />
-        </Form.Item>
-        <Form.Item label="绑定资源" name="resourceIds" rules={[{ required: true, message: "请绑定至少一个资源" }]}>
-          <ResourceTreeSelector
-            applicationId={selectedApplicationId ? String(selectedApplicationId) : ''}
-            value={[]}
-            onChange={(value) => form.setFieldValue('resourceIds', value)}
-          />
         </Form.Item>
         <Form.Item label="权限值" name="value">
           <Input />
