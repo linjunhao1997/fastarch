@@ -39,7 +39,8 @@ var authOnlyMethods = map[string]struct{}{
 	iam_v1.AuthorizationService_CheckPermission_FullMethodName:  {},
 	// specs/008-account-app-context：自描述接口，仅需登录态（无需具体资源权限）
 	iam_v1.AuthenticationService_GetMyProfile_FullMethodName: {},
-	iam_v1.AuthorizationService_ListMyMenuTree_FullMethodName: {},
+	// 菜单树自查：仅需登录态，按角色绑定服务端过滤（无需菜单权限）
+	iam_v1.MenuService_ListMyMenuTree_FullMethodName: {},
 }
 
 const contextIsAdmin = "auth.is_admin"

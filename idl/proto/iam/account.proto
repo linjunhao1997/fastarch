@@ -12,9 +12,10 @@ import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 import "buf/validate/validate.proto";
 
-// 账号管理服务
+// 用户管理服务（服务名保持 AccountService，HTTP 路径 /account/accounts 稳定不变；
+// 消息语义为 t_user 用户：username 唯一登录名 + email 双标识）
 service AccountService {
-  // 创建账号，返回创建出的账号（含 id）
+  // 创建用户：初始密码必填（bcrypt 落库），返回创建出的用户（含 id）
   rpc CreateAccount(CreateAccountRequest) returns (Account) {
     option (google.api.http) = {
       post: "/account/accounts"
@@ -22,21 +23,21 @@ service AccountService {
     };
   }
 
-  // 获取账号信息
+  // 获取用户信息
   rpc GetAccount(common.v1.GetRequest) returns (Account) {
     option (google.api.http) = {
       get: "/account/accounts/{id}"
     };
   }
 
-  // 获取账号列表
+  // 获取用户列表：keyword 模糊匹配 username/nickname/email
   rpc ListAccounts(ListAccountsRequest) returns (ListAccountsResponse) {
     option (google.api.http) = {
       get: "/account/accounts"
     };
   }
 
-  // 修改账号
+  // 修改用户：nickname/email/status 可选更新（字段缺省 = 不修改）
   rpc UpdateAccount(UpdateAccountRequest) returns (google.protobuf.Empty) {
     option (google.api.http) = {
       patch: "/account/accounts/{id}"
@@ -56,24 +57,32 @@ service AccountService {
       body: "*"
     };
   }
+
+  // 管理员重置用户密码：新密码 bcrypt 落库，不要求提供旧密码
+  rpc ResetAccountPassword(ResetAccountPasswordRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      post: "/account/accounts/{id}/reset-password"
+      body: "*"
+    };
+  }
 }
 
 message CreateAccountRequest {
-  string name = 1 [(buf.validate.field).string.min_len = 1];
-  string email = 2 [(buf.validate.field).string.email = true];
-  // 账号类型："0" 用户，"1" 系统
-  string kind = 3 [(buf.validate.field).string = { in: ["0", "1"] }];
-  // 账号归属的应用 id 集合；可为空（允许无归属账号）
-  repeated int64 application_id_list = 4;
-  // 账号状态："enabled" 启用，"disabled" 禁用；缺省为 enabled
-  string status = 5 [(buf.validate.field).string = { in: ["", "enabled", "disabled"] }];
+  string username = 1 [(buf.validate.field).string.min_len = 1];
+  string nickname = 2;
+  // 邮箱可选；传了必须合法（protovalidate 对空串跳过 email 规则）
+  string email = 3 [(buf.validate.field).string.email = true];
+  // 初始密码必填（bcrypt 摘要落库，明文不落盘）
+  string password = 4 [(buf.validate.field).string.min_len = 8];
+  // 初始角色 id 集合（string 编码），可选；缺省不绑定角色
+  repeated string role_ids = 5;
 }
 
 message ListAccountsRequest {
   int64 current_page = 1;
   int64 page_size = 2;
-  string id = 3;
-  string keyword = 4;
+  // 模糊匹配 username/nickname/email
+  string keyword = 3;
 }
 
 message ListAccountsResponse {
@@ -83,15 +92,13 @@ message ListAccountsResponse {
 
 message UpdateAccountRequest {
   int64 id = 1 [(buf.validate.field).required = true];
-  string status = 2;
-  string password = 3;
-  string name = 4;
-  string email = 5;
-  int64 version = 6 [(buf.validate.field).required = true];
-  // 账号归属的应用 id 集合；presence + 全量替换语义 —— 字段缺省=不修改归属，
-  // 显式传入（含空数组）时以本集合为目标归属集合做差集增删
-  //（与 UpdateAccountRolesRequest 的 added/removed 增量语义不同）
-  repeated int64 application_id_list = 7;
+  // 以下字段缺省（空串）= 不修改（与现有更新风格一致）
+  string nickname = 2;
+  string email = 3;
+  // 用户状态："enabled" 启用，"disabled" 禁用；缺省不修改
+  string status = 4 [(buf.validate.field).string = { in: ["", "enabled", "disabled"] }];
+  // 乐观锁版本号
+  int64 version = 5 [(buf.validate.field).required = true];
 }
 
 message UpdateAccountRolesRequest {
@@ -100,27 +107,31 @@ message UpdateAccountRolesRequest {
   repeated string removed_role_code_list = 3;
 }
 
+message ResetAccountPasswordRequest {
+  int64 id = 1 [(buf.validate.field).required = true];
+  // 新密码（管理员重置，无需旧密码）
+  string new_password = 2 [(buf.validate.field).string.min_len = 8];
+}
+
 message DeleteAccountRequest {
   int64 id = 1 [(buf.validate.field).required = true];
 }
 
 
-// 账号信息
+// 用户信息（t_user 语义；不含密码摘要等敏感字段，宪法 XII）
 message Account {
   string id = 1;
-  string name = 2;
-  string email = 3;
-  // 账号类型："0" 用户，"1" 系统
-  string kind = 4;
-  repeated string role_code_list = 5;
+  string username = 2;                        // 唯一登录名
+  string email = 3;                           // 邮箱（可空，唯一）
+  string nickname = 4;                        // 显示名（可空）
+  // 用户状态（只读回传）："enabled" 启用，"disabled" 禁用
+  string status = 5;
   int64 version = 6;
+  // 绑定的角色编码清单（只读回传）
+  repeated string role_code_list = 7;
   // 审计字段（只读回传，由服务端注入；请求消息不含此类字段，宪法 XII）
-  string created_by = 7;                      // 创建人（账号 id）
-  string updated_by = 8;                      // 修改人（账号 id）
-  google.protobuf.Timestamp create_time = 9;  // 创建时间
-  google.protobuf.Timestamp update_time = 10; // 修改时间
-  // 账号当前归属的应用 id 集合（只读回传）
-  repeated string application_id_list = 11;
-  // 账号状态（只读回传）："enabled" 启用，"disabled" 禁用
-  string status = 12;
+  string created_by = 8;                      // 创建人（用户 id）
+  string updated_by = 9;                      // 修改人（用户 id）
+  google.protobuf.Timestamp create_time = 10; // 创建时间
+  google.protobuf.Timestamp update_time = 11; // 修改时间
 }

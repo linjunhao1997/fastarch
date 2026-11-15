@@ -8,7 +8,8 @@ import "regexp"
 //   - 新增 RPC：在 METHOD_PERMISSIONS 增加映射 + PERMISSION_CODES 增加码
 //     （存量库经数据迁移补种权限行）
 
-// PERMISSION_CODES 是全部 API 权限码词汇（与迁移 SQL 000003 种子镜像，42 个码）。
+// PERMISSION_CODES 是全部 API 权限码词汇（与迁移 SQL 000003+000005 种子镜像，
+// 共 43 个码：000005 补种 iam.user.reset_password）。
 var PERMISSION_CODES = []string{
 	// 用户模块（iam.account.* 已随 011 模型改名 iam.user.*）
 	"iam.user.create",
@@ -17,6 +18,7 @@ var PERMISSION_CODES = []string{
 	"iam.user.update",
 	"iam.user.delete",
 	"iam.user.assign_roles",
+	"iam.user.reset_password",
 	// 应用模块
 	"iam.application.create",
 	"iam.application.get",
@@ -73,12 +75,29 @@ var METHOD_PERMISSIONS = map[string][]string{
 	"/iam.v1.AccountService/UpdateAccount":      {"iam.user.update"},
 	"/iam.v1.AccountService/DeleteAccount":      {"iam.user.delete"},
 	"/iam.v1.AccountService/UpdateAccountRoles": {"iam.user.assign_roles"},
+	"/iam.v1.AccountService/ResetAccountPassword": {"iam.user.reset_password"},
 	// ApplicationService
 	"/iam.v1.ApplicationService/CreateApplication": {"iam.application.create"},
 	"/iam.v1.ApplicationService/GetApplication":    {"iam.application.get"},
 	"/iam.v1.ApplicationService/ListApplications":  {"iam.application.list"},
 	"/iam.v1.ApplicationService/UpdateApplication": {"iam.application.update"},
 	"/iam.v1.ApplicationService/DeleteApplication": {"iam.application.delete"},
+	// MenuService（菜单 = t_menu + t_r_role_menu，组件资源模型已废弃）
+	"/iam.v1.MenuService/CreateMenu":     {"iam.menu.create"},
+	"/iam.v1.MenuService/GetMenu":        {"iam.menu.get"},
+	"/iam.v1.MenuService/ListMenuTree":   {"iam.menu.list"},
+	"/iam.v1.MenuService/UpdateMenu":     {"iam.menu.update"},
+	"/iam.v1.MenuService/DeleteMenu":     {"iam.menu.delete"},
+	"/iam.v1.MenuService/UpdateRoleMenus": {"iam.menu.update"},
+	// DictService
+	"/iam.v1.DictService/CreateDictType": {"iam.dict.create"},
+	"/iam.v1.DictService/UpdateDictType": {"iam.dict.update"},
+	"/iam.v1.DictService/DeleteDictType": {"iam.dict.delete"},
+	"/iam.v1.DictService/ListDictTypes":  {"iam.dict.list"},
+	"/iam.v1.DictService/CreateDictItem": {"iam.dict.create"},
+	"/iam.v1.DictService/UpdateDictItem": {"iam.dict.update"},
+	"/iam.v1.DictService/DeleteDictItem": {"iam.dict.delete"},
+	"/iam.v1.DictService/ListDictItems":  {"iam.dict.list"},
 	// AuthorizationService：权限
 	"/iam.v1.AuthorizationService/CreatePermission": {"iam.permission.create"},
 	"/iam.v1.AuthorizationService/GetPermission":    {"iam.permission.get"},
@@ -91,11 +110,6 @@ var METHOD_PERMISSIONS = map[string][]string{
 	"/iam.v1.AuthorizationService/ListRoles":  {"iam.role.list"},
 	"/iam.v1.AuthorizationService/UpdateRole": {"iam.role.update"},
 	"/iam.v1.AuthorizationService/DeleteRole": {"iam.role.delete"},
-	// AuthorizationService：权限订阅
-	"/iam.v1.AuthorizationService/CreateSubscription": {"iam.subscription.create"},
-	"/iam.v1.AuthorizationService/GetSubscription":    {"iam.subscription.get"},
-	"/iam.v1.AuthorizationService/UpdateSubscription": {"iam.subscription.update"},
-	"/iam.v1.AuthorizationService/ListSubscriptions":  {"iam.subscription.list"},
 	// AccessCredentialService（specs/009-ak-sk-auth）
 	"/iam.v1.AccessCredentialService/CreateAccessCredential":       {"iam.access_credential.create"},
 	"/iam.v1.AccessCredentialService/GetAccessCredential":          {"iam.access_credential.get"},

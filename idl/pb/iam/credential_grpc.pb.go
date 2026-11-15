@@ -36,7 +36,7 @@ const (
 type AccessCredentialServiceClient interface {
 	// 创建凭证，响应中一次性返回明文 secret_key（之后任何接口不再返回，FR-002）
 	CreateAccessCredential(ctx context.Context, in *CreateAccessCredentialRequest, opts ...grpc.CallOption) (*CreateAccessCredentialResponse, error)
-	// 凭证分页列表：支持按 account_id / access_key / status 筛选；全量业务字段（不含 secret_key）
+	// 凭证分页列表：支持按 user_id / access_key / status 筛选；全量业务字段（不含 secret_key）
 	ListAccessCredentials(ctx context.Context, in *ListAccessCredentialsRequest, opts ...grpc.CallOption) (*ListAccessCredentialsResponse, error)
 	// 凭证详情：全量业务字段（不含 secret_key）
 	GetAccessCredential(ctx context.Context, in *common.GetRequest, opts ...grpc.CallOption) (*AccessCredential, error)
@@ -127,7 +127,7 @@ func (c *accessCredentialServiceClient) DeleteAccessCredential(ctx context.Conte
 type AccessCredentialServiceServer interface {
 	// 创建凭证，响应中一次性返回明文 secret_key（之后任何接口不再返回，FR-002）
 	CreateAccessCredential(context.Context, *CreateAccessCredentialRequest) (*CreateAccessCredentialResponse, error)
-	// 凭证分页列表：支持按 account_id / access_key / status 筛选；全量业务字段（不含 secret_key）
+	// 凭证分页列表：支持按 user_id / access_key / status 筛选；全量业务字段（不含 secret_key）
 	ListAccessCredentials(context.Context, *ListAccessCredentialsRequest) (*ListAccessCredentialsResponse, error)
 	// 凭证详情：全量业务字段（不含 secret_key）
 	GetAccessCredential(context.Context, *common.GetRequest) (*AccessCredential, error)

@@ -13,7 +13,7 @@ import "buf/validate/validate.proto";
 
 // 认证服务
 service AuthenticationService {
-  // 密码认证
+  // 密码认证：identifier 即登录标识（username 或 email，服务端双路径查询）
   rpc PasswordAuth(PasswordAuthRequest) returns (PasswordAuthResponse) {
     option (google.api.http) = {
       post: "/authentication/password-auth"
@@ -31,9 +31,9 @@ service AuthenticationService {
 }
 
 message PasswordAuthRequest {
-  string username = 1;
-  string email = 2 [(buf.validate.field).string.email = true];
-  string password = 3 [(buf.validate.field).string.min_len = 1];
+  // 登录标识：username 或 email（双标识登录，011 裁决）
+  string identifier = 1 [(buf.validate.field).string.min_len = 1];
+  string password = 2 [(buf.validate.field).string.min_len = 1];
 }
 
 message PasswordAuthResponse {
@@ -49,15 +49,14 @@ message MyProfileApplication {
 }
 
 message GetMyProfileResponse {
-  // 账号基本信息（不含密码、盐、AK/SK 等敏感凭据字段）
+  // 用户基本信息（不含密码摘要、AK/SK 等敏感凭据字段）
   string id = 1;
-  string name = 2;
-  string email = 3;
-  // 账号类型："0" 用户，"1" 系统
-  string kind = 4;
-  string status = 5;
+  string username = 2;                       // 登录名（唯一）
+  string nickname = 3;                       // 显示名（可空）
+  string email = 4;                          // 邮箱（可空，唯一）
+  string status = 5;                         // "enabled" 启用，"disabled" 禁用
   // 审计字段（只读回传，服务端注入）
-  string created_by = 6;                      // 创建人（账号 id）
+  string created_by = 6;                      // 创建人（用户 id）
   google.protobuf.Timestamp create_time = 7;  // 创建时间
   // 所属应用列表（含停用应用；用户无归属时为空列表）
   repeated MyProfileApplication applications = 8;

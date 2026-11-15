@@ -51,8 +51,8 @@ func TestGetMyProfile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetMyProfile() error = %v", err)
 	}
-	// 011 模型：Name 映射 username；email/kind/应用归属已随模型删除
-	if resp.Id != "1" || resp.Name != "one" || resp.Email != "" || resp.Kind != "" {
+	// 011 模型：username/nickname/email/status；无应用归属
+	if resp.Id != "1" || resp.Username != "one" || resp.Email != "" || resp.Nickname != "one" {
 		t.Fatalf("GetMyProfile() basic info = %+v", resp)
 	}
 	if len(resp.Applications) != 0 {
@@ -102,7 +102,7 @@ func TestPasswordAuthDisabledAccountRejected(t *testing.T) {
 	service := NewAuthenticationService(db, rdb)
 	ctx := grpc.NewContextWithServerTransportStream(auth.WithAdmin(context.Background()), stubServerTransportStream{})
 	_, err := service.PasswordAuth(ctx, &iam_v1.PasswordAuthRequest{
-		Username: "disabled",
+		Identifier: "disabled",
 		Password: "password123",
 	})
 	if err == nil {
@@ -132,7 +132,7 @@ func TestPasswordAuthEnabledAccountAllowed(t *testing.T) {
 	service := NewAuthenticationService(db, rdb)
 	ctx := grpc.NewContextWithServerTransportStream(auth.WithAdmin(context.Background()), stubServerTransportStream{})
 	resp, err := service.PasswordAuth(ctx, &iam_v1.PasswordAuthRequest{
-		Username: "enabled",
+		Identifier: "enabled",
 		Password: "password123",
 	})
 	if err != nil {
@@ -154,7 +154,7 @@ func TestPasswordAuthInvalidCredentials(t *testing.T) {
 
 	// 密码错误
 	_, err := service.PasswordAuth(ctx, &iam_v1.PasswordAuthRequest{
-		Username: "enabled",
+		Identifier: "enabled",
 		Password: "wrong-password",
 	})
 	if err != ErrInvalidAccountPassword {
@@ -163,7 +163,7 @@ func TestPasswordAuthInvalidCredentials(t *testing.T) {
 
 	// 用户不存在：与密码错误同语义
 	_, err = service.PasswordAuth(ctx, &iam_v1.PasswordAuthRequest{
-		Username: "missing-user",
+		Identifier: "missing-user",
 		Password: "password123",
 	})
 	if err != ErrInvalidAccountPassword {

@@ -9,34 +9,36 @@ option java_package = "com.iam.v1";
 import "common/common.proto";
 import "google/api/annotations.proto";
 import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
 import "buf/validate/validate.proto";
 
 
-// 应用管理服务
+// 应用管理服务（t_application：app_id 唯一标识 + secret 仅存 sha256 摘要）
 service ApplicationService {
-  // 创建应用，返回创建出的应用（含 id）
-  rpc CreateApplication(CreateApplicationRequest) returns (Application) {
+  // 创建应用：服务端生成 app_id 与随机 secret，响应一次性返回 secret 明文
+  // （服务端只存 sha256 摘要，之后任何接口不再返回）
+  rpc CreateApplication(CreateApplicationRequest) returns (CreateApplicationResponse) {
     option (google.api.http) = {
       post: "/application/applications"
       body: "*"
     };
   }
 
-  // 获取应用信息
+  // 获取应用信息（不回传 secret）
   rpc GetApplication(common.v1.GetRequest) returns (Application) {
     option (google.api.http) = {
       get: "/application/applications/{id}"
     };
   }
 
-  // 获取应用列表
+  // 获取应用列表（不回传 secret）
   rpc ListApplications(ListApplicationsRequest) returns (ListApplicationsResponse) {
     option (google.api.http) = {
       get: "/application/applications"
     };
   }
 
-  // 修改应用信息
+  // 修改应用信息（name/status）
   rpc UpdateApplication(UpdateApplicationRequest) returns (google.protobuf.Empty) {
     option (google.api.http) = {
       patch: "/application/applications/{id}"
@@ -54,9 +56,14 @@ service ApplicationService {
 
 message CreateApplicationRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
-  string description = 2;
   // 应用状态："enabled" 启用，"disabled" 禁用；缺省为 enabled
-  string enabled_status = 3 [(buf.validate.field).string = { in: ["", "enabled", "disabled"] }];
+  string status = 2 [(buf.validate.field).string = { in: ["", "enabled", "disabled"] }];
+}
+
+message CreateApplicationResponse {
+  Application application = 1;
+  // 一次性返回的 secret 明文（服务端仅存 sha256 hex 摘要），仅此响应可见
+  string secret = 2;
 }
 
 message ListApplicationsRequest {
@@ -72,9 +79,9 @@ message ListApplicationsResponse {
 
 message UpdateApplicationRequest {
   int64 id = 1 [(buf.validate.field).required = true];
+  // 以下字段缺省（空串）= 不修改
   string name = 2;
-  string description = 3;
-  string enabled_status = 4;
+  string status = 3 [(buf.validate.field).string = { in: ["", "enabled", "disabled"] }];
 }
 
 message DeleteApplicationRequest {
@@ -82,11 +89,17 @@ message DeleteApplicationRequest {
 }
 
 
-// 应用信息
+// 应用信息（t_application 全列；不含 secret 摘要等敏感字段，宪法 XII）
 message Application {
   string id = 1;
-  string name = 2;
-  string app_code = 3;
-  string description = 4;
-  string enabled_status = 5;
+  string app_id = 2;                           // 应用标识（服务端生成，唯一）
+  string name = 3;
+  // 应用状态："enabled" 启用，"disabled" 禁用
+  string status = 4;
+  int64 version = 5;
+  // 审计字段（只读回传，由服务端注入；请求消息不含此类字段，宪法 XII）
+  string created_by = 6;                       // 创建人（用户 id）
+  string updated_by = 7;                       // 修改人（用户 id）
+  google.protobuf.Timestamp create_time = 8;   // 创建时间
+  google.protobuf.Timestamp update_time = 9;   // 修改时间
 }

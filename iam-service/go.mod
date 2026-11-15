@@ -12,6 +12,7 @@ require (
 	github.com/redis/go-redis/v9 v9.7.3
 	github.com/spf13/cast v1.10.0
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.62.0
+	golang.org/x/crypto v0.59.0
 	google.golang.org/grpc v1.73.0
 	gorm.io/gorm v1.30.0
 )
@@ -29,7 +30,6 @@ require (
 	github.com/spf13/cobra v1.9.1 // indirect
 	github.com/yuin/gopher-lua v0.0.0-20210529063254-f4c35e4016d9 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
-	golang.org/x/crypto v0.59.0 // indirect
 	gorm.io/driver/mysql v1.6.0 // indirect
 	modernc.org/libc v1.22.5 // indirect
 	modernc.org/mathutil v1.5.0 // indirect

@@ -49,38 +49,6 @@
         ]
       }
     },
-    "/authorization/my-menu-tree": {
-      "get": {
-        "summary": "获取当前用户在指定应用下可见的菜单树（服务端按权限过滤）\r\n仅含 kind=menu 资源；普通用户按权限键快照过滤，管理员全量",
-        "operationId": "AuthorizationService_ListMyMenuTree",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/v1ListResourceTreeResponse"
-            }
-          },
-          "default": {
-            "description": "An unexpected error response.",
-            "schema": {
-              "$ref": "#/definitions/rpcStatus"
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "applicationId",
-            "in": "query",
-            "required": false,
-            "type": "string",
-            "format": "int64"
-          }
-        ],
-        "tags": [
-          "AuthorizationService"
-        ]
-      }
-    },
     "/authorization/my-permissions": {
       "get": {
         "summary": "返回当前认证账号的权限码集合",
@@ -293,267 +261,6 @@
         ]
       }
     },
-    "/authorization/resource-tree": {
-      "get": {
-        "summary": "应用内资源树，用于资源管理与权限绑定选择",
-        "operationId": "AuthorizationService_ListResourceTree",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/v1ListResourceTreeResponse"
-            }
-          },
-          "default": {
-            "description": "An unexpected error response.",
-            "schema": {
-              "$ref": "#/definitions/rpcStatus"
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "applicationId",
-            "in": "query",
-            "required": false,
-            "type": "string",
-            "format": "int64"
-          },
-          {
-            "name": "keyword",
-            "in": "query",
-            "required": false,
-            "type": "string"
-          }
-        ],
-        "tags": [
-          "AuthorizationService"
-        ]
-      }
-    },
-    "/authorization/resources": {
-      "get": {
-        "summary": "资源清单（分页 + 按类型/关键字过滤），供权限创建/编辑的资源绑定选择器",
-        "operationId": "AuthorizationService_ListResources",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/v1ListResourcesResponse"
-            }
-          },
-          "default": {
-            "description": "An unexpected error response.",
-            "schema": {
-              "$ref": "#/definitions/rpcStatus"
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "currentPage",
-            "in": "query",
-            "required": false,
-            "type": "string",
-            "format": "int64"
-          },
-          {
-            "name": "pageSize",
-            "in": "query",
-            "required": false,
-            "type": "string",
-            "format": "int64"
-          },
-          {
-            "name": "kind",
-            "description": "按组件类型过滤：menu | page | button",
-            "in": "query",
-            "required": false,
-            "type": "string"
-          },
-          {
-            "name": "keyword",
-            "description": "匹配 key/name",
-            "in": "query",
-            "required": false,
-            "type": "string"
-          },
-          {
-            "name": "applicationId",
-            "description": "按所属应用过滤（资源管理页按应用维度展示）",
-            "in": "query",
-            "required": false,
-            "type": "string",
-            "format": "int64"
-          }
-        ],
-        "tags": [
-          "AuthorizationService"
-        ]
-      },
-      "post": {
-        "summary": "创建资源",
-        "operationId": "AuthorizationService_CreateResource",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/v1Resource"
-            }
-          },
-          "default": {
-            "description": "An unexpected error response.",
-            "schema": {
-              "$ref": "#/definitions/rpcStatus"
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "body",
-            "in": "body",
-            "required": true,
-            "schema": {
-              "$ref": "#/definitions/v1CreateResourceRequest"
-            }
-          }
-        ],
-        "tags": [
-          "AuthorizationService"
-        ]
-      }
-    },
-    "/authorization/resources/{id}": {
-      "get": {
-        "summary": "获取资源详情",
-        "operationId": "AuthorizationService_GetResource",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/v1Resource"
-            }
-          },
-          "default": {
-            "description": "An unexpected error response.",
-            "schema": {
-              "$ref": "#/definitions/rpcStatus"
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "type": "string",
-            "format": "int64"
-          }
-        ],
-        "tags": [
-          "AuthorizationService"
-        ]
-      },
-      "delete": {
-        "summary": "删除资源",
-        "operationId": "AuthorizationService_DeleteResource",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "type": "object",
-              "properties": {}
-            }
-          },
-          "default": {
-            "description": "An unexpected error response.",
-            "schema": {
-              "$ref": "#/definitions/rpcStatus"
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "type": "string",
-            "format": "int64"
-          }
-        ],
-        "tags": [
-          "AuthorizationService"
-        ]
-      },
-      "put": {
-        "summary": "修改资源",
-        "operationId": "AuthorizationService_UpdateResource",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/v1Resource"
-            }
-          },
-          "default": {
-            "description": "An unexpected error response.",
-            "schema": {
-              "$ref": "#/definitions/rpcStatus"
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "type": "string",
-            "format": "int64"
-          },
-          {
-            "name": "body",
-            "in": "body",
-            "required": true,
-            "schema": {
-              "type": "object",
-              "properties": {
-                "parentId": {
-                  "type": "string",
-                  "format": "int64"
-                },
-                "parentCleared": {
-                  "type": "boolean"
-                },
-                "name": {
-                  "type": "string"
-                },
-                "disabled": {
-                  "type": "boolean"
-                },
-                "version": {
-                  "type": "string",
-                  "format": "int64"
-                },
-                "displayOrder": {
-                  "type": "integer",
-                  "format": "int32"
-                },
-                "permissionCodeList": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  },
-                  "title": "绑定的权限码清单（替换式更新）"
-                }
-              }
-            }
-          }
-        ],
-        "tags": [
-          "AuthorizationService"
-        ]
-      }
-    },
     "/authorization/roles": {
       "get": {
         "summary": "获取角色列表",
@@ -755,167 +462,6 @@
           "AuthorizationService"
         ]
       }
-    },
-    "/authorization/subscriptions": {
-      "get": {
-        "summary": "申请记录列表",
-        "operationId": "AuthorizationService_ListSubscriptions",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/v1ListSubscriptionsResponse"
-            }
-          },
-          "default": {
-            "description": "An unexpected error response.",
-            "schema": {
-              "$ref": "#/definitions/rpcStatus"
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "currentPage",
-            "in": "query",
-            "required": false,
-            "type": "string",
-            "format": "int64"
-          },
-          {
-            "name": "pageSize",
-            "in": "query",
-            "required": false,
-            "type": "string",
-            "format": "int64"
-          },
-          {
-            "name": "keyword",
-            "in": "query",
-            "required": false,
-            "type": "string"
-          }
-        ],
-        "tags": [
-          "AuthorizationService"
-        ]
-      },
-      "post": {
-        "summary": "申请权限，返回创建出的申请记录（含 id）",
-        "operationId": "AuthorizationService_CreateSubscription",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/v1Subscription"
-            }
-          },
-          "default": {
-            "description": "An unexpected error response.",
-            "schema": {
-              "$ref": "#/definitions/rpcStatus"
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "body",
-            "in": "body",
-            "required": true,
-            "schema": {
-              "$ref": "#/definitions/v1CreateSubscriptionRequest"
-            }
-          }
-        ],
-        "tags": [
-          "AuthorizationService"
-        ]
-      }
-    },
-    "/authorization/subscriptions/{id}": {
-      "get": {
-        "summary": "申请记录详情",
-        "operationId": "AuthorizationService_GetSubscription",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/v1Subscription"
-            }
-          },
-          "default": {
-            "description": "An unexpected error response.",
-            "schema": {
-              "$ref": "#/definitions/rpcStatus"
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "type": "string",
-            "format": "int64"
-          }
-        ],
-        "tags": [
-          "AuthorizationService"
-        ]
-      },
-      "patch": {
-        "summary": "修改申请记录",
-        "operationId": "AuthorizationService_UpdateSubscription",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "type": "object",
-              "properties": {}
-            }
-          },
-          "default": {
-            "description": "An unexpected error response.",
-            "schema": {
-              "$ref": "#/definitions/rpcStatus"
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "type": "string",
-            "format": "int64"
-          },
-          {
-            "name": "body",
-            "in": "body",
-            "required": true,
-            "schema": {
-              "type": "object",
-              "properties": {
-                "roleCodeList": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                },
-                "permissionCodeList": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                }
-              }
-            }
-          }
-        ],
-        "tags": [
-          "AuthorizationService"
-        ]
-      }
     }
   },
   "definitions": {
@@ -947,33 +493,9 @@
         }
       }
     },
-    "v1ApplicationSummary": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string",
-          "format": "int64"
-        },
-        "name": {
-          "type": "string"
-        },
-        "code": {
-          "type": "string"
-        },
-        "enabledStatus": {
-          "type": "string"
-        },
-        "description": {
-          "type": "string"
-        }
-      }
-    },
     "v1CheckPermissionRequest": {
       "type": "object",
       "properties": {
-        "applicationCode": {
-          "type": "string"
-        },
         "permissionCode": {
           "type": "string"
         }
@@ -991,88 +513,26 @@
     "v1CreatePermissionRequest": {
       "type": "object",
       "properties": {
-        "applicationId": {
-          "type": "string",
-          "format": "int64"
-        },
         "name": {
           "type": "string"
         },
         "code": {
           "type": "string",
-          "title": "权限码是唯一授权词汇，格式为 服务.模块.操作，如 iam.account.delete"
+          "title": "权限码是唯一授权词汇，格式为 服务.模块.操作，如 iam.user.delete"
         },
         "description": {
           "type": "string"
         }
       }
     },
-    "v1CreateResourceRequest": {
-      "type": "object",
-      "properties": {
-        "applicationId": {
-          "type": "string",
-          "format": "int64"
-        },
-        "parentId": {
-          "type": "string",
-          "format": "int64"
-        },
-        "kind": {
-          "type": "string",
-          "title": "组件类型：menu | page | button"
-        },
-        "key": {
-          "type": "string"
-        },
-        "name": {
-          "type": "string"
-        },
-        "disabled": {
-          "type": "boolean"
-        },
-        "displayOrder": {
-          "type": "integer",
-          "format": "int32"
-        },
-        "permissionCodeList": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "title": "绑定的权限码清单（替换式写入；空清单表示不绑定权限）"
-        }
-      }
-    },
     "v1CreateRoleRequest": {
       "type": "object",
       "properties": {
-        "applicationId": {
-          "type": "string",
-          "format": "int64"
-        },
         "name": {
           "type": "string"
         },
         "roleCode": {
           "type": "string"
-        }
-      }
-    },
-    "v1CreateSubscriptionRequest": {
-      "type": "object",
-      "properties": {
-        "roleCodeList": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "permissionCodeList": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
         }
       }
     },
@@ -1103,33 +563,6 @@
         }
       }
     },
-    "v1ListResourceTreeResponse": {
-      "type": "object",
-      "properties": {
-        "roots": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "$ref": "#/definitions/v1ResourceTreeNode"
-          }
-        }
-      }
-    },
-    "v1ListResourcesResponse": {
-      "type": "object",
-      "properties": {
-        "page": {
-          "$ref": "#/definitions/v1Page"
-        },
-        "resources": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "$ref": "#/definitions/v1Resource"
-          }
-        }
-      }
-    },
     "v1ListRolesResponse": {
       "type": "object",
       "properties": {
@@ -1141,21 +574,6 @@
           "items": {
             "type": "object",
             "$ref": "#/definitions/v1Role"
-          }
-        }
-      }
-    },
-    "v1ListSubscriptionsResponse": {
-      "type": "object",
-      "properties": {
-        "page": {
-          "$ref": "#/definitions/v1Page"
-        },
-        "subscriptions": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "$ref": "#/definitions/v1Subscription"
           }
         }
       }
@@ -1195,14 +613,13 @@
         "name": {
           "type": "string"
         },
-        "applicationId": {
-          "type": "string",
-          "format": "int64"
-        },
         "permissionCode": {
           "type": "string"
         },
         "enabledStatus": {
+          "type": "string"
+        },
+        "description": {
           "type": "string"
         },
         "version": {
@@ -1211,12 +628,12 @@
         },
         "createdBy": {
           "type": "string",
-          "description": "创建人（账号 id）",
+          "description": "创建人（用户 id）",
           "title": "审计字段（只读回传，由服务端注入；请求消息不含此类字段，宪法 XII）"
         },
         "updatedBy": {
           "type": "string",
-          "title": "修改人（账号 id）"
+          "title": "修改人（用户 id）"
         },
         "createTime": {
           "type": "string",
@@ -1229,14 +646,13 @@
           "title": "修改时间"
         }
       },
-      "title": "权限信息。权限码（permission_code）是唯一授权词汇，\r\n格式为 服务.模块.操作（如 iam.account.delete）。"
+      "title": "权限信息。权限码（permission_code）是唯一授权词汇，\n格式为 服务.模块.操作（如 iam.user.delete）。"
     },
     "v1PermissionSummary": {
       "type": "object",
       "properties": {
         "id": {
-          "type": "string",
-          "format": "int64"
+          "type": "string"
         },
         "name": {
           "type": "string"
@@ -1249,77 +665,6 @@
         }
       }
     },
-    "v1Resource": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string"
-        },
-        "kind": {
-          "type": "string",
-          "title": "组件类型：menu | page | button"
-        },
-        "key": {
-          "type": "string"
-        },
-        "name": {
-          "type": "string"
-        },
-        "enabledStatus": {
-          "type": "string"
-        },
-        "createTime": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "updateTime": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "applicationId": {
-          "type": "string",
-          "format": "int64"
-        },
-        "parentId": {
-          "type": "string",
-          "format": "int64"
-        },
-        "version": {
-          "type": "string",
-          "format": "int64"
-        },
-        "displayOrder": {
-          "type": "integer",
-          "format": "int32"
-        },
-        "application": {
-          "$ref": "#/definitions/v1ApplicationSummary"
-        },
-        "permissionCodeList": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "title": "绑定的权限码清单（前端展示/置灰判定依据）"
-        }
-      },
-      "title": "前端组件资源（页面结构注册表）：结构归代码、展示归管理员。\r\nkey 全局唯一（应用内唯一），格式随 kind：\r\n  menu   → 菜单层级键，如 \"authorization_management\"\r\n  page   → 页面路由键，如 \"permission_list\"\r\n  button → 按钮/操作键，如 \"account_list.delete\"\r\npermission_code_list 是组件绑定的权限码：前端按「组件绑定码 ∩ 用户持有码」\r\n决定展示或置灰；空清单表示不绑定权限（所有人可见）。"
-    },
-    "v1ResourceTreeNode": {
-      "type": "object",
-      "properties": {
-        "resource": {
-          "$ref": "#/definitions/v1Resource"
-        },
-        "children": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "$ref": "#/definitions/v1ResourceTreeNode"
-          }
-        }
-      }
-    },
     "v1Role": {
       "type": "object",
       "properties": {
@@ -1328,10 +673,6 @@
         },
         "name": {
           "type": "string"
-        },
-        "applicationId": {
-          "type": "string",
-          "format": "int64"
         },
         "roleCode": {
           "type": "string"
@@ -1351,12 +692,12 @@
         },
         "createdBy": {
           "type": "string",
-          "description": "创建人（账号 id）",
+          "description": "创建人（用户 id）",
           "title": "审计字段（只读回传，由服务端注入；请求消息不含此类字段，宪法 XII）"
         },
         "updatedBy": {
           "type": "string",
-          "title": "修改人（账号 id）"
+          "title": "修改人（用户 id）"
         },
         "createTime": {
           "type": "string",
@@ -1368,9 +709,6 @@
           "format": "date-time",
           "title": "修改时间"
         },
-        "application": {
-          "$ref": "#/definitions/v1ApplicationSummary"
-        },
         "permissionList": {
           "type": "array",
           "items": {
@@ -1380,50 +718,6 @@
         }
       },
       "title": "角色信息"
-    },
-    "v1Subscription": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string"
-        },
-        "sourceApplicationCode": {
-          "type": "string"
-        },
-        "targetApplicationCode": {
-          "type": "string"
-        },
-        "roleCodeList": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "permissionCodeList": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "applicantId": {
-          "type": "string",
-          "format": "int64"
-        },
-        "approverId": {
-          "type": "string",
-          "format": "int64"
-        },
-        "applicantName": {
-          "type": "string"
-        },
-        "approverName": {
-          "type": "string"
-        },
-        "status": {
-          "type": "string"
-        }
-      },
-      "title": "权限申请记录"
     }
   }
 }

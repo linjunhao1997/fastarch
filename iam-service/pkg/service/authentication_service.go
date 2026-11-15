@@ -36,20 +36,21 @@ func NewAuthenticationService(db *gorm.DB, rdb *redis.Client) iam_v1.Authenticat
 	return &AuthenticationService{db: db, rdb: rdb}
 }
 
-// PasswordAuth 用户名密码登录（011 模型：t_user + bcrypt 摘要）。
-// proto 的 Email 字段随 email 列删除，忽略。
+// PasswordAuth 密码登录（011 模型：t_user + bcrypt 摘要）。
+// identifier 为双标识（username 或 email）：单次 OR 条件查询命中其一即取用户，
+// 命中后 bcrypt 校验；用户不存在与密码错误统一语义，不泄露账号存在性。
 func (a AuthenticationService) PasswordAuth(ctx context.Context, request *iam_v1.PasswordAuthRequest) (*iam_v1.PasswordAuthResponse, error) {
 	var user model.User
 	err := a.db.WithContext(ctx).
 		Select(model.UserFields).
-		Where(model.UserColumnUsername, request.Username).
+		Where(model.UserColumnUsername+" = ? OR "+model.UserColumnEmail+" = ?", request.Identifier, request.Identifier).
 		First(&user).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			// 用户不存在与密码错误统一语义，不泄露账号存在性
 			return nil, ErrInvalidAccountPassword
 		}
-		slog.Warn("query user for login failed", "username", request.Username, "error", err)
+		slog.Warn("query user for login failed", "identifier", request.Identifier, "error", err)
 		return nil, err
 	}
 
@@ -108,9 +109,8 @@ func (a AuthenticationService) PasswordAuth(ctx context.Context, request *iam_v1
 	}, nil
 }
 
-// GetMyProfile 返回当前登录用户的个人信息。011 模型：无 email/kind/应用归属，
-// 响应中对应字段留空；Name 映射 username。仅凭登录态（JWT accountId）获取，
-// 不接收用户标识参数；响应不含密码摘要等敏感字段。
+// GetMyProfile 返回当前登录用户的个人信息（username/nickname/email/status/审计）。
+// 仅凭登录态（JWT accountId）获取，不接收用户标识参数；响应不含密码摘要等敏感字段。
 func (a AuthenticationService) GetMyProfile(ctx context.Context, empty *emptypb.Empty) (*iam_v1.GetMyProfileResponse, error) {
 	accountId := auth.GetAccountId(ctx)
 	if accountId == 0 {
@@ -131,7 +131,9 @@ func (a AuthenticationService) GetMyProfile(ctx context.Context, empty *emptypb.
 	}
 	return &iam_v1.GetMyProfileResponse{
 		Id:         cast.ToString(user.Id),
-		Name:       user.Username,
+		Username:   user.Username,
+		Nickname:   user.Nickname,
+		Email:      user.EmailString(),
 		Status:     user.Status,
 		CreatedBy:  user.CreatedBy,
 		CreateTime: timestamppb.New(user.CreateTime),

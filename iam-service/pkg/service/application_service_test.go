@@ -2,13 +2,17 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"testing"
 	"time"
 
 	"github.com/glebarez/sqlite"
+	common_v1 "github.com/linjunhao1997/idl/pb/common"
+	iam_v1 "github.com/linjunhao1997/idl/pb/iam"
+	"github.com/spf13/cast"
 	"gorm.io/gorm"
 
-	iam_v1 "github.com/linjunhao1997/idl/pb/iam"
 	"iam-service/pkg/model"
 )
 
@@ -150,8 +154,8 @@ func TestDeleteApplicationRepeated(t *testing.T) {
 	}
 }
 
-// 011 模型：AppCode 映射 app_id，服务端生成（krand 雪花 id 字符串化）。
-func TestCreateApplicationGeneratesAppId(t *testing.T) {
+// 011 模型：app_id 服务端生成；secret 一次性返回且服务端仅存 sha256 摘要。
+func TestCreateApplicationGeneratesAppIdAndSecret(t *testing.T) {
 	db := setupApplicationTestDB(t)
 	service := NewApplicationService(db)
 
@@ -161,10 +165,32 @@ func TestCreateApplicationGeneratesAppId(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateApplication() error = %v", err)
 	}
-	if created.AppCode == "" {
-		t.Fatal("AppCode should be generated server-side")
+	if created.Application.AppId == "" {
+		t.Fatal("AppId should be generated server-side")
 	}
-	if created.EnabledStatus != model.StatusEnabled {
-		t.Fatalf("EnabledStatus = %q, want enabled by default", created.EnabledStatus)
+	if created.Application.Status != model.StatusEnabled {
+		t.Fatalf("Status = %q, want enabled by default", created.Application.Status)
+	}
+	if len(created.Secret) != 64 {
+		t.Fatalf("secret length = %d, want 64 (32 bytes hex)", len(created.Secret))
+	}
+
+	// 服务端只存 sha256 hex 摘要，Get 不回传 secret
+	detail, err := service.GetApplication(context.Background(), &common_v1.GetRequest{
+		Id: cast.ToInt64(created.Application.Id),
+	})
+	if err != nil {
+		t.Fatalf("GetApplication() error = %v", err)
+	}
+	if detail.AppId != created.Application.AppId {
+		t.Fatalf("GetApplication AppId = %q, want %q", detail.AppId, created.Application.AppId)
+	}
+	var stored model.Application
+	if err := db.Where(model.ApplicationColumnId, cast.ToInt64(created.Application.Id)).First(&stored).Error; err != nil {
+		t.Fatalf("get stored application: %v", err)
+	}
+	digest := sha256.Sum256([]byte(created.Secret))
+	if stored.SecretHash != hex.EncodeToString(digest[:]) {
+		t.Fatalf("SecretHash = %q, want sha256 hex of returned secret", stored.SecretHash)
 	}
 }

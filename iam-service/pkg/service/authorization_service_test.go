@@ -78,7 +78,7 @@ func TestCreateRoleCodeUnique(t *testing.T) {
 	createTestRole(t, db, 1, "role-code", 1)
 	service := NewAuthorizationService(db, nil)
 
-	_, err := service.CreateRole(context.Background(), &iam_v1.CreateRoleRequest{ApplicationId: 1, Name: "role", RoleCode: "role-code"})
+	_, err := service.CreateRole(context.Background(), &iam_v1.CreateRoleRequest{Name: "role", RoleCode: "role-code"})
 	if err != ErrRoleCodeDuplicated {
 		t.Fatalf("CreateRole() error = %v, want %v", err, ErrRoleCodeDuplicated)
 	}
@@ -293,9 +293,8 @@ func TestRoleAuditFields(t *testing.T) {
 	service := NewAuthorizationService(db, nil)
 
 	created, err := service.CreateRole(createCtx, &iam_v1.CreateRoleRequest{
-		ApplicationId: 1,
-		Name:          "role",
-		RoleCode:      "audit-role",
+		Name:     "role",
+		RoleCode: "audit-role",
 	})
 	if err != nil {
 		t.Fatalf("CreateRole() error = %v", err)
@@ -421,15 +420,6 @@ func TestListPermissionsKeyword(t *testing.T) {
 	}
 	if len(response.Permissions) != 1 || response.Permissions[0].PermissionCode != "iam.alpha.code" {
 		t.Fatalf("ListPermissions() = %v, want iam.alpha.code", response.Permissions)
-	}
-}
-
-// 权限订阅域暂未落地（011 模型无订阅表）：返回 Unimplemented。
-func TestListSubscriptionsUnimplemented(t *testing.T) {
-	service := NewAuthorizationService(setupAuthorizationTestDB(t), nil)
-	_, err := service.ListSubscriptions(context.Background(), &iam_v1.ListSubscriptionsRequest{Keyword: "alpha"})
-	if err == nil {
-		t.Fatal("ListSubscriptions() should return Unimplemented error")
 	}
 }
 
@@ -584,180 +574,5 @@ func TestCreatePermissionCodeDuplicated(t *testing.T) {
 	}
 	if _, err := service.CreatePermission(ctx, req); !errors.Is(err, ErrPermissionCodeDuplicated) {
 		t.Fatalf("CreatePermission() error = %v, want %v", err, ErrPermissionCodeDuplicated)
-	}
-}
-
-// 组件资源模型已废弃：资源 CRUD 与资源树接口一律返回 Unimplemented 语义错误。
-func TestResourceMethodsDeprecated(t *testing.T) {
-	db := setupAuthorizationTestDB(t)
-	service := NewAuthorizationService(db, nil)
-	ctx := context.Background()
-
-	if _, err := service.CreateResource(ctx, &iam_v1.CreateResourceRequest{}); !errors.Is(err, ErrResourceModelDeprecated) {
-		t.Fatalf("CreateResource() error = %v, want ErrResourceModelDeprecated", err)
-	}
-	if _, err := service.GetResource(ctx, &common_v1.GetRequest{Id: 1}); !errors.Is(err, ErrResourceModelDeprecated) {
-		t.Fatalf("GetResource() error = %v, want ErrResourceModelDeprecated", err)
-	}
-	if _, err := service.UpdateResource(ctx, &iam_v1.UpdateResourceRequest{}); !errors.Is(err, ErrResourceModelDeprecated) {
-		t.Fatalf("UpdateResource() error = %v, want ErrResourceModelDeprecated", err)
-	}
-	if _, err := service.DeleteResource(ctx, &iam_v1.DeleteResourceRequest{}); !errors.Is(err, ErrResourceModelDeprecated) {
-		t.Fatalf("DeleteResource() error = %v, want ErrResourceModelDeprecated", err)
-	}
-	if _, err := service.ListResources(ctx, &iam_v1.ListResourcesRequest{}); !errors.Is(err, ErrResourceModelDeprecated) {
-		t.Fatalf("ListResources() error = %v, want ErrResourceModelDeprecated", err)
-	}
-	if _, err := service.ListResourceTree(ctx, &iam_v1.ListResourceTreeRequest{}); !errors.Is(err, ErrResourceModelDeprecated) {
-		t.Fatalf("ListResourceTree() error = %v, want ErrResourceModelDeprecated", err)
-	}
-}
-
-// ── 我的菜单树（011 模型：t_menu + t_r_role_menu 角色绑定，管理员全量）──
-
-// setupMenuTreeFixture 构造菜单树测试环境（sqlite + miniredis）。
-func setupMenuTreeFixture(t *testing.T) (*gorm.DB, *redis.Client) {
-	t.Helper()
-	db := setupAuthorizationTestDB(t)
-	rdb, _ := setupTestRedis(t)
-	return db, rdb
-}
-
-// bindRoleMenus 建立角色-菜单绑定（t_r_role_menu）。
-func bindRoleMenus(t *testing.T, db *gorm.DB, roleId int64, menuIds []int64) {
-	t.Helper()
-	for _, menuId := range menuIds {
-		if err := db.Create(&model.RRoleMenu{RoleId: roleId, MenuId: menuId}).Error; err != nil {
-			t.Fatalf("bind role menu: %v", err)
-		}
-	}
-}
-
-func createMenuRow(t *testing.T, db *gorm.DB, id int64, parentId int64, path, name string, sort int32, permissionCode string) model.Menu {
-	t.Helper()
-	now := time.Now()
-	menu := model.Menu{
-		Id:             id,
-		ParentId:       parentId,
-		Path:           path,
-		Name:           name,
-		Sort:           sort,
-		PermissionCode: permissionCode,
-		Status:         model.StatusEnabled,
-		Version:        1,
-		CreateTime:     now,
-		UpdateTime:     now,
-	}
-	if err := db.Create(&menu).Error; err != nil {
-		t.Fatalf("create menu: %v", err)
-	}
-	return menu
-}
-
-func collectMenuKeys(nodes []*iam_v1.ResourceTreeNode) map[string]bool {
-	out := make(map[string]bool)
-	var walk func(list []*iam_v1.ResourceTreeNode)
-	walk = func(list []*iam_v1.ResourceTreeNode) {
-		for _, n := range list {
-			out[n.Resource.Key] = true
-			walk(n.Children)
-		}
-	}
-	walk(nodes)
-	return out
-}
-
-// 普通用户：可见菜单为其角色绑定的菜单；命中节点的祖先路径一并返回。
-func TestListMyMenuTreeRoleBindingFiltering(t *testing.T) {
-	db, rdb := setupMenuTreeFixture(t)
-	// 根菜单 + 两个子菜单
-	createMenuRow(t, db, 1, 0, "account_management", "账号管理", 1, "")
-	createMenuRow(t, db, 2, 1, "account_management.account_list", "用户列表", 1, "iam.user.list")
-	createMenuRow(t, db, 3, 1, "account_management.application_list", "应用列表", 2, "iam.application.list")
-	createMenuRow(t, db, 4, 0, "isolated", "孤立菜单", 3, "")
-
-	user := createTestUser(t, db, 2, "viewer", 1)
-	role := createTestRole(t, db, 10, "viewer-role", 1)
-	// 用户绑定角色，角色绑定用户列表菜单（子菜单）：祖先路径应回补
-	if err := db.Create(&model.RUserRole{UserId: user.Id, RoleId: role.Id}).Error; err != nil {
-		t.Fatalf("bind user role: %v", err)
-	}
-	bindRoleMenus(t, db, role.Id, []int64{2})
-
-	service := NewAuthorizationService(db, rdb)
-	resp, err := service.ListMyMenuTree(auth.WithAccountId(context.Background(), user.Id), &iam_v1.ListMyMenuTreeRequest{})
-	if err != nil {
-		t.Fatalf("ListMyMenuTree() error = %v", err)
-	}
-
-	keys := collectMenuKeys(resp.Roots)
-	if !keys["account_management"] || !keys["account_management.account_list"] {
-		t.Fatalf("bound menu + ancestors missing: %v", keys)
-	}
-	// 未绑定菜单不可见
-	if keys["account_management.application_list"] || keys["isolated"] {
-		t.Fatalf("unbound menu visible: %v", keys)
-	}
-}
-
-// 管理员全量可见启用菜单（无需角色绑定）。
-func TestListMyMenuTreeAdminFull(t *testing.T) {
-	db, rdb := setupMenuTreeFixture(t)
-	createMenuRow(t, db, 1, 0, "account_management", "账号管理", 1, "")
-	createMenuRow(t, db, 2, 1, "account_management.account_list", "用户列表", 1, "iam.user.list")
-
-	service := NewAuthorizationService(db, rdb)
-	resp, err := service.ListMyMenuTree(
-		auth.WithAdmin(auth.WithAccountId(context.Background(), 2)),
-		&iam_v1.ListMyMenuTreeRequest{},
-	)
-	if err != nil {
-		t.Fatalf("ListMyMenuTree() error = %v", err)
-	}
-	keys := collectMenuKeys(resp.Roots)
-	if len(keys) != 2 || !keys["account_management"] || !keys["account_management.account_list"] {
-		t.Fatalf("admin should see all enabled menus: %v", keys)
-	}
-}
-
-// 停用菜单对管理员也不可见。
-func TestListMyMenuTreeExcludesDisabledMenu(t *testing.T) {
-	db, rdb := setupMenuTreeFixture(t)
-	createMenuRow(t, db, 1, 0, "enabled_menu", "启用菜单", 1, "")
-	disabled := createMenuRow(t, db, 2, 0, "disabled_menu", "停用菜单", 2, "")
-	if err := db.Model(model.Menu{}).Where(model.MenuColumnId, disabled.Id).
-		Update(model.MenuColumnStatus, model.StatusDisabled).Error; err != nil {
-		t.Fatalf("disable menu: %v", err)
-	}
-
-	service := NewAuthorizationService(db, rdb)
-	resp, err := service.ListMyMenuTree(
-		auth.WithAdmin(auth.WithAccountId(context.Background(), 2)),
-		&iam_v1.ListMyMenuTreeRequest{},
-	)
-	if err != nil {
-		t.Fatalf("ListMyMenuTree() error = %v", err)
-	}
-	keys := collectMenuKeys(resp.Roots)
-	if keys["disabled_menu"] {
-		t.Fatalf("disabled menu should be hidden: %v", keys)
-	}
-	if !keys["enabled_menu"] {
-		t.Fatalf("enabled menu missing: %v", keys)
-	}
-}
-
-// 空绑定：返回空 roots 而非报错。
-func TestListMyMenuTreeEmpty(t *testing.T) {
-	db, rdb := setupMenuTreeFixture(t)
-	createTestUser(t, db, 2, "viewer", 1)
-
-	service := NewAuthorizationService(db, rdb)
-	resp, err := service.ListMyMenuTree(auth.WithAccountId(context.Background(), 2), &iam_v1.ListMyMenuTreeRequest{})
-	if err != nil {
-		t.Fatalf("ListMyMenuTree() error = %v", err)
-	}
-	if len(resp.Roots) != 0 {
-		t.Fatalf("roots = %v, want empty", resp.Roots)
 	}
 }

@@ -87,36 +87,6 @@ service AuthorizationService {
     };
   }
 
-  // 申请权限，返回创建出的申请记录（含 id）
-  rpc CreateSubscription(CreateSubscriptionRequest) returns (Subscription) {
-    option (google.api.http) = {
-      post: "/authorization/subscriptions"
-      body: "*"
-    };
-  }
-
-  // 申请记录详情
-  rpc GetSubscription(common.v1.GetRequest) returns (Subscription) {
-    option (google.api.http) = {
-      get: "/authorization/subscriptions/{id}"
-    };
-  }
-
-  // 修改申请记录
-  rpc UpdateSubscription(UpdateSubscriptionRequest) returns (google.protobuf.Empty) {
-    option (google.api.http) = {
-      patch: "/authorization/subscriptions/{id}"
-      body: "*"
-    };
-  }
-
-  // 申请记录列表
-  rpc ListSubscriptions(ListSubscriptionsRequest) returns (ListSubscriptionsResponse) {
-    option (google.api.http) = {
-      get: "/authorization/subscriptions"
-    };
-  }
-
   // 鉴权：校验当前账号是否拥有指定权限
   rpc CheckPermission(CheckPermissionRequest) returns (CheckPermissionResponse) {
     option (google.api.http) = {
@@ -131,73 +101,20 @@ service AuthorizationService {
       get: "/authorization/my-permissions"
     };
   }
-
-  // 资源清单（分页 + 按类型/关键字过滤），供权限创建/编辑的资源绑定选择器
-  rpc ListResources(ListResourcesRequest) returns (ListResourcesResponse) {
-    option (google.api.http) = {
-      get: "/authorization/resources"
-    };
-  }
-
-  // 应用内资源树，用于资源管理与权限绑定选择
-  rpc ListResourceTree(ListResourceTreeRequest) returns (ListResourceTreeResponse) {
-    option (google.api.http) = {
-      get: "/authorization/resource-tree"
-    };
-  }
-
-  // 获取当前用户在指定应用下可见的菜单树（服务端按权限过滤）
-  // 仅含 kind=menu 资源；普通用户按权限键快照过滤，管理员全量
-  rpc ListMyMenuTree(ListMyMenuTreeRequest) returns (ListResourceTreeResponse) {
-    option (google.api.http) = {
-      get: "/authorization/my-menu-tree"
-    };
-  }
-
-  // 创建资源
-  rpc CreateResource(CreateResourceRequest) returns (Resource) {
-    option (google.api.http) = {
-      post: "/authorization/resources"
-      body: "*"
-    };
-  }
-
-  // 获取资源详情
-  rpc GetResource(common.v1.GetRequest) returns (Resource) {
-    option (google.api.http) = {
-      get: "/authorization/resources/{id}"
-    };
-  }
-
-  // 修改资源
-  rpc UpdateResource(UpdateResourceRequest) returns (Resource) {
-    option (google.api.http) = {
-      put: "/authorization/resources/{id}"
-      body: "*"
-    };
-  }
-
-  // 删除资源
-  rpc DeleteResource(DeleteResourceRequest) returns (google.protobuf.Empty) {
-    option (google.api.http) = {
-      delete: "/authorization/resources/{id}"
-    };
-  }
 }
 
 message CreatePermissionRequest {
-  int64 application_id = 1 [(buf.validate.field).required = true];
-  string name = 2 [(buf.validate.field).string.min_len = 1];
-  // 权限码是唯一授权词汇，格式为 服务.模块.操作，如 iam.account.delete
-  string code = 3 [(buf.validate.field).string.min_len = 1];
-  string description = 5;
-  reserved 4, 6, 7, 8;  // value / kind / resource_key_list / resource_id_list 已废除
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  // 权限码是唯一授权词汇，格式为 服务.模块.操作，如 iam.user.delete
+  string code = 2 [(buf.validate.field).string.min_len = 1];
+  string description = 3;
+  reserved 4, 5, 6, 7, 8;  // application_id / value / kind / resource_key_list / resource_id_list 已废除
 }
 
 message CreateRoleRequest {
-  int64 application_id = 1 [(buf.validate.field).required = true];
-  string name = 2 [(buf.validate.field).string.min_len = 1];
-  string role_code = 3 [(buf.validate.field).string.min_len = 1];
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  string role_code = 2 [(buf.validate.field).string.min_len = 1];
+  reserved 3;  // application_id 已废除：011 模型角色不归属应用
 }
 
 message ListPermissionsRequest {
@@ -249,187 +166,51 @@ message DeleteRoleRequest {
   int64 id = 1 [(buf.validate.field).required = true];
 }
 
-message CreateSubscriptionRequest {
-  repeated string role_code_list = 1;
-  repeated string permission_code_list = 2;
-}
-
-message UpdateSubscriptionRequest {
-  int64 id = 1 [(buf.validate.field).required = true];
-  repeated string role_code_list = 2;
-  repeated string permission_code_list = 3;
-}
-
-message ListSubscriptionsRequest {
-  int64 current_page = 1;
-  int64 page_size = 2;
-  string keyword = 3;
-}
-
-message ListSubscriptionsResponse {
-  common.v1.Page page = 1;
-  repeated Subscription subscriptions = 2;
-}
-
 // 权限信息。权限码（permission_code）是唯一授权词汇，
-// 格式为 服务.模块.操作（如 iam.account.delete）。
+// 格式为 服务.模块.操作（如 iam.user.delete）。
 message Permission {
   string id = 1;
   string name = 2;
-  int64 application_id = 3;
-  string permission_code = 4;
-  string enabled_status = 5;
+  string permission_code = 3;
+  string enabled_status = 4;
+  string description = 5;
   int64 version = 6;
   // 审计字段（只读回传，由服务端注入；请求消息不含此类字段，宪法 XII）
-  string created_by = 7;                      // 创建人（账号 id）
-  string updated_by = 8;                      // 修改人（账号 id）
+  string created_by = 7;                      // 创建人（用户 id）
+  string updated_by = 8;                      // 修改人（用户 id）
   google.protobuf.Timestamp create_time = 9;  // 创建时间
   google.protobuf.Timestamp update_time = 10; // 修改时间
-  reserved 11, 12;  // kind / resource_list 已废除：权限码即词汇，绑定语义由组件承担
-}
-
-// 前端组件资源（页面结构注册表）：结构归代码、展示归管理员。
-// key 全局唯一（应用内唯一），格式随 kind：
-//   menu   → 菜单层级键，如 "authorization_management"
-//   page   → 页面路由键，如 "permission_list"
-//   button → 按钮/操作键，如 "account_list.delete"
-// permission_code_list 是组件绑定的权限码：前端按「组件绑定码 ∩ 用户持有码」
-// 决定展示或置灰；空清单表示不绑定权限（所有人可见）。
-message Resource {
-  string id = 1;
-  // 组件类型：menu | page | button
-  string kind = 2;
-  string key = 3;
-  string name = 4;
-  string enabled_status = 6;
-  google.protobuf.Timestamp create_time = 7;
-  google.protobuf.Timestamp update_time = 8;
-  int64 application_id = 9;
-  int64 parent_id = 10;
-  int64 version = 11;
-  int32 display_order = 12;
-  ApplicationSummary application = 13;
-  // 绑定的权限码清单（前端展示/置灰判定依据）
-  repeated string permission_code_list = 14;
-}
-
-message ListResourcesRequest {
-  int64 current_page = 1;
-  int64 page_size = 2;
-  // 按组件类型过滤：menu | page | button
-  string kind = 3;
-  // 匹配 key/name
-  string keyword = 4;
-  // 按所属应用过滤（资源管理页按应用维度展示）
-  int64 application_id = 5;
-}
-
-message ListResourcesResponse {
-  common.v1.Page page = 1;
-  repeated Resource resources = 2;
-}
-
-message ListResourceTreeRequest {
-  int64 application_id = 1 [(buf.validate.field).required = true];
-  string keyword = 2;
-}
-
-message ListMyMenuTreeRequest {
-  int64 application_id = 1 [(buf.validate.field).required = true];
-}
-
-message ResourceTreeNode {
-  Resource resource = 1;
-  repeated ResourceTreeNode children = 2;
-}
-
-message ListResourceTreeResponse {
-  repeated ResourceTreeNode roots = 1;
-}
-
-message CreateResourceRequest {
-  int64 application_id = 1 [(buf.validate.field).required = true];
-  int64 parent_id = 2;
-  // 组件类型：menu | page | button
-  string kind = 3 [(buf.validate.field).required = true];
-  string key = 4 [(buf.validate.field).string.min_len = 1];
-  string name = 5 [(buf.validate.field).string.min_len = 1];
-  bool disabled = 7;
-  int32 display_order = 8;
-  // 绑定的权限码清单（替换式写入；空清单表示不绑定权限）
-  repeated string permission_code_list = 9;
-  reserved 6;  // rpc_full_method 已废除：API→码映射归代码内 methodMap
-}
-
-message UpdateResourceRequest {
-  int64 id = 1 [(buf.validate.field).required = true];
-  int64 parent_id = 2;
-  bool parent_cleared = 3;
-  string name = 4;
-  bool disabled = 6;
-  int64 version = 7 [(buf.validate.field).required = true];
-  int32 display_order = 8;
-  // 绑定的权限码清单（替换式更新）
-  repeated string permission_code_list = 9;
-  reserved 5;  // rpc_full_method 已废除
-}
-
-message DeleteResourceRequest {
-  int64 id = 1 [(buf.validate.field).required = true];
+  reserved 11, 12, 13;  // application_id / kind / resource_list 已废除
 }
 
 // 角色信息
 message Role {
   string id = 1;
   string name = 2;
-  int64 application_id = 3;
-  string role_code = 4;
-  string enabled_status = 5;
-  repeated string permission_code_list = 6 [deprecated = true];
-  int64 version = 7;
-  // 审计字段（只读回传，由服务端注入；请求消息不含此类字段，宪法 XII）
-  string created_by = 8;                      // 创建人（账号 id）
-  string updated_by = 9;                      // 修改人（账号 id）
-  google.protobuf.Timestamp create_time = 10; // 创建时间
-  google.protobuf.Timestamp update_time = 11; // 修改时间
-  ApplicationSummary application = 12;
-  repeated PermissionSummary permission_list = 13;
-}
-
-message ApplicationSummary {
-  int64 id = 1;
-  string name = 2;
-  string code = 3;
+  string role_code = 3;
   string enabled_status = 4;
-  string description = 5;
+  repeated string permission_code_list = 5 [deprecated = true];
+  int64 version = 6;
+  // 审计字段（只读回传，由服务端注入；请求消息不含此类字段，宪法 XII）
+  string created_by = 7;                      // 创建人（用户 id）
+  string updated_by = 8;                      // 修改人（用户 id）
+  google.protobuf.Timestamp create_time = 9;  // 创建时间
+  google.protobuf.Timestamp update_time = 10; // 修改时间
+  repeated PermissionSummary permission_list = 11;
+  reserved 12;  // application 归属已废除
 }
 
 message PermissionSummary {
-  int64 id = 1;
+  string id = 1;
   string name = 2;
   string permission_code = 3;
-  string enabled_status = 5;
-  reserved 4;  // kind 已废除
-}
-
-// 权限申请记录
-message Subscription {
-  string id = 1;
-  string source_application_code = 2;
-  string target_application_code = 3;
-  repeated string role_code_list = 4;
-  repeated string permission_code_list = 5;
-  int64 applicant_id = 6;
-  int64 approver_id = 7;
-  string applicant_name = 8;
-  string approver_name = 9;
-  string status = 10;
+  string enabled_status = 4;
 }
 
 // 检查权限
 message CheckPermissionRequest {
-  string application_code = 1 [(buf.validate.field).string.min_len = 1];
-  string permission_code = 2 [(buf.validate.field).string.min_len = 1];
+  string permission_code = 1 [(buf.validate.field).string.min_len = 1];
+  reserved 2;  // application_code 已废除：权限码为全局唯一词汇
 }
 
 message CheckPermissionResponse {

@@ -1,0 +1,414 @@
+package service
+
+import (
+	"context"
+	"log/slog"
+	"time"
+
+	"iam-service/pkg/auth"
+	"iam-service/pkg/model"
+
+	"github.com/go-dev-frame/sponge/pkg/krand"
+	common_v1 "github.com/linjunhao1997/idl/pb/common"
+	iam_v1 "github.com/linjunhao1997/idl/pb/iam"
+	"github.com/spf13/cast"
+	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+	"gorm.io/gorm"
+)
+
+type MenuService struct {
+	db *gorm.DB
+}
+
+var _ iam_v1.MenuServiceServer = (*MenuService)(nil)
+
+func NewMenuService(db *gorm.DB) *MenuService {
+	return &MenuService{db: db}
+}
+
+// menuToPb 模型转 pb（t_menu 全列映射）。
+func menuToPb(m model.Menu) *iam_v1.Menu {
+	return &iam_v1.Menu{
+		Id:             cast.ToString(m.Id),
+		ParentId:       m.ParentId,
+		Name:           m.Name,
+		Path:           m.Path,
+		Icon:           m.Icon,
+		Sort:           m.Sort,
+		PermissionCode: m.PermissionCode,
+		Status:         m.Status,
+		Version:        m.Version,
+		CreatedBy:      m.CreatedBy,
+		UpdatedBy:      m.UpdatedBy,
+		CreateTime:     timestamppb.New(m.CreateTime),
+		UpdateTime:     timestamppb.New(m.UpdateTime),
+	}
+}
+
+// menuTreeNodes 按 parent_id 组装菜单树（纯内存回溯，禁止循环内 DB 调用）。
+func menuTreeNodes(menus []model.Menu) []*iam_v1.MenuTreeNode {
+	nodesById := make(map[int64]*iam_v1.MenuTreeNode, len(menus))
+	for _, menu := range menus {
+		nodesById[menu.Id] = &iam_v1.MenuTreeNode{
+			Menu: menuToPb(menu),
+		}
+	}
+	roots := make([]*iam_v1.MenuTreeNode, 0)
+	for _, menu := range menus {
+		node := nodesById[menu.Id]
+		parent, hasParent := nodesById[menu.ParentId]
+		if menu.ParentId != 0 && hasParent {
+			parent.Children = append(parent.Children, node)
+		} else {
+			roots = append(roots, node)
+		}
+	}
+	return roots
+}
+
+// loadVisibleMenus 按账号角色取可见菜单（011 模型：t_menu + t_r_role_menu）。
+// 管理员取全量启用菜单；普通用户取角色绑定菜单并回补祖先路径，保证树结构完整。
+func loadVisibleMenus(ctx context.Context, db *gorm.DB, accountId int64, isAdmin bool) []model.Menu {
+	var menus []model.Menu
+	query := db.WithContext(ctx).
+		Select(model.MenuFields).
+		Where(model.MenuColumnStatus, model.StatusEnabled)
+	if !isAdmin {
+		var roleIds []int64
+		err := db.WithContext(ctx).Model(model.RUserRole{}).
+			Where(model.RUserRoleColumnUserId, accountId).
+			Pluck(model.RUserRoleColumnRoleId, &roleIds).Error
+		if err != nil {
+			slog.Warn("load user role ids failed", "account_id", accountId, "error", err)
+			return nil
+		}
+		if len(roleIds) == 0 {
+			return nil
+		}
+		var menuIds []int64
+		err = db.WithContext(ctx).Model(model.RRoleMenu{}).
+			Where(model.RRoleMenuColumnRoleId+" IN ?", roleIds).
+			Distinct().
+			Pluck(model.RRoleMenuColumnMenuId, &menuIds).Error
+		if err != nil {
+			slog.Warn("load role menu ids failed", "role_ids", roleIds, "error", err)
+			return nil
+		}
+		if len(menuIds) == 0 {
+			return nil
+		}
+		query = query.Where(model.MenuColumnId+" IN ?", menuIds)
+	}
+	err := query.
+		Order(model.MenuColumnSort + " ASC").
+		Find(&menus).Error
+	if err != nil {
+		slog.Warn("load menus failed", "error", err)
+		return nil
+	}
+	// 回补祖先路径：把选中菜单的各级父节点并入集合，保证树从根可达
+	return fillMenuAncestors(ctx, db, menus)
+}
+
+// fillMenuAncestors 把菜单集合缺失的祖先菜单并入返回集合。
+// 一次性载入全量启用菜单后纯内存回溯（菜单树规模有限），避免循环内点查。
+func fillMenuAncestors(ctx context.Context, db *gorm.DB, menus []model.Menu) []model.Menu {
+	included := make(map[int64]struct{}, len(menus))
+	for _, menu := range menus {
+		included[menu.Id] = struct{}{}
+	}
+	var allMenus []model.Menu
+	err := db.WithContext(ctx).
+		Select(model.MenuFields).
+		Where(model.MenuColumnStatus, model.StatusEnabled).
+		Find(&allMenus).Error
+	if err != nil {
+		slog.Warn("load all menus for ancestor fill failed", "error", err)
+		return menus
+	}
+	menuById := make(map[int64]model.Menu, len(allMenus))
+	for _, menu := range allMenus {
+		menuById[menu.Id] = menu
+	}
+	result := menus
+	for _, menu := range menus {
+		parentId := menu.ParentId
+		for parentId != 0 {
+			if _, ok := included[parentId]; ok {
+				break
+			}
+			parent, exists := menuById[parentId]
+			if !exists {
+				break
+			}
+			included[parentId] = struct{}{}
+			result = append(result, parent)
+			parentId = parent.ParentId
+		}
+	}
+	return result
+}
+
+// ListMenuTree 管理员视角全量菜单树（含停用菜单，前端置灰）。
+func (s *MenuService) ListMenuTree(ctx context.Context, empty *emptypb.Empty) (*iam_v1.ListMenuTreeResponse, error) {
+	var menus []model.Menu
+	err := s.db.WithContext(ctx).
+		Select(model.MenuFields).
+		Order(model.MenuColumnSort + " ASC").
+		Find(&menus).Error
+	if err != nil {
+		slog.Warn("list menu tree failed", "error", err)
+		return nil, err
+	}
+	return &iam_v1.ListMenuTreeResponse{
+		Roots: menuTreeNodes(menus),
+	}, nil
+}
+
+// ListMyMenuTree 当前登录用户可见菜单树：管理员全量启用菜单，
+// 普通用户按角色绑定过滤并回补祖先路径。
+func (s *MenuService) ListMyMenuTree(ctx context.Context, empty *emptypb.Empty) (*iam_v1.ListMenuTreeResponse, error) {
+	isAdmin := auth.IsAdminFromContext(ctx)
+	accountId := auth.GetAccountId(ctx)
+	menus := loadVisibleMenus(ctx, s.db, accountId, isAdmin)
+	return &iam_v1.ListMenuTreeResponse{
+		Roots: menuTreeNodes(menus),
+	}, nil
+}
+
+// CreateMenu 创建菜单，返回创建出的菜单（含 id）。
+func (s *MenuService) CreateMenu(ctx context.Context, request *iam_v1.CreateMenuRequest) (*iam_v1.Menu, error) {
+	if len(request.PermissionCode) > 0 && !model.IsValidPermissionCode(request.PermissionCode) {
+		return nil, ErrInvalidPermissionCode
+	}
+	pkId := krand.NewID()
+	now := time.Now()
+	operator := cast.ToString(auth.GetAccountId(ctx))
+	status := request.Status
+	if status == "" {
+		status = model.StatusEnabled
+	}
+	menu := model.Menu{
+		Id:             pkId,
+		ParentId:       request.ParentId,
+		Name:           request.Name,
+		Path:           request.Path,
+		Icon:           request.Icon,
+		Sort:           request.Sort,
+		PermissionCode: request.PermissionCode,
+		Status:         status,
+		Version:        1,
+		CreatedBy:      operator,
+		UpdatedBy:      operator,
+		CreateTime:     now,
+		UpdateTime:     now,
+	}
+	if err := s.db.WithContext(ctx).Select(model.MenuFields).Create(&menu).Error; err != nil {
+		slog.Warn("create menu failed", "menu_name", request.Name, "error", err)
+		return nil, err
+	}
+	return menuToPb(menu), nil
+}
+
+// GetMenu 获取菜单信息。
+func (s *MenuService) GetMenu(ctx context.Context, request *common_v1.GetRequest) (*iam_v1.Menu, error) {
+	var menu model.Menu
+	err := s.db.WithContext(ctx).
+		Select(model.MenuFields).
+		Where(model.MenuColumnId, request.Id).
+		First(&menu).Error
+	if err != nil {
+		return nil, err
+	}
+	return menuToPb(menu), nil
+}
+
+// UpdateMenu 修改菜单：字段缺省 = 不修改；parent_id 默认不改，
+// 仅在 parent_cleared = true 时按传入值整体移动（含挂到顶级）。
+func (s *MenuService) UpdateMenu(ctx context.Context, request *iam_v1.UpdateMenuRequest) (*emptypb.Empty, error) {
+	var menu model.Menu
+	err := s.db.WithContext(ctx).
+		Select(model.MenuFields).
+		Where(model.MenuColumnId, request.Id).
+		First(&menu).Error
+	if err != nil {
+		return nil, err
+	}
+	if len(request.PermissionCode) > 0 && !model.IsValidPermissionCode(request.PermissionCode) {
+		return nil, ErrInvalidPermissionCode
+	}
+
+	updates := map[string]interface{}{}
+	if len(request.Name) > 0 {
+		updates[model.MenuColumnName] = request.Name
+	}
+	if len(request.Path) > 0 {
+		updates[model.MenuColumnPath] = request.Path
+	}
+	if len(request.Icon) > 0 {
+		updates[model.MenuColumnIcon] = request.Icon
+	}
+	if request.Sort != 0 {
+		updates[model.MenuColumnSort] = request.Sort
+	}
+	if len(request.PermissionCode) > 0 {
+		updates[model.MenuColumnPermissionCode] = request.PermissionCode
+	}
+	if len(request.Status) > 0 {
+		updates[model.MenuColumnStatus] = request.Status
+	}
+	if request.ParentCleared {
+		updates[model.MenuColumnParentId] = request.ParentId
+	}
+	updates[model.MenuColumnUpdateTime] = time.Now()
+	// 审计字段服务端注入：仅更新修改人与修改时间（宪法 XII）
+	updates[model.MenuColumnUpdatedBy] = cast.ToString(auth.GetAccountId(ctx))
+	updates[model.MenuColumnVersion] = gorm.Expr(model.MenuColumnVersion + " + 1")
+
+	result := s.db.WithContext(ctx).Model(model.Menu{}).
+		Where(model.MenuColumnId, request.Id).
+		Where(model.MenuColumnVersion, request.Version).
+		Updates(updates)
+	if result.Error != nil {
+		slog.Warn("update menu failed", "menu_id", request.Id, "version", request.Version, "error", result.Error)
+		return nil, result.Error
+	}
+	if result.RowsAffected == 0 {
+		slog.Warn("update menu rejected: version conflict", "menu_id", request.Id, "version", request.Version)
+		return nil, ErrUpdateMenuBusy
+	}
+	return &emptypb.Empty{}, nil
+}
+
+// DeleteMenu 删除菜单：子菜单与角色绑定引用检查，物理删除（基础架构型，宪法 XIV）。
+func (s *MenuService) DeleteMenu(ctx context.Context, request *iam_v1.DeleteMenuRequest) (*emptypb.Empty, error) {
+	var childCount int64
+	err := s.db.WithContext(ctx).Model(model.Menu{}).
+		Where(model.MenuColumnParentId, request.Id).
+		Count(&childCount).Error
+	if err != nil {
+		slog.Warn("check menu children failed", "menu_id", request.Id, "error", err)
+		return nil, err
+	}
+	if childCount > 0 {
+		slog.Warn("delete menu rejected: has child menus", "menu_id", request.Id, "child_count", childCount)
+		return nil, ErrMenuHasChildren
+	}
+	var bindingCount int64
+	err = s.db.WithContext(ctx).Model(model.RRoleMenu{}).
+		Where(model.RRoleMenuColumnMenuId, request.Id).
+		Count(&bindingCount).Error
+	if err != nil {
+		slog.Warn("check menu role bindings failed", "menu_id", request.Id, "error", err)
+		return nil, err
+	}
+	if bindingCount > 0 {
+		slog.Warn("delete menu rejected: bound by roles", "menu_id", request.Id, "binding_count", bindingCount)
+		return nil, ErrMenuReferenced
+	}
+
+	result := s.db.WithContext(ctx).
+		Where(model.MenuColumnId, request.Id).
+		Delete(model.Menu{})
+	if result.Error != nil {
+		slog.Warn("delete menu failed", "menu_id", request.Id, "error", result.Error)
+		return nil, result.Error
+	}
+	if result.RowsAffected == 0 {
+		slog.Warn("delete menu rejected: menu not found", "menu_id", request.Id)
+		return nil, gorm.ErrRecordNotFound
+	}
+	return &emptypb.Empty{}, nil
+}
+
+// UpdateRoleMenus 角色绑定菜单全量覆盖：以 menu_ids 为目标集合做整体替换
+// （事务内先清空再写入；与 UpdateAccountRoles 的增量语义不同）。
+func (s *MenuService) UpdateRoleMenus(ctx context.Context, request *iam_v1.UpdateRoleMenusRequest) (*emptypb.Empty, error) {
+	menuIds := make([]int64, 0, len(request.MenuIds))
+	seen := make(map[int64]struct{}, len(request.MenuIds))
+	for _, raw := range request.MenuIds {
+		id := cast.ToInt64(raw)
+		if id <= 0 {
+			continue
+		}
+		if _, dup := seen[id]; dup {
+			continue
+		}
+		seen[id] = struct{}{}
+		menuIds = append(menuIds, id)
+	}
+
+	// 菜单必须全部存在（避免静默丢弃非法 id）
+	if len(menuIds) > 0 {
+		var count int64
+		err := s.db.WithContext(ctx).Model(model.Menu{}).
+			Where(model.MenuColumnId+" IN ?", menuIds).
+			Count(&count).Error
+		if err != nil {
+			slog.Warn("check menus for role binding failed", "role_id", request.RoleId, "error", err)
+			return nil, err
+		}
+		if count != int64(len(menuIds)) {
+			slog.Warn("bind menus rejected: some menus not found", "role_id", request.RoleId)
+			return nil, ErrMenuNotFound
+		}
+	}
+
+	var role model.Role
+	err := s.db.WithContext(ctx).
+		Select(model.RoleFields).
+		Where(model.RoleColumnId, request.RoleId).
+		First(&role).Error
+	if err != nil {
+		slog.Warn("get role for menu binding failed", "role_id", request.RoleId, "error", err)
+		return nil, err
+	}
+	if err := loadRoleMenus(ctx, s.db, &role); err != nil {
+		return nil, err
+	}
+
+	// 与当前绑定求差集，只增删变化部分，避免清空重写引发无谓行变更
+	boundMenuIds := make(map[int64]struct{}, len(role.MenuList))
+	for _, menu := range role.MenuList {
+		boundMenuIds[menu.Id] = struct{}{}
+	}
+	targetSet := make(map[int64]struct{}, len(menuIds))
+	for _, id := range menuIds {
+		targetSet[id] = struct{}{}
+	}
+	addedMenus := make([]model.Menu, 0, len(menuIds))
+	for _, id := range menuIds {
+		if _, exists := boundMenuIds[id]; !exists {
+			addedMenus = append(addedMenus, model.Menu{Id: id})
+		}
+	}
+	removedMenus := make([]model.Menu, 0)
+	for _, menu := range role.MenuList {
+		if _, exists := targetSet[menu.Id]; !exists {
+			removedMenus = append(removedMenus, *menu)
+		}
+	}
+
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		association := tx.Model(&role).Association("MenuList")
+		// GORM Append 空切片仍会重复插入关联行，必须跳过空清单
+		if len(addedMenus) > 0 {
+			if err := association.Append(addedMenus); err != nil {
+				return err
+			}
+		}
+		if len(removedMenus) > 0 {
+			return association.Delete(removedMenus)
+		}
+		return nil
+	})
+	if err != nil {
+		slog.Warn("commit role menu binding failed",
+			"role_id", request.RoleId,
+			"menu_ids", request.MenuIds,
+			"error", err)
+		return nil, err
+	}
+	return &emptypb.Empty{}, nil
+}

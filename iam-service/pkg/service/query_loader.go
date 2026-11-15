@@ -246,3 +246,40 @@ func loadUsersRoles(ctx context.Context, db *gorm.DB, users []model.User) error 
 	}
 	return nil
 }
+
+// loadRoleMenus 加载角色的菜单列表（经 t_r_role_menu 关联，按绑定顺序）。
+func loadRoleMenus(ctx context.Context, db *gorm.DB, role *model.Role) error {
+	var bindings []model.RRoleMenu
+	if err := db.WithContext(ctx).
+		Where(model.RRoleMenuColumnRoleId, role.Id).
+		Select(model.RRoleMenuFields).
+		Find(&bindings).Error; err != nil {
+		return err
+	}
+	if len(bindings) == 0 {
+		role.MenuList = []*model.Menu{}
+		return nil
+	}
+	menuIds := make([]int64, 0, len(bindings))
+	for _, binding := range bindings {
+		menuIds = append(menuIds, binding.MenuId)
+	}
+	var menus []*model.Menu
+	if err := db.WithContext(ctx).
+		Where(model.MenuColumnId+" IN ?", menuIds).
+		Select(model.MenuFields).
+		Find(&menus).Error; err != nil {
+		return err
+	}
+	menuById := make(map[int64]*model.Menu, len(menus))
+	for _, menu := range menus {
+		menuById[menu.Id] = menu
+	}
+	role.MenuList = make([]*model.Menu, 0, len(bindings))
+	for _, binding := range bindings {
+		if menu, exists := menuById[binding.MenuId]; exists {
+			role.MenuList = append(role.MenuList, menu)
+		}
+	}
+	return nil
+}

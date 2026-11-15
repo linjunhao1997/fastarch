@@ -55,7 +55,7 @@ func TestCreateAccessCredentialReturnsOneTimeSecret(t *testing.T) {
 	createTestUser(t, service.db, 1, "cred", 1)
 
 	resp, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{
-		AccountId: 1,
+		UserId: 1,
 		Remark:    "ci-deploy",
 	})
 	if err != nil {
@@ -121,7 +121,7 @@ func TestCreateAccessCredentialAccountInvalid(t *testing.T) {
 		{name: "account disabled", accountId: 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{AccountId: tc.accountId})
+			_, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{UserId: tc.accountId})
 			if err != ErrAccessCredentialAccountInvalid {
 				t.Fatalf("error = %v, want ErrAccessCredentialAccountInvalid", err)
 			}
@@ -142,11 +142,11 @@ func TestCreateAccessCredentialLimitExceeded(t *testing.T) {
 	createTestUser(t, service.db, 1, "limit", 1)
 
 	for i := 0; i < 2; i++ {
-		if _, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{AccountId: 1}); err != nil {
+		if _, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{UserId: 1}); err != nil {
 			t.Fatalf("create #%d error = %v", i+1, err)
 		}
 	}
-	_, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{AccountId: 1})
+	_, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{UserId: 1})
 	if err != ErrAccessCredentialLimitExceeded {
 		t.Fatalf("error = %v, want ErrAccessCredentialLimitExceeded", err)
 	}
@@ -170,7 +170,7 @@ func TestListAccessCredentialsPaging(t *testing.T) {
 			accountId = 2
 		}
 		if _, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{
-			AccountId: accountId,
+			UserId: accountId,
 			Remark:    "remark-" + string(rune('a'+i)),
 		}); err != nil {
 			t.Fatalf("create #%d error = %v", i+1, err)
@@ -191,7 +191,7 @@ func TestListAccessCredentialsPaging(t *testing.T) {
 		t.Fatalf("items = %d, want 2", len(resp.AccessCredentials))
 	}
 	for _, item := range resp.AccessCredentials {
-		if item.AccountName == "" {
+		if item.UserName == "" {
 			t.Fatalf("account_name not assembled for credential %s", item.Id)
 		}
 		if item.Id == "" || item.AccessKey == "" {
@@ -210,14 +210,14 @@ func TestListAccessCredentialsFilters(t *testing.T) {
 	createTestUser(t, service.db, 2, "b-user", 1)
 
 	// 两个账号各 1 条启用 + 账号 1 追加 1 条禁用
-	enabledOne, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{AccountId: 1, Remark: "keep"})
+	enabledOne, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{UserId: 1, Remark: "keep"})
 	if err != nil {
 		t.Fatalf("create enabled one: %v", err)
 	}
-	if _, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{AccountId: 1, Remark: "off"}); err != nil {
+	if _, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{UserId: 1, Remark: "off"}); err != nil {
 		t.Fatalf("create disabled: %v", err)
 	}
-	if _, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{AccountId: 2, Remark: "other"}); err != nil {
+	if _, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{UserId: 2, Remark: "other"}); err != nil {
 		t.Fatalf("create account2: %v", err)
 	}
 	if err := service.db.Model(&model.AccessCredential{}).
@@ -239,7 +239,7 @@ func TestListAccessCredentialsFilters(t *testing.T) {
 	}
 
 	// account_id 筛选
-	if got := list(&iam_v1.ListAccessCredentialsRequest{AccountId: 2}); len(got) != 1 {
+	if got := list(&iam_v1.ListAccessCredentialsRequest{UserId: 2}); len(got) != 1 {
 		t.Fatalf("filter by account_id=2: got %d items, want 1", len(got))
 	}
 	// status 筛选
@@ -251,11 +251,11 @@ func TestListAccessCredentialsFilters(t *testing.T) {
 		t.Fatalf("filter by access_key prefix: got %d items, want 1", len(got))
 	}
 	// 组合条件：account_id=1 且 status=enabled
-	if got := list(&iam_v1.ListAccessCredentialsRequest{AccountId: 1, Status: "enabled"}); len(got) != 1 || got[0] != enabledOne.Credential.AccessKey {
+	if got := list(&iam_v1.ListAccessCredentialsRequest{UserId: 1, Status: "enabled"}); len(got) != 1 || got[0] != enabledOne.Credential.AccessKey {
 		t.Fatalf("combined filter: got %v, want only %s", got, enabledOne.Credential.AccessKey)
 	}
 	// 无匹配 → 空列表非错误
-	if got := list(&iam_v1.ListAccessCredentialsRequest{AccountId: 999}); len(got) != 0 {
+	if got := list(&iam_v1.ListAccessCredentialsRequest{UserId: 999}); len(got) != 0 {
 		t.Fatalf("filter by missing account: got %v, want empty", got)
 	}
 }
@@ -264,7 +264,7 @@ func TestListAccessCredentialsFilters(t *testing.T) {
 func TestChangeAccessCredentialStatus(t *testing.T) {
 	service, _ := newTestCredentialService(t, 20)
 	createTestUser(t, service.db, 1, "a-user", 1)
-	created, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{AccountId: 1})
+	created, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{UserId: 1})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -317,7 +317,7 @@ func TestChangeAccessCredentialStatus(t *testing.T) {
 func TestResetAccessCredentialSecret(t *testing.T) {
 	service, aes := newTestCredentialService(t, 20)
 	createTestUser(t, service.db, 1, "a-user", 1)
-	created, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{AccountId: 1})
+	created, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{UserId: 1})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -364,7 +364,7 @@ func TestResetAccessCredentialSecret(t *testing.T) {
 func TestDeleteAccessCredential(t *testing.T) {
 	service, _ := newTestCredentialService(t, 20)
 	createTestUser(t, service.db, 1, "a-user", 1)
-	created, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{AccountId: 1})
+	created, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{UserId: 1})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -389,7 +389,7 @@ func TestDeleteAccessCredential(t *testing.T) {
 func TestGetAccessCredential(t *testing.T) {
 	service, _ := newTestCredentialService(t, 20)
 	createTestUser(t, service.db, 1, "a-user", 1)
-	created, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{AccountId: 1, Remark: "detail"})
+	created, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{UserId: 1, Remark: "detail"})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -398,7 +398,7 @@ func TestGetAccessCredential(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetAccessCredential() error = %v", err)
 	}
-	if detail.AccessKey != created.Credential.AccessKey || detail.AccountName == "" || detail.Remark != "detail" {
+	if detail.AccessKey != created.Credential.AccessKey || detail.UserName == "" || detail.Remark != "detail" {
 		t.Fatalf("detail fields mismatch: %+v", detail)
 	}
 	if detail.Version != created.Credential.Version {
@@ -417,7 +417,7 @@ func TestCreateAccessCredentialWithExpireTime(t *testing.T) {
 	expire := time.Now().Add(24 * time.Hour).Round(time.Second).UTC()
 
 	resp, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{
-		AccountId:  1,
+		UserId:  1,
 		ExpireTime: timestamppb.New(expire),
 	})
 	if err != nil {

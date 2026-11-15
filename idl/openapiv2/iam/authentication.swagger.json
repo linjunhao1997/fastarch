@@ -18,7 +18,7 @@
   "paths": {
     "/authentication/my-profile": {
       "get": {
-        "summary": "获取当前登录用户的个人信息（基本信息 + 所属应用列表）\r\n仅凭登录态（JWT accountId）返回，不接收用户标识参数",
+        "summary": "获取当前登录用户的个人信息（基本信息 + 所属应用列表）\n仅凭登录态（JWT accountId）返回，不接收用户标识参数",
         "operationId": "AuthenticationService_GetMyProfile",
         "responses": {
           "200": {
@@ -41,7 +41,7 @@
     },
     "/authentication/password-auth": {
       "post": {
-        "summary": "密码认证",
+        "summary": "密码认证：identifier 即登录标识（username 或 email，服务端双路径查询）",
         "operationId": "AuthenticationService_PasswordAuth",
         "responses": {
           "200": {
@@ -107,24 +107,27 @@
       "properties": {
         "id": {
           "type": "string",
-          "title": "账号基本信息（不含密码、盐、AK/SK 等敏感凭据字段）"
+          "title": "用户基本信息（不含密码摘要、AK/SK 等敏感凭据字段）"
         },
-        "name": {
-          "type": "string"
+        "username": {
+          "type": "string",
+          "title": "登录名（唯一）"
+        },
+        "nickname": {
+          "type": "string",
+          "title": "显示名（可空）"
         },
         "email": {
-          "type": "string"
-        },
-        "kind": {
           "type": "string",
-          "title": "账号类型：\"0\" 用户，\"1\" 系统"
+          "title": "邮箱（可空，唯一）"
         },
         "status": {
-          "type": "string"
+          "type": "string",
+          "title": "\"enabled\" 启用，\"disabled\" 禁用"
         },
         "createdBy": {
           "type": "string",
-          "description": "创建人（账号 id）",
+          "description": "创建人（用户 id）",
           "title": "审计字段（只读回传，服务端注入）"
         },
         "createTime": {
@@ -167,11 +170,9 @@
     "v1PasswordAuthRequest": {
       "type": "object",
       "properties": {
-        "username": {
-          "type": "string"
-        },
-        "email": {
-          "type": "string"
+        "identifier": {
+          "type": "string",
+          "title": "登录标识：username 或 email（双标识登录，011 裁决）"
         },
         "password": {
           "type": "string"

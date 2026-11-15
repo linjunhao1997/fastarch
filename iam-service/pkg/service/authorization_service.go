@@ -31,12 +31,21 @@ func applyKeywordFilter(db *gorm.DB, conditions []string, keyword string) *gorm.
 	}
 	escapedKeyword := strings.NewReplacer("%", "\\%", "_", "\\_").Replace(keyword)
 	likeKeyword := "%" + escapedKeyword + "%"
-	return db.Where(strings.Join(conditions, " OR "), likeKeyword, likeKeyword)
+	// 每个 LIKE ? 条件对应一个参数，按条件数动态填充
+	args := make([]any, 0, len(conditions))
+	for range conditions {
+		args = append(args, likeKeyword)
+	}
+	return db.Where(strings.Join(conditions, " OR "), args...)
 }
 
 type AuthorizationService struct {
 	db  *gorm.DB
 	rdb *redis.Client
+}
+
+func NewAuthorizationService(db *gorm.DB, rdb *redis.Client) *AuthorizationService {
+	return &AuthorizationService{db: db, rdb: rdb}
 }
 
 // loadAccountPermissionSnapshot 读取账号权限快照：缓存命中直接返回，未命中或
@@ -92,6 +101,7 @@ func permissionToPb(p model.Permission) *iam_v1.Permission {
 		Name:           p.Name,
 		PermissionCode: p.Code,
 		EnabledStatus:  p.Status,
+		Description:    p.Description,
 		Version:        p.Version,
 		CreatedBy:      p.CreatedBy,
 		UpdatedBy:      p.UpdatedBy,
@@ -122,7 +132,7 @@ func roleToPb(r model.Role) *iam_v1.Role {
 			summaries := make([]*iam_v1.PermissionSummary, 0, len(r.PermissionList))
 			for _, permission := range r.PermissionList {
 				summaries = append(summaries, &iam_v1.PermissionSummary{
-					Id:             permission.Id,
+					Id:             cast.ToString(permission.Id),
 					Name:           permission.Name,
 					PermissionCode: permission.Code,
 					EnabledStatus:  permission.Status,
@@ -131,6 +141,17 @@ func roleToPb(r model.Role) *iam_v1.Role {
 			return summaries
 		}(),
 	}
+}
+
+// GetMyPermissions 返回当前认证账号持有的全部权限码（011 模型：纯权限码快照）。
+func (a *AuthorizationService) GetMyPermissions(ctx context.Context, request *emptypb.Empty) (*iam_v1.GetMyPermissionsResponse, error) {
+	permKeys, err := loadAccountPermissionSnapshot(ctx, a.rdb, a.db, auth.GetAccountId(ctx))
+	if err != nil {
+		return nil, err
+	}
+	return &iam_v1.GetMyPermissionsResponse{
+		PermissionCodeList: permKeys,
+	}, nil
 }
 
 func (a *AuthorizationService) CreatePermission(ctx context.Context, request *iam_v1.CreatePermissionRequest) (*iam_v1.Permission, error) {
@@ -143,11 +164,12 @@ func (a *AuthorizationService) CreatePermission(ctx context.Context, request *ia
 	// 审计字段服务端注入：created_by/updated_by 取认证上下文操作者
 	operator := cast.ToString(auth.GetAccountId(ctx))
 	permission := model.Permission{
-		Id:         pkId,
-		Name:       request.Name,
-		Code:       request.Code,
-		Type:       "api",
-		Status:     model.StatusEnabled,
+		Id:          pkId,
+		Name:        request.Name,
+		Code:        request.Code,
+		Type:        "api",
+		Description: request.Description,
+		Status:      model.StatusEnabled,
 		Version:    1,
 		CreatedBy:  operator,
 		UpdatedBy:  operator,
@@ -270,7 +292,6 @@ func (a *AuthorizationService) CreateRole(ctx context.Context, request *iam_v1.C
 	now := time.Now()
 	// 审计字段服务端注入：created_by/updated_by 取认证上下文操作者
 	operator := cast.ToString(auth.GetAccountId(ctx))
-	// 011 模型：t_role 不再归属应用，request.ApplicationId 忽略
 	role := model.Role{
 		Id:         pkId,
 		Name:       request.Name,

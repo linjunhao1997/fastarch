@@ -1,0 +1,181 @@
+syntax = "proto3";
+
+package iam.v1;
+
+option go_package = "github.com/linjunhao1997/idl/pb/iam;iam_v1";
+option java_multiple_files = true;
+option java_package = "com.iam.v1";
+
+import "common/common.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+import "buf/validate/validate.proto";
+
+// 字典管理服务（t_dict_type 字典类型 + t_dict_item 字典项）
+service DictService {
+  // 创建字典类型，返回创建出的字典类型（含 id）
+  rpc CreateDictType(CreateDictTypeRequest) returns (DictType) {
+    option (google.api.http) = {
+      post: "/dict/types"
+      body: "*"
+    };
+  }
+
+  // 修改字典类型
+  rpc UpdateDictType(UpdateDictTypeRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      patch: "/dict/types/{id}"
+      body: "*"
+    };
+  }
+
+  // 删除字典类型（仅当名下无字典项时可删除）
+  rpc DeleteDictType(DeleteDictTypeRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/dict/types/{id}"
+    };
+  }
+
+  // 字典类型分页列表：keyword 模糊匹配 code/name
+  rpc ListDictTypes(ListDictTypesRequest) returns (ListDictTypesResponse) {
+    option (google.api.http) = {
+      get: "/dict/types"
+    };
+  }
+
+  // 创建字典项，返回创建出的字典项（含 id）
+  rpc CreateDictItem(CreateDictItemRequest) returns (DictItem) {
+    option (google.api.http) = {
+      post: "/dict/items"
+      body: "*"
+    };
+  }
+
+  // 修改字典项
+  rpc UpdateDictItem(UpdateDictItemRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      patch: "/dict/items/{id}"
+      body: "*"
+    };
+  }
+
+  // 删除字典项
+  rpc DeleteDictItem(DeleteDictItemRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/dict/items/{id}"
+    };
+  }
+
+  // 字典项列表：按字典类型筛选，keyword 模糊匹配 label/value
+  rpc ListDictItems(ListDictItemsRequest) returns (ListDictItemsResponse) {
+    option (google.api.http) = {
+      get: "/dict/items"
+    };
+  }
+}
+
+// 字典类型（t_dict_type：code 唯一业务码）
+message DictType {
+  string id = 1;
+  string code = 2;                             // 唯一业务码
+  string name = 3;
+  string remark = 4;
+  // 状态："enabled" 启用，"disabled" 禁用
+  string status = 5;
+  int64 version = 6;
+  // 审计字段（只读回传，由服务端注入；请求消息不含此类字段，宪法 XII）
+  string created_by = 7;                       // 创建人（用户 id）
+  string updated_by = 8;                       // 修改人（用户 id）
+  google.protobuf.Timestamp create_time = 9;   // 创建时间
+  google.protobuf.Timestamp update_time = 10;  // 修改时间
+}
+
+// 字典项（t_dict_item：type_id 挂载到字典类型，label/value 二元组）
+message DictItem {
+  string id = 1;
+  string type_id = 2;                          // 所属字典类型 id（string 编码）
+  string label = 3;
+  string value = 4;
+  int32 sort = 5;
+  // 状态："enabled" 启用，"disabled" 禁用
+  string status = 6;
+  int64 version = 7;
+  // 审计字段（只读回传，由服务端注入；请求消息不含此类字段，宪法 XII）
+  string created_by = 8;                       // 创建人（用户 id）
+  string updated_by = 9;                       // 修改人（用户 id）
+  google.protobuf.Timestamp create_time = 10;  // 创建时间
+  google.protobuf.Timestamp update_time = 11;  // 修改时间
+}
+
+message CreateDictTypeRequest {
+  string code = 1 [(buf.validate.field).string.min_len = 1];
+  string name = 2 [(buf.validate.field).string.min_len = 1];
+  string remark = 3;
+  // 状态："enabled" 启用，"disabled" 禁用；缺省为 enabled
+  string status = 4 [(buf.validate.field).string = { in: ["", "enabled", "disabled"] }];
+}
+
+message UpdateDictTypeRequest {
+  int64 id = 1 [(buf.validate.field).required = true];
+  // 以下字段缺省（空串）= 不修改
+  string name = 2;
+  string remark = 3;
+  string status = 4 [(buf.validate.field).string = { in: ["", "enabled", "disabled"] }];
+  // 乐观锁版本号
+  int64 version = 5 [(buf.validate.field).required = true];
+}
+
+message DeleteDictTypeRequest {
+  int64 id = 1 [(buf.validate.field).required = true];
+}
+
+message ListDictTypesRequest {
+  int64 current_page = 1;
+  int64 page_size = 2;
+  // 模糊匹配 code/name
+  string keyword = 3;
+}
+
+message ListDictTypesResponse {
+  common.v1.Page page = 1;
+  repeated DictType dict_types = 2;
+}
+
+message CreateDictItemRequest {
+  int64 type_id = 1 [(buf.validate.field).required = true];
+  string label = 2 [(buf.validate.field).string.min_len = 1];
+  string value = 3 [(buf.validate.field).string.min_len = 1];
+  int32 sort = 4;
+  // 状态："enabled" 启用，"disabled" 禁用；缺省为 enabled
+  string status = 5 [(buf.validate.field).string = { in: ["", "enabled", "disabled"] }];
+}
+
+message UpdateDictItemRequest {
+  int64 id = 1 [(buf.validate.field).required = true];
+  // 以下字段缺省（空串）= 不修改；sort 仅在显式传非 0 时更新
+  string label = 2;
+  string value = 3;
+  int32 sort = 4;
+  string status = 5 [(buf.validate.field).string = { in: ["", "enabled", "disabled"] }];
+  // 乐观锁版本号
+  int64 version = 6 [(buf.validate.field).required = true];
+}
+
+message DeleteDictItemRequest {
+  int64 id = 1 [(buf.validate.field).required = true];
+}
+
+message ListDictItemsRequest {
+  int64 current_page = 1;
+  int64 page_size = 2;
+  // 按字典类型筛选（必填）
+  int64 type_id = 3 [(buf.validate.field).required = true];
+  // 模糊匹配 label/value
+  string keyword = 4;
+}
+
+message ListDictItemsResponse {
+  common.v1.Page page = 1;
+  repeated DictItem dict_items = 2;
+}

@@ -1,0 +1,436 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "iam/menu.proto",
+    "version": "version not set"
+  },
+  "tags": [
+    {
+      "name": "MenuService"
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/menu/menu-tree": {
+      "get": {
+        "summary": "管理员视角全量菜单树（含停用菜单，前端置灰）",
+        "operationId": "MenuService_ListMenuTree",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListMenuTreeResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "MenuService"
+        ]
+      }
+    },
+    "/menu/menus": {
+      "post": {
+        "summary": "创建菜单，返回创建出的菜单（含 id）",
+        "operationId": "MenuService_CreateMenu",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Menu"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1CreateMenuRequest"
+            }
+          }
+        ],
+        "tags": [
+          "MenuService"
+        ]
+      }
+    },
+    "/menu/menus/{id}": {
+      "get": {
+        "summary": "获取菜单信息",
+        "operationId": "MenuService_GetMenu",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Menu"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "int64"
+          }
+        ],
+        "tags": [
+          "MenuService"
+        ]
+      },
+      "delete": {
+        "summary": "删除菜单（仅当未被角色绑定引用时可删除）",
+        "operationId": "MenuService_DeleteMenu",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "int64"
+          }
+        ],
+        "tags": [
+          "MenuService"
+        ]
+      },
+      "patch": {
+        "summary": "修改菜单信息",
+        "operationId": "MenuService_UpdateMenu",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "parentId": {
+                  "type": "string",
+                  "format": "int64"
+                },
+                "parentCleared": {
+                  "type": "boolean",
+                  "title": "parent_cleared = true 时以 parent_id 字段为准整体移动（含挂到顶级）；\nfalse 时 parent_id 缺省（0）不修改父节点"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "icon": {
+                  "type": "string"
+                },
+                "sort": {
+                  "type": "integer",
+                  "format": "int32"
+                },
+                "permissionCode": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "version": {
+                  "type": "string",
+                  "format": "int64",
+                  "title": "乐观锁版本号"
+                }
+              }
+            }
+          }
+        ],
+        "tags": [
+          "MenuService"
+        ]
+      }
+    },
+    "/menu/my-menu-tree": {
+      "get": {
+        "summary": "当前登录用户可见菜单树：按用户角色绑定（t_r_role_menu）过滤并回补祖先路径，\n仅需登录态（self-scoped，无需菜单权限）",
+        "operationId": "MenuService_ListMyMenuTree",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListMenuTreeResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "MenuService"
+        ]
+      }
+    },
+    "/menu/roles/{roleId}/menus": {
+      "patch": {
+        "summary": "角色绑定菜单全量覆盖：以 menu_ids 为目标绑定集合做整体替换（事务）",
+        "operationId": "MenuService_UpdateRoleMenus",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "roleId",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "menuIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "目标菜单 id 集合（string 编码）：全量覆盖语义，空数组 = 清空绑定"
+                }
+              }
+            }
+          }
+        ],
+        "tags": [
+          "MenuService"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "rpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    },
+    "v1CreateMenuRequest": {
+      "type": "object",
+      "properties": {
+        "parentId": {
+          "type": "string",
+          "format": "int64",
+          "title": "父菜单 id，顶级传 0"
+        },
+        "name": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "icon": {
+          "type": "string"
+        },
+        "sort": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "permissionCode": {
+          "type": "string",
+          "title": "绑定的权限码（可空；传了必须已存在于权限词汇）"
+        },
+        "status": {
+          "type": "string",
+          "title": "菜单状态：\"enabled\" 启用，\"disabled\" 禁用；缺省为 enabled"
+        }
+      }
+    },
+    "v1ListMenuTreeResponse": {
+      "type": "object",
+      "properties": {
+        "roots": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1MenuTreeNode"
+          }
+        }
+      }
+    },
+    "v1Menu": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "parentId": {
+          "type": "string",
+          "format": "int64",
+          "title": "父菜单 id，顶级为 0"
+        },
+        "name": {
+          "type": "string",
+          "title": "菜单名"
+        },
+        "path": {
+          "type": "string",
+          "title": "前端路由路径"
+        },
+        "icon": {
+          "type": "string",
+          "title": "图标"
+        },
+        "sort": {
+          "type": "integer",
+          "format": "int32",
+          "title": "排序"
+        },
+        "permissionCode": {
+          "type": "string",
+          "title": "绑定的权限码（可空）"
+        },
+        "status": {
+          "type": "string",
+          "title": "菜单状态：\"enabled\" 启用，\"disabled\" 禁用"
+        },
+        "version": {
+          "type": "string",
+          "format": "int64"
+        },
+        "createdBy": {
+          "type": "string",
+          "description": "创建人（用户 id）",
+          "title": "审计字段（只读回传，由服务端注入；请求消息不含此类字段，宪法 XII）"
+        },
+        "updatedBy": {
+          "type": "string",
+          "title": "修改人（用户 id）"
+        },
+        "createTime": {
+          "type": "string",
+          "format": "date-time",
+          "title": "创建时间"
+        },
+        "updateTime": {
+          "type": "string",
+          "format": "date-time",
+          "title": "修改时间"
+        }
+      },
+      "title": "菜单信息（t_menu 全列；permission_code 为唯一授权词汇，可空 = 不绑定权限）"
+    },
+    "v1MenuTreeNode": {
+      "type": "object",
+      "properties": {
+        "menu": {
+          "$ref": "#/definitions/v1Menu"
+        },
+        "children": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1MenuTreeNode"
+          }
+        }
+      },
+      "title": "菜单树节点"
+    }
+  }
+}

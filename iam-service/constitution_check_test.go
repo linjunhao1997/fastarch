@@ -88,7 +88,7 @@ func TestServiceQueriesDoNotUseSelectStar(t *testing.T) {
 	if _, err := service.NewAccountService(db, redisClient).GetAccount(ctx, &commonv1.GetRequest{Id: user.Id}); err != nil {
 		t.Fatal(err)
 	}
-	if _, authErr := service.NewAuthenticationService(db, redisClient).PasswordAuth(ctx, &iamv1.PasswordAuthRequest{Username: user.Username, Password: "invalid"}); authErr != nil {
+	if _, authErr := service.NewAuthenticationService(db, redisClient).PasswordAuth(ctx, &iamv1.PasswordAuthRequest{Identifier: user.Username, Password: "invalid"}); authErr != nil {
 		if !errors.Is(authErr, service.ErrInvalidAccountPassword) {
 			t.Fatal(authErr)
 		}
@@ -96,14 +96,6 @@ func TestServiceQueriesDoNotUseSelectStar(t *testing.T) {
 	loader := service.NewPermissionSnapshotLoader(db)
 	if _, err := loader(ctx, user.Id); err != nil {
 		t.Fatal(err)
-	}
-
-	// 资源接口已废弃（011 模型）：断言直接返回 Unimplemented 语义错误
-	if _, err := services.GetResource(ctx, &commonv1.GetRequest{Id: 1}); !errors.Is(err, service.ErrResourceModelDeprecated) {
-		t.Fatalf("GetResource() error = %v, want ErrResourceModelDeprecated", err)
-	}
-	if _, err := services.ListResourceTree(ctx, &iamv1.ListResourceTreeRequest{}); !errors.Is(err, service.ErrResourceModelDeprecated) {
-		t.Fatalf("ListResourceTree() error = %v, want ErrResourceModelDeprecated", err)
 	}
 
 	for _, query := range capture.queries {

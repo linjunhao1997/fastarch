@@ -18,7 +18,7 @@
   "paths": {
     "/application/applications": {
       "get": {
-        "summary": "获取应用列表",
+        "summary": "获取应用列表（不回传 secret）",
         "operationId": "ApplicationService_ListApplications",
         "responses": {
           "200": {
@@ -61,13 +61,13 @@
         ]
       },
       "post": {
-        "summary": "创建应用，返回创建出的应用（含 id）",
+        "summary": "创建应用：服务端生成 app_id 与随机 secret，响应一次性返回 secret 明文\n（服务端只存 sha256 摘要，之后任何接口不再返回）",
         "operationId": "ApplicationService_CreateApplication",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/v1Application"
+              "$ref": "#/definitions/v1CreateApplicationResponse"
             }
           },
           "default": {
@@ -94,7 +94,7 @@
     },
     "/application/applications/{id}": {
       "get": {
-        "summary": "获取应用信息",
+        "summary": "获取应用信息（不回传 secret）",
         "operationId": "ApplicationService_GetApplication",
         "responses": {
           "200": {
@@ -155,7 +155,7 @@
         ]
       },
       "patch": {
-        "summary": "修改应用信息",
+        "summary": "修改应用信息（name/status）",
         "operationId": "ApplicationService_UpdateApplication",
         "responses": {
           "200": {
@@ -188,12 +188,10 @@
               "type": "object",
               "properties": {
                 "name": {
-                  "type": "string"
+                  "type": "string",
+                  "title": "以下字段缺省（空串）= 不修改"
                 },
-                "description": {
-                  "type": "string"
-                },
-                "enabledStatus": {
+                "status": {
                   "type": "string"
                 }
               }
@@ -241,20 +239,42 @@
         "id": {
           "type": "string"
         },
+        "appId": {
+          "type": "string",
+          "title": "应用标识（服务端生成，唯一）"
+        },
         "name": {
           "type": "string"
         },
-        "appCode": {
-          "type": "string"
+        "status": {
+          "type": "string",
+          "title": "应用状态：\"enabled\" 启用，\"disabled\" 禁用"
         },
-        "description": {
-          "type": "string"
+        "version": {
+          "type": "string",
+          "format": "int64"
         },
-        "enabledStatus": {
-          "type": "string"
+        "createdBy": {
+          "type": "string",
+          "description": "创建人（用户 id）",
+          "title": "审计字段（只读回传，由服务端注入；请求消息不含此类字段，宪法 XII）"
+        },
+        "updatedBy": {
+          "type": "string",
+          "title": "修改人（用户 id）"
+        },
+        "createTime": {
+          "type": "string",
+          "format": "date-time",
+          "title": "创建时间"
+        },
+        "updateTime": {
+          "type": "string",
+          "format": "date-time",
+          "title": "修改时间"
         }
       },
-      "title": "应用信息"
+      "title": "应用信息（t_application 全列；不含 secret 摘要等敏感字段，宪法 XII）"
     },
     "v1CreateApplicationRequest": {
       "type": "object",
@@ -262,12 +282,21 @@
         "name": {
           "type": "string"
         },
-        "description": {
-          "type": "string"
-        },
-        "enabledStatus": {
+        "status": {
           "type": "string",
           "title": "应用状态：\"enabled\" 启用，\"disabled\" 禁用；缺省为 enabled"
+        }
+      }
+    },
+    "v1CreateApplicationResponse": {
+      "type": "object",
+      "properties": {
+        "application": {
+          "$ref": "#/definitions/v1Application"
+        },
+        "secret": {
+          "type": "string",
+          "title": "一次性返回的 secret 明文（服务端仅存 sha256 hex 摘要），仅此响应可见"
         }
       }
     },

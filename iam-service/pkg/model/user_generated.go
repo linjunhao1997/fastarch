@@ -15,6 +15,7 @@ const (
 	UserColumnUsername     = "username"
 	UserColumnPasswordHash = "password_hash"
 	UserColumnNickname     = "nickname"
+	UserColumnEmail        = "email"
 	UserColumnStatus       = "status"
 	UserColumnCreatedBy    = "created_by"
 	UserColumnUpdatedBy    = "updated_by"

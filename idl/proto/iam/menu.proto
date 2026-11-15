@@ -1,0 +1,136 @@
+syntax = "proto3";
+
+package iam.v1;
+
+option go_package = "github.com/linjunhao1997/idl/pb/iam;iam_v1";
+option java_multiple_files = true;
+option java_package = "com.iam.v1";
+
+import "common/common.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+import "buf/validate/validate.proto";
+
+// 菜单管理服务（t_menu：单 permission_code 菜单树 + t_r_role_menu 角色绑定）
+service MenuService {
+  // 创建菜单，返回创建出的菜单（含 id）
+  rpc CreateMenu(CreateMenuRequest) returns (Menu) {
+    option (google.api.http) = {
+      post: "/menu/menus"
+      body: "*"
+    };
+  }
+
+  // 获取菜单信息
+  rpc GetMenu(common.v1.GetRequest) returns (Menu) {
+    option (google.api.http) = {
+      get: "/menu/menus/{id}"
+    };
+  }
+
+  // 修改菜单信息
+  rpc UpdateMenu(UpdateMenuRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      patch: "/menu/menus/{id}"
+      body: "*"
+    };
+  }
+
+  // 删除菜单（仅当未被角色绑定引用时可删除）
+  rpc DeleteMenu(DeleteMenuRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/menu/menus/{id}"
+    };
+  }
+
+  // 管理员视角全量菜单树（含停用菜单，前端置灰）
+  rpc ListMenuTree(google.protobuf.Empty) returns (ListMenuTreeResponse) {
+    option (google.api.http) = {
+      get: "/menu/menu-tree"
+    };
+  }
+
+  // 当前登录用户可见菜单树：按用户角色绑定（t_r_role_menu）过滤并回补祖先路径，
+  // 仅需登录态（self-scoped，无需菜单权限）
+  rpc ListMyMenuTree(google.protobuf.Empty) returns (ListMenuTreeResponse) {
+    option (google.api.http) = {
+      get: "/menu/my-menu-tree"
+    };
+  }
+
+  // 角色绑定菜单全量覆盖：以 menu_ids 为目标绑定集合做整体替换（事务）
+  rpc UpdateRoleMenus(UpdateRoleMenusRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      patch: "/menu/roles/{role_id}/menus"
+      body: "*"
+    };
+  }
+}
+
+// 菜单信息（t_menu 全列；permission_code 为唯一授权词汇，可空 = 不绑定权限）
+message Menu {
+  string id = 1;
+  int64 parent_id = 2;                         // 父菜单 id，顶级为 0
+  string name = 3;                             // 菜单名
+  string path = 4;                             // 前端路由路径
+  string icon = 5;                             // 图标
+  int32 sort = 6;                              // 排序
+  string permission_code = 7;                  // 绑定的权限码（可空）
+  // 菜单状态："enabled" 启用，"disabled" 禁用
+  string status = 8;
+  int64 version = 9;
+  // 审计字段（只读回传，由服务端注入；请求消息不含此类字段，宪法 XII）
+  string created_by = 10;                      // 创建人（用户 id）
+  string updated_by = 11;                      // 修改人（用户 id）
+  google.protobuf.Timestamp create_time = 12;  // 创建时间
+  google.protobuf.Timestamp update_time = 13;  // 修改时间
+}
+
+message CreateMenuRequest {
+  int64 parent_id = 1;  // 父菜单 id，顶级传 0
+  string name = 2 [(buf.validate.field).string.min_len = 1];
+  string path = 3;
+  string icon = 4;
+  int32 sort = 5;
+  // 绑定的权限码（可空；传了必须已存在于权限词汇）
+  string permission_code = 6;
+  // 菜单状态："enabled" 启用，"disabled" 禁用；缺省为 enabled
+  string status = 7 [(buf.validate.field).string = { in: ["", "enabled", "disabled"] }];
+}
+
+message UpdateMenuRequest {
+  int64 id = 1 [(buf.validate.field).required = true];
+  int64 parent_id = 2;
+  // parent_cleared = true 时以 parent_id 字段为准整体移动（含挂到顶级）；
+  // false 时 parent_id 缺省（0）不修改父节点
+  bool parent_cleared = 3;
+  string name = 4;
+  string path = 5;
+  string icon = 6;
+  int32 sort = 7;
+  string permission_code = 8;
+  string status = 9 [(buf.validate.field).string = { in: ["", "enabled", "disabled"] }];
+  // 乐观锁版本号
+  int64 version = 10 [(buf.validate.field).required = true];
+}
+
+message DeleteMenuRequest {
+  int64 id = 1 [(buf.validate.field).required = true];
+}
+
+message UpdateRoleMenusRequest {
+  int64 role_id = 1 [(buf.validate.field).required = true];
+  // 目标菜单 id 集合（string 编码）：全量覆盖语义，空数组 = 清空绑定
+  repeated string menu_ids = 2;
+}
+
+// 菜单树节点
+message MenuTreeNode {
+  Menu menu = 1;
+  repeated MenuTreeNode children = 2;
+}
+
+message ListMenuTreeResponse {
+  repeated MenuTreeNode roots = 1;
+}

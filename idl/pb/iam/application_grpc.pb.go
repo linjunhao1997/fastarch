@@ -32,13 +32,14 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ApplicationServiceClient interface {
-	// 创建应用，返回创建出的应用（含 id）
-	CreateApplication(ctx context.Context, in *CreateApplicationRequest, opts ...grpc.CallOption) (*Application, error)
-	// 获取应用信息
+	// 创建应用：服务端生成 app_id 与随机 secret，响应一次性返回 secret 明文
+	// （服务端只存 sha256 摘要，之后任何接口不再返回）
+	CreateApplication(ctx context.Context, in *CreateApplicationRequest, opts ...grpc.CallOption) (*CreateApplicationResponse, error)
+	// 获取应用信息（不回传 secret）
 	GetApplication(ctx context.Context, in *common.GetRequest, opts ...grpc.CallOption) (*Application, error)
-	// 获取应用列表
+	// 获取应用列表（不回传 secret）
 	ListApplications(ctx context.Context, in *ListApplicationsRequest, opts ...grpc.CallOption) (*ListApplicationsResponse, error)
-	// 修改应用信息
+	// 修改应用信息（name/status）
 	UpdateApplication(ctx context.Context, in *UpdateApplicationRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// 删除应用（仅当未被授权数据引用时可删除）
 	DeleteApplication(ctx context.Context, in *DeleteApplicationRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
@@ -52,8 +53,8 @@ func NewApplicationServiceClient(cc grpc.ClientConnInterface) ApplicationService
 	return &applicationServiceClient{cc}
 }
 
-func (c *applicationServiceClient) CreateApplication(ctx context.Context, in *CreateApplicationRequest, opts ...grpc.CallOption) (*Application, error) {
-	out := new(Application)
+func (c *applicationServiceClient) CreateApplication(ctx context.Context, in *CreateApplicationRequest, opts ...grpc.CallOption) (*CreateApplicationResponse, error) {
+	out := new(CreateApplicationResponse)
 	err := c.cc.Invoke(ctx, ApplicationService_CreateApplication_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -101,13 +102,14 @@ func (c *applicationServiceClient) DeleteApplication(ctx context.Context, in *De
 // All implementations should embed UnimplementedApplicationServiceServer
 // for forward compatibility
 type ApplicationServiceServer interface {
-	// 创建应用，返回创建出的应用（含 id）
-	CreateApplication(context.Context, *CreateApplicationRequest) (*Application, error)
-	// 获取应用信息
+	// 创建应用：服务端生成 app_id 与随机 secret，响应一次性返回 secret 明文
+	// （服务端只存 sha256 摘要，之后任何接口不再返回）
+	CreateApplication(context.Context, *CreateApplicationRequest) (*CreateApplicationResponse, error)
+	// 获取应用信息（不回传 secret）
 	GetApplication(context.Context, *common.GetRequest) (*Application, error)
-	// 获取应用列表
+	// 获取应用列表（不回传 secret）
 	ListApplications(context.Context, *ListApplicationsRequest) (*ListApplicationsResponse, error)
-	// 修改应用信息
+	// 修改应用信息（name/status）
 	UpdateApplication(context.Context, *UpdateApplicationRequest) (*emptypb.Empty, error)
 	// 删除应用（仅当未被授权数据引用时可删除）
 	DeleteApplication(context.Context, *DeleteApplicationRequest) (*emptypb.Empty, error)
@@ -117,7 +119,7 @@ type ApplicationServiceServer interface {
 type UnimplementedApplicationServiceServer struct {
 }
 
-func (UnimplementedApplicationServiceServer) CreateApplication(context.Context, *CreateApplicationRequest) (*Application, error) {
+func (UnimplementedApplicationServiceServer) CreateApplication(context.Context, *CreateApplicationRequest) (*CreateApplicationResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateApplication not implemented")
 }
 func (UnimplementedApplicationServiceServer) GetApplication(context.Context, *common.GetRequest) (*Application, error) {

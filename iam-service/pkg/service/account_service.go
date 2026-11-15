@@ -32,14 +32,15 @@ func NewAccountService(db *gorm.DB, rdb *redis.Client) *AccountService {
 	return &AccountService{db: db, rdb: rdb}
 }
 
-// accountToPb 模型转 pb：proto 未随 011 模型更新，Name 映射 username；
-// email/kind/application_id_list 在新模型中已不存在，一律留空。
+// accountToPb 模型转 pb：id/username/email/nickname/status/audit/role_code_list。
 func accountToPb(a model.User) *iam_v1.Account {
 	return &iam_v1.Account{
-		Id:         cast.ToString(a.Id),
-		Name:       a.Username,
-		Status:     a.Status,
-		Version:    a.Version,
+		Id:       cast.ToString(a.Id),
+		Username: a.Username,
+		Email:    a.EmailString(),
+		Nickname: a.Nickname,
+		Status:   a.Status,
+		Version:  a.Version,
 		CreatedBy:  a.CreatedBy,
 		UpdatedBy:  a.UpdatedBy,
 		CreateTime: timestamppb.New(a.CreateTime),
@@ -74,15 +75,13 @@ func (service *AccountService) ListAccounts(ctx context.Context, request *iam_v1
 	limit, offset := helper.GetLimitAndOffset(request.CurrentPage, request.PageSize)
 	var count int64
 	var res []model.User
-	// 分页查询：关键字匹配用户名与昵称
+	// 分页查询：关键字模糊匹配 username/nickname/email（双标识登录词汇全覆盖）
 	buildQuery := func() *gorm.DB {
 		query := service.db.WithContext(ctx).Model(model.User{})
-		if len(request.Id) > 0 {
-			query = query.Where(model.UserColumnId, request.Id)
-		}
 		return applyKeywordFilter(query, []string{
 			model.UserColumnUsername + " LIKE ?",
 			model.UserColumnNickname + " LIKE ?",
+			model.UserColumnEmail + " LIKE ?",
 		}, request.Keyword)
 	}
 	err := buildQuery().Count(&count).Error
@@ -111,6 +110,8 @@ func (service *AccountService) ListAccounts(ctx context.Context, request *iam_v1
 	}, nil
 }
 
+// UpdateAccount 修改用户：nickname/email/status 可选更新（空串 = 不修改），
+// username 为唯一登录名不可改，乐观锁防并发覆盖。
 func (service *AccountService) UpdateAccount(ctx context.Context, request *iam_v1.UpdateAccountRequest) (*emptypb.Empty, error) {
 	var user model.User
 	err := service.db.WithContext(ctx).
@@ -122,21 +123,28 @@ func (service *AccountService) UpdateAccount(ctx context.Context, request *iam_v
 	}
 
 	updates := map[string]interface{}{}
-	if len(request.Name) > 0 {
-		// username 为唯一登录名不可改；Name 映射为昵称（显示名）
-		updates[model.UserColumnNickname] = request.Name
+	if len(request.Nickname) > 0 {
+		updates[model.UserColumnNickname] = request.Nickname
 	}
-	if len(request.Status) > 0 {
-		updates[model.UserColumnStatus] = request.Status
-	}
-	if len(request.Password) > 0 {
-		// 密码统一走 bcrypt：无盐字段，摘要直接落 password_hash
-		hash, err := bcrypt.GenerateFromPassword([]byte(request.Password), bcrypt.DefaultCost)
+	if len(request.Email) > 0 {
+		// 邮箱唯一：先查重转友好错误（DB 层唯一索引兜底）
+		var count int64
+		err := service.db.WithContext(ctx).Model(model.User{}).
+			Where(model.UserColumnEmail+" = ?", request.Email).
+			Where(model.UserColumnId+" <> ?", request.Id).
+			Count(&count).Error
 		if err != nil {
 			return nil, err
 		}
-		updates[model.UserColumnPasswordHash] = string(hash)
-		updates[model.UserColumnUpdateTime] = time.Now()
+		if count > 0 {
+			slog.Warn("update user rejected: email duplicated", "user_id", request.Id)
+			return nil, ErrEmailDuplicated
+		}
+		email := request.Email
+		updates[model.UserColumnEmail] = &email
+	}
+	if len(request.Status) > 0 {
+		updates[model.UserColumnStatus] = request.Status
 	}
 	if len(updates) == 0 {
 		return &emptypb.Empty{}, nil
@@ -243,6 +251,44 @@ func (service *AccountService) UpdateAccountRoles(ctx context.Context, request *
 	return &emptypb.Empty{}, nil
 }
 
+// ResetAccountPassword 管理员重置用户密码：新密码 bcrypt 摘要落库，
+// 不要求提供旧密码（管理员权威通道）；version+1 并注入审计字段。
+func (service *AccountService) ResetAccountPassword(ctx context.Context, request *iam_v1.ResetAccountPasswordRequest) (*emptypb.Empty, error) {
+	var user model.User
+	err := service.db.WithContext(ctx).
+		Select(model.UserFields).
+		Where(model.UserColumnId, request.Id).
+		First(&user).Error
+	if err != nil {
+		slog.Warn("get user for password reset failed", "user_id", request.Id, "error", err)
+		return nil, err
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(request.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		slog.Warn("hash new password failed", "user_id", request.Id, "error", err)
+		return nil, err
+	}
+	newPasswordHash := string(hash)
+	operator := cast.ToString(auth.GetAccountId(ctx))
+	result := service.db.WithContext(ctx).Model(model.User{}).
+		Where(model.UserColumnId, request.Id).
+		Updates(map[string]interface{}{
+			model.UserColumnPasswordHash: newPasswordHash,
+			model.UserColumnUpdatedBy:    operator,
+			model.UserColumnUpdateTime:   time.Now(),
+			model.UserColumnVersion:      user.Version + 1,
+		})
+	if result.Error != nil {
+		slog.Warn("reset user password failed", "user_id", request.Id, "error", result.Error)
+		return nil, result.Error
+	}
+	if result.RowsAffected == 0 {
+		slog.Warn("reset password rejected: user not found", "user_id", request.Id)
+		return nil, gorm.ErrRecordNotFound
+	}
+	return &emptypb.Empty{}, nil
+}
+
 func (service *AccountService) DeleteAccount(ctx context.Context, request *iam_v1.DeleteAccountRequest) (*emptypb.Empty, error) {
 	var count int64
 	err := service.db.WithContext(ctx).Model(model.RUserRole{}).
@@ -285,33 +331,49 @@ func (service *AccountService) DeleteAccount(ctx context.Context, request *iam_v
 	return &emptypb.Empty{}, nil
 }
 
+// CreateAccount 创建用户：初始密码必填（bcrypt 摘要落库），email 可选（唯一），
+// role_ids 可选初始角色绑定；username 唯一。
 func (service *AccountService) CreateAccount(ctx context.Context, request *iam_v1.CreateAccountRequest) (*iam_v1.Account, error) {
+	// 初始密码必填（创建路径无旧密码可校验，直接拒绝缺省）
+	if len(request.Password) == 0 {
+		slog.Warn("create user rejected: password required", "username", request.Username)
+		return nil, ErrPasswordRequired
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(request.Password), bcrypt.DefaultCost)
+	if err != nil {
+		slog.Warn("hash initial password failed", "username", request.Username, "error", err)
+		return nil, err
+	}
+	passwordHash := string(hash)
+
 	pkId := krand.NewID()
 	now := time.Now()
 	// 审计字段服务端注入：created_by/updated_by 取认证上下文操作者，无认证上下文时空串（research.md D16）
 	operator := cast.ToString(auth.GetAccountId(ctx))
-	// 状态缺省为启用（契约：status 字段可省略）
-	status := request.Status
-	if status == "" {
-		status = constant.AccountStatusEnabled
+	// email 可空：nil 落库为 NULL，避免空串占用唯一索引位
+	var email *string
+	if len(request.Email) > 0 {
+		e := request.Email
+		email = &e
 	}
-	// proto 未随 011 模型更新：Name 映射为 username（唯一登录名）；
-	// email/kind/application_id_list 已随模型删除，忽略
 	user := model.User{
-		Id:         pkId,
-		Username:   request.Name,
-		Nickname:   request.Name,
-		Status:     status,
-		Version:    1,
-		CreatedBy:  operator,
-		UpdatedBy:  operator,
-		CreateTime: now,
-		UpdateTime: now,
+		Id:           pkId,
+		Username:     request.Username,
+		Email:        email,
+		Nickname:     request.Nickname,
+		PasswordHash: passwordHash,
+		Status:       constant.AccountStatusEnabled,
+		Version:      1,
+		CreatedBy:    operator,
+		UpdatedBy:    operator,
+		CreateTime:   now,
+		UpdateTime:   now,
 	}
-	err := service.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	var createdRoles []model.Role
+	err = service.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var count int64
 		err := tx.Model(model.User{}).
-			Where(model.UserColumnUsername, request.Name).
+			Where(model.UserColumnUsername, request.Username).
 			Count(&count).Error
 		if err != nil {
 			return err
@@ -319,10 +381,55 @@ func (service *AccountService) CreateAccount(ctx context.Context, request *iam_v
 		if count > 0 {
 			return ErrUsernameDuplicated
 		}
-		return tx.Select(model.UserFields).Create(&user).Error
+		// email 唯一：非空时查重转友好错误（DB 层唯一索引兜底）
+		if email != nil {
+			var emailCount int64
+			err := tx.Model(model.User{}).
+				Where(model.UserColumnEmail+" = ?", *email).
+				Count(&emailCount).Error
+			if err != nil {
+				return err
+			}
+			if emailCount > 0 {
+				return ErrEmailDuplicated
+			}
+		}
+		if err := tx.Select(model.UserFields).Create(&user).Error; err != nil {
+			return err
+		}
+		// 可选初始角色绑定：全部校验存在后整批绑定（len>0 才 Append，见历史坑）
+		if len(request.RoleIds) > 0 {
+			roleIds := make([]int64, 0, len(request.RoleIds))
+			seen := make(map[int64]struct{}, len(request.RoleIds))
+			for _, raw := range request.RoleIds {
+				id := cast.ToInt64(raw)
+				if id <= 0 {
+					continue
+				}
+				if _, dup := seen[id]; dup {
+					continue
+				}
+				seen[id] = struct{}{}
+				roleIds = append(roleIds, id)
+			}
+			if len(roleIds) > 0 {
+				if err := tx.Where(model.RoleColumnId+" IN ?", roleIds).
+					Find(&createdRoles).Error; err != nil {
+					return err
+				}
+				if len(createdRoles) != len(roleIds) {
+					slog.Warn("create user rejected: some roles not found", "role_ids", request.RoleIds)
+					return ErrRoleNotFound
+				}
+				if err := tx.Model(&user).Association("RoleList").Append(createdRoles); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
 	})
 	if err != nil {
-		slog.Warn("create user failed", "username", request.Name, "error", err)
+		slog.Warn("create user failed", "username", request.Username, "error", err)
 		return nil, err
 	}
 	return accountToPb(user), nil

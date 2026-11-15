@@ -18,7 +18,7 @@
   "paths": {
     "/account/accounts": {
       "get": {
-        "summary": "获取账号列表",
+        "summary": "获取用户列表：keyword 模糊匹配 username/nickname/email",
         "operationId": "AccountService_ListAccounts",
         "responses": {
           "200": {
@@ -50,13 +50,8 @@
             "format": "int64"
           },
           {
-            "name": "id",
-            "in": "query",
-            "required": false,
-            "type": "string"
-          },
-          {
             "name": "keyword",
+            "description": "模糊匹配 username/nickname/email",
             "in": "query",
             "required": false,
             "type": "string"
@@ -67,7 +62,7 @@
         ]
       },
       "post": {
-        "summary": "创建账号，返回创建出的账号（含 id）",
+        "summary": "创建用户：初始密码必填（bcrypt 落库），返回创建出的用户（含 id）",
         "operationId": "AccountService_CreateAccount",
         "responses": {
           "200": {
@@ -154,7 +149,7 @@
     },
     "/account/accounts/{id}": {
       "get": {
-        "summary": "获取账号信息",
+        "summary": "获取用户信息",
         "operationId": "AccountService_GetAccount",
         "responses": {
           "200": {
@@ -214,7 +209,7 @@
         ]
       },
       "patch": {
-        "summary": "修改账号",
+        "summary": "修改用户：nickname/email/status 可选更新（字段缺省 = 不修改）",
         "operationId": "AccountService_UpdateAccount",
         "responses": {
           "200": {
@@ -246,29 +241,68 @@
             "schema": {
               "type": "object",
               "properties": {
-                "status": {
-                  "type": "string"
-                },
-                "password": {
-                  "type": "string"
-                },
-                "name": {
-                  "type": "string"
+                "nickname": {
+                  "type": "string",
+                  "title": "以下字段缺省（空串）= 不修改（与现有更新风格一致）"
                 },
                 "email": {
                   "type": "string"
                 },
+                "status": {
+                  "type": "string",
+                  "title": "用户状态：\"enabled\" 启用，\"disabled\" 禁用；缺省不修改"
+                },
                 "version": {
                   "type": "string",
-                  "format": "int64"
-                },
-                "applicationIdList": {
-                  "type": "array",
-                  "items": {
-                    "type": "string",
-                    "format": "int64"
-                  },
-                  "title": "账号归属的应用 id 集合；presence + 全量替换语义 —— 字段缺省=不修改归属，\r\n显式传入（含空数组）时以本集合为目标归属集合做差集增删\r\n（与 UpdateAccountRolesRequest 的 added/removed 增量语义不同）"
+                  "format": "int64",
+                  "title": "乐观锁版本号"
+                }
+              }
+            }
+          }
+        ],
+        "tags": [
+          "AccountService"
+        ]
+      }
+    },
+    "/account/accounts/{id}/reset-password": {
+      "post": {
+        "summary": "管理员重置用户密码：新密码 bcrypt 落库，不要求提供旧密码",
+        "operationId": "AccountService_ResetAccountPassword",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "newPassword": {
+                  "type": "string",
+                  "title": "新密码（管理员重置，无需旧密码）"
                 }
               }
             }
@@ -315,34 +349,41 @@
         "id": {
           "type": "string"
         },
-        "name": {
-          "type": "string"
+        "username": {
+          "type": "string",
+          "title": "唯一登录名"
         },
         "email": {
-          "type": "string"
-        },
-        "kind": {
           "type": "string",
-          "title": "账号类型：\"0\" 用户，\"1\" 系统"
+          "title": "邮箱（可空，唯一）"
         },
-        "roleCodeList": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
+        "nickname": {
+          "type": "string",
+          "title": "显示名（可空）"
+        },
+        "status": {
+          "type": "string",
+          "title": "用户状态（只读回传）：\"enabled\" 启用，\"disabled\" 禁用"
         },
         "version": {
           "type": "string",
           "format": "int64"
         },
+        "roleCodeList": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "绑定的角色编码清单（只读回传）"
+        },
         "createdBy": {
           "type": "string",
-          "description": "创建人（账号 id）",
+          "description": "创建人（用户 id）",
           "title": "审计字段（只读回传，由服务端注入；请求消息不含此类字段，宪法 XII）"
         },
         "updatedBy": {
           "type": "string",
-          "title": "修改人（账号 id）"
+          "title": "修改人（用户 id）"
         },
         "createTime": {
           "type": "string",
@@ -353,45 +394,33 @@
           "type": "string",
           "format": "date-time",
           "title": "修改时间"
-        },
-        "applicationIdList": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "title": "账号当前归属的应用 id 集合（只读回传）"
-        },
-        "status": {
-          "type": "string",
-          "title": "账号状态（只读回传）：\"enabled\" 启用，\"disabled\" 禁用"
         }
       },
-      "title": "账号信息"
+      "title": "用户信息（t_user 语义；不含密码摘要等敏感字段，宪法 XII）"
     },
     "v1CreateAccountRequest": {
       "type": "object",
       "properties": {
-        "name": {
+        "username": {
+          "type": "string"
+        },
+        "nickname": {
           "type": "string"
         },
         "email": {
-          "type": "string"
-        },
-        "kind": {
           "type": "string",
-          "title": "账号类型：\"0\" 用户，\"1\" 系统"
+          "title": "邮箱可选；传了必须合法（protovalidate 对空串跳过 email 规则）"
         },
-        "applicationIdList": {
+        "password": {
+          "type": "string",
+          "title": "初始密码必填（bcrypt 摘要落库，明文不落盘）"
+        },
+        "roleIds": {
           "type": "array",
           "items": {
-            "type": "string",
-            "format": "int64"
+            "type": "string"
           },
-          "title": "账号归属的应用 id 集合；可为空（允许无归属账号）"
-        },
-        "status": {
-          "type": "string",
-          "title": "账号状态：\"enabled\" 启用，\"disabled\" 禁用；缺省为 enabled"
+          "title": "初始角色 id 集合（string 编码），可选；缺省不绑定角色"
         }
       }
     },

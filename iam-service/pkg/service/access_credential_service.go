@@ -53,8 +53,8 @@ func accessCredentialToPb(c model.AccessCredential, accountName string) *iam_v1.
 	return &iam_v1.AccessCredential{
 		Id:           cast.ToString(c.Id),
 		AccessKey:    c.AccessKey,
-		AccountId:    cast.ToString(c.UserId),
-		AccountName:  accountName,
+		UserId:       cast.ToString(c.UserId),
+		UserName:     accountName,
 		Remark:       c.Remark,
 		Status:       c.Status,
 		ExpireTime:   timeToTsPtr(c.ExpireTime),
@@ -108,7 +108,7 @@ func (service *AccessCredentialService) CreateAccessCredential(ctx context.Conte
 		var account model.User
 		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 			Select(model.UserFields).
-			Where(model.UserColumnId, request.AccountId).
+			Where(model.UserColumnId, request.UserId).
 			First(&account).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return ErrAccessCredentialAccountInvalid
@@ -122,14 +122,14 @@ func (service *AccessCredentialService) CreateAccessCredential(ctx context.Conte
 		// 单账号凭证上限（FR-010）；行锁下计数，规避并发创建的 check-then-act 放大
 		var count int64
 		err = tx.Model(model.AccessCredential{}).
-			Where(model.AccessCredentialColumnUserId, request.AccountId).
+			Where(model.AccessCredentialColumnUserId, request.UserId).
 			Count(&count).Error
 		if err != nil {
 			return err
 		}
 		if count >= int64(service.maxPerAccount) {
 			slog.Warn("create access credential rejected: limit exceeded",
-				"operator", operator, "account_id", request.AccountId, "count", count)
+				"operator", operator, "user_id", request.UserId, "count", count)
 			return ErrAccessCredentialLimitExceeded
 		}
 		plainSecret, err = generateSecretKey()
@@ -146,7 +146,7 @@ func (service *AccessCredentialService) CreateAccessCredential(ctx context.Conte
 				Id:              krand.NewID(),
 				AccessKey:       generateAccessKey(),
 				SecretKeyCipher: cipherText,
-				UserId:          request.AccountId,
+				UserId:          request.UserId,
 
 				Remark:     request.Remark,
 				Status:     constant.AccessCredentialStatusEnabled,
@@ -221,8 +221,8 @@ func (service *AccessCredentialService) ListAccessCredentials(ctx context.Contex
 	var res []model.AccessCredential
 	buildQuery := func() *gorm.DB {
 		query := service.db.WithContext(ctx).Model(model.AccessCredential{})
-		if request.AccountId > 0 {
-			query = query.Where(model.AccessCredentialColumnUserId, request.AccountId)
+		if request.UserId > 0 {
+			query = query.Where(model.AccessCredentialColumnUserId, request.UserId)
 		}
 		if len(request.AccessKey) > 0 {
 			query = query.Where(model.AccessCredentialColumnAccessKey+" LIKE ?", request.AccessKey+"%")

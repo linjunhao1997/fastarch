@@ -62,6 +62,8 @@ var (
 	ErrRoleAdminProtected       = NewErrorWithCode("1001018", codes.FailedPrecondition, errors.New("管理员角色为系统内置，禁止删除"))
 	ErrUsernameDuplicated       = NewErrorWithCode("1001027", codes.AlreadyExists, errors.New("用户名已被占用"))
 	ErrUsernameRequired         = NewErrorWithCode("1001046", codes.InvalidArgument, errors.New("用户名不能为空"))
+	ErrEmailDuplicated          = NewErrorWithCode("1001048", codes.AlreadyExists, errors.New("邮箱已被占用"))
+	ErrPasswordRequired         = NewErrorWithCode("1001049", codes.InvalidArgument, errors.New("初始密码不能为空"))
 	// specs/009-ak-sk-auth 访问凭证域（1001040 起）
 	ErrAccessCredentialNotFound       = NewErrorWithCode("1001040", codes.NotFound, errors.New("访问凭证不存在"))
 	ErrAccessCredentialAccountInvalid = NewErrorWithCode("1001041", codes.FailedPrecondition, errors.New("绑定用户不存在或已停用"))
@@ -69,6 +71,14 @@ var (
 	ErrAccessCredentialSkDecrypt      = NewErrorWithCode("1001043", codes.Internal, errors.New("凭证密钥解密失败，请检查加密密钥配置"))
 	ErrAccessCredentialUpdateBusy     = NewErrorWithCode("1001044", codes.FailedPrecondition, errors.New("凭证已被他人修改，请刷新后重试"))
 	ErrAccountReferencedByCredential  = NewErrorWithCode("1001045", codes.FailedPrecondition, errors.New("用户名下存在访问凭证，请先删除凭证"))
-	// 011 模型迁移：组件资源模型已废弃，菜单改由 t_menu 承担（1001047）
-	ErrResourceModelDeprecated = NewErrorWithCode("1001047", codes.Unimplemented, errors.New("组件资源模型已废弃，资源管理请使用菜单接口"))
+	// 菜单域（011 模型迁移：组件资源模型废弃，菜单改由 t_menu 承担）
+	ErrMenuNotFound    = NewErrorWithCode("1001047", codes.NotFound, errors.New("菜单不存在"))
+	ErrMenuHasChildren = NewErrorWithCode("1001050", codes.FailedPrecondition, errors.New("菜单存在子菜单，请先删除子菜单"))
+	ErrMenuReferenced  = NewErrorWithCode("1001051", codes.FailedPrecondition, errors.New("菜单已被角色绑定，请先解除绑定"))
+	ErrUpdateMenuBusy  = NewErrorWithCode("1001052", codes.FailedPrecondition, errors.New("菜单已被他人修改，请刷新后重试"))
+	// 字典域
+	ErrDictTypeCodeDuplicated  = NewErrorWithCode("1001053", codes.AlreadyExists, errors.New("字典编码已被占用"))
+	ErrDictTypeReferenced      = NewErrorWithCode("1001054", codes.FailedPrecondition, errors.New("字典类型名下存在字典项，请先删除字典项"))
+	ErrUpdateDictTypeBusy      = NewErrorWithCode("1001055", codes.FailedPrecondition, errors.New("字典类型已被他人修改，请刷新后重试"))
+	ErrUpdateDictItemBusy      = NewErrorWithCode("1001056", codes.FailedPrecondition, errors.New("字典项已被他人修改，请刷新后重试"))
 )

@@ -28,7 +28,7 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type AuthenticationServiceClient interface {
-	// 密码认证
+	// 密码认证：identifier 即登录标识（username 或 email，服务端双路径查询）
 	PasswordAuth(ctx context.Context, in *PasswordAuthRequest, opts ...grpc.CallOption) (*PasswordAuthResponse, error)
 	// 获取当前登录用户的个人信息（基本信息 + 所属应用列表）
 	// 仅凭登录态（JWT accountId）返回，不接收用户标识参数
@@ -65,7 +65,7 @@ func (c *authenticationServiceClient) GetMyProfile(ctx context.Context, in *empt
 // All implementations should embed UnimplementedAuthenticationServiceServer
 // for forward compatibility
 type AuthenticationServiceServer interface {
-	// 密码认证
+	// 密码认证：identifier 即登录标识（username 或 email，服务端双路径查询）
 	PasswordAuth(context.Context, *PasswordAuthRequest) (*PasswordAuthResponse, error)
 	// 获取当前登录用户的个人信息（基本信息 + 所属应用列表）
 	// 仅凭登录态（JWT accountId）返回，不接收用户标识参数

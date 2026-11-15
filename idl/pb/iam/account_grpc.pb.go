@@ -21,28 +21,31 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	AccountService_CreateAccount_FullMethodName      = "/iam.v1.AccountService/CreateAccount"
-	AccountService_GetAccount_FullMethodName         = "/iam.v1.AccountService/GetAccount"
-	AccountService_ListAccounts_FullMethodName       = "/iam.v1.AccountService/ListAccounts"
-	AccountService_UpdateAccount_FullMethodName      = "/iam.v1.AccountService/UpdateAccount"
-	AccountService_DeleteAccount_FullMethodName      = "/iam.v1.AccountService/DeleteAccount"
-	AccountService_UpdateAccountRoles_FullMethodName = "/iam.v1.AccountService/UpdateAccountRoles"
+	AccountService_CreateAccount_FullMethodName        = "/iam.v1.AccountService/CreateAccount"
+	AccountService_GetAccount_FullMethodName           = "/iam.v1.AccountService/GetAccount"
+	AccountService_ListAccounts_FullMethodName         = "/iam.v1.AccountService/ListAccounts"
+	AccountService_UpdateAccount_FullMethodName        = "/iam.v1.AccountService/UpdateAccount"
+	AccountService_DeleteAccount_FullMethodName        = "/iam.v1.AccountService/DeleteAccount"
+	AccountService_UpdateAccountRoles_FullMethodName   = "/iam.v1.AccountService/UpdateAccountRoles"
+	AccountService_ResetAccountPassword_FullMethodName = "/iam.v1.AccountService/ResetAccountPassword"
 )
 
 // AccountServiceClient is the client API for AccountService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type AccountServiceClient interface {
-	// 创建账号，返回创建出的账号（含 id）
+	// 创建用户：初始密码必填（bcrypt 落库），返回创建出的用户（含 id）
 	CreateAccount(ctx context.Context, in *CreateAccountRequest, opts ...grpc.CallOption) (*Account, error)
-	// 获取账号信息
+	// 获取用户信息
 	GetAccount(ctx context.Context, in *common.GetRequest, opts ...grpc.CallOption) (*Account, error)
-	// 获取账号列表
+	// 获取用户列表：keyword 模糊匹配 username/nickname/email
 	ListAccounts(ctx context.Context, in *ListAccountsRequest, opts ...grpc.CallOption) (*ListAccountsResponse, error)
-	// 修改账号
+	// 修改用户：nickname/email/status 可选更新（字段缺省 = 不修改）
 	UpdateAccount(ctx context.Context, in *UpdateAccountRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	DeleteAccount(ctx context.Context, in *DeleteAccountRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	UpdateAccountRoles(ctx context.Context, in *UpdateAccountRolesRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// 管理员重置用户密码：新密码 bcrypt 落库，不要求提供旧密码
+	ResetAccountPassword(ctx context.Context, in *ResetAccountPasswordRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
 
 type accountServiceClient struct {
@@ -107,20 +110,31 @@ func (c *accountServiceClient) UpdateAccountRoles(ctx context.Context, in *Updat
 	return out, nil
 }
 
+func (c *accountServiceClient) ResetAccountPassword(ctx context.Context, in *ResetAccountPasswordRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, AccountService_ResetAccountPassword_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AccountServiceServer is the server API for AccountService service.
 // All implementations should embed UnimplementedAccountServiceServer
 // for forward compatibility
 type AccountServiceServer interface {
-	// 创建账号，返回创建出的账号（含 id）
+	// 创建用户：初始密码必填（bcrypt 落库），返回创建出的用户（含 id）
 	CreateAccount(context.Context, *CreateAccountRequest) (*Account, error)
-	// 获取账号信息
+	// 获取用户信息
 	GetAccount(context.Context, *common.GetRequest) (*Account, error)
-	// 获取账号列表
+	// 获取用户列表：keyword 模糊匹配 username/nickname/email
 	ListAccounts(context.Context, *ListAccountsRequest) (*ListAccountsResponse, error)
-	// 修改账号
+	// 修改用户：nickname/email/status 可选更新（字段缺省 = 不修改）
 	UpdateAccount(context.Context, *UpdateAccountRequest) (*emptypb.Empty, error)
 	DeleteAccount(context.Context, *DeleteAccountRequest) (*emptypb.Empty, error)
 	UpdateAccountRoles(context.Context, *UpdateAccountRolesRequest) (*emptypb.Empty, error)
+	// 管理员重置用户密码：新密码 bcrypt 落库，不要求提供旧密码
+	ResetAccountPassword(context.Context, *ResetAccountPasswordRequest) (*emptypb.Empty, error)
 }
 
 // UnimplementedAccountServiceServer should be embedded to have forward compatible implementations.
@@ -144,6 +158,9 @@ func (UnimplementedAccountServiceServer) DeleteAccount(context.Context, *DeleteA
 }
 func (UnimplementedAccountServiceServer) UpdateAccountRoles(context.Context, *UpdateAccountRolesRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateAccountRoles not implemented")
+}
+func (UnimplementedAccountServiceServer) ResetAccountPassword(context.Context, *ResetAccountPasswordRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ResetAccountPassword not implemented")
 }
 
 // UnsafeAccountServiceServer may be embedded to opt out of forward compatibility for this service.
@@ -265,6 +282,24 @@ func _AccountService_UpdateAccountRoles_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AccountService_ResetAccountPassword_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResetAccountPasswordRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AccountServiceServer).ResetAccountPassword(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AccountService_ResetAccountPassword_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AccountServiceServer).ResetAccountPassword(ctx, req.(*ResetAccountPasswordRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AccountService_ServiceDesc is the grpc.ServiceDesc for AccountService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -295,6 +330,10 @@ var AccountService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UpdateAccountRoles",
 			Handler:    _AccountService_UpdateAccountRoles_Handler,
+		},
+		{
+			MethodName: "ResetAccountPassword",
+			Handler:    _AccountService_ResetAccountPassword_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
