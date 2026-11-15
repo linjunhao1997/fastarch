@@ -6,7 +6,6 @@ import "time"
 // AccessCredential 是 AK/SK 签名鉴权凭证（specs/009-ak-sk-auth data-model）：
 // 绑定账号创建，凭证自身不携带权限；SK 以 AES-256-GCM 密文落库（secret_key_cipher），
 // 明文仅在创建/重置响应中一次性返回。
-//
 type AccessCredential struct {
 	Id              int64      `gorm:"column:id;primaryKey"`
 	AccessKey       string     `gorm:"column:access_key;size:64;uniqueIndex"`

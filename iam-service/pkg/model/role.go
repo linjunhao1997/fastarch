@@ -7,7 +7,6 @@ const RoleAdmin = "admin"
 // Role 角色模型（t_role，fastarch_dev 基线 Schema）：code 唯一业务码，
 // status 取值 enabled/disabled；与权限、菜单经关联表绑定。
 // 删除策略: 基础架构型（物理删除 + 引用检查 + 审计日志）
-//
 type Role struct {
 	Id             int64         `gorm:"column:id;primaryKey"`
 	Code           string        `gorm:"column:code;size:64;uniqueIndex"`

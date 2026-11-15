@@ -4,18 +4,19 @@ import "time"
 
 // DictType 字典类型（t_dict_type）：code 唯一业务码，字典项经 type_id 挂载。
 // 删除策略: 基础架构型（物理删除 + 引用检查 + 审计日志）
-//
 type DictType struct {
-	Id         int64     `gorm:"column:id;primaryKey"`
-	Code       string    `gorm:"column:code;size:64;uniqueIndex"`
-	Name       string    `gorm:"column:name;size:64"`
-	Remark     string    `gorm:"column:remark;size:255"`
-	Status     string    `gorm:"column:status;size:16;default:enabled"`
-	Version    int64     `gorm:"column:version"`
-	CreatedBy  string    `gorm:"column:created_by;size:64"`
-	UpdatedBy  string    `gorm:"column:updated_by;size:64"`
-	CreateTime time.Time `gorm:"column:create_time"`
-	UpdateTime time.Time `gorm:"column:update_time"`
+	Id   int64  `gorm:"column:id;primaryKey"`
+	Code string `gorm:"column:code;size:64;uniqueIndex"`
+	// ApplicationId 归属应用（多应用数据隔离，裁决 #7-#9；应用上下文由 token 承载）
+	ApplicationId int64     `gorm:"column:application_id;index"`
+	Name          string    `gorm:"column:name;size:64"`
+	Remark        string    `gorm:"column:remark;size:255"`
+	Status        string    `gorm:"column:status;size:16;default:enabled"`
+	Version       int64     `gorm:"column:version"`
+	CreatedBy     string    `gorm:"column:created_by;size:64"`
+	UpdatedBy     string    `gorm:"column:updated_by;size:64"`
+	CreateTime    time.Time `gorm:"column:create_time"`
+	UpdateTime    time.Time `gorm:"column:update_time"`
 }
 
 func (d *DictType) TableName() string {
@@ -43,7 +44,7 @@ func (d *DictItem) TableName() string {
 }
 
 var DictTypeFields = []string{
-	DictTypeColumnId, DictTypeColumnCode, DictTypeColumnName, DictTypeColumnRemark,
+	DictTypeColumnId, DictTypeColumnCode, DictTypeColumnApplicationId, DictTypeColumnName, DictTypeColumnRemark,
 	DictTypeColumnStatus, DictTypeColumnVersion, DictTypeColumnCreatedBy,
 	DictTypeColumnUpdatedBy, DictTypeColumnCreateTime, DictTypeColumnUpdateTime,
 }

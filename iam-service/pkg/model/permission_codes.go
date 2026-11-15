@@ -69,12 +69,12 @@ var PERMISSION_CODES = []string{
 // 未登记的方法一律拒绝。登录、自查类方法不在此表（拦截器 authOnly 豁免）。
 var METHOD_PERMISSIONS = map[string][]string{
 	// AccountService（用户服务语义，proto 方法名未动）
-	"/iam.v1.AccountService/CreateAccount":      {"iam.user.create"},
-	"/iam.v1.AccountService/GetAccount":         {"iam.user.get"},
-	"/iam.v1.AccountService/ListAccounts":       {"iam.user.list"},
-	"/iam.v1.AccountService/UpdateAccount":      {"iam.user.update"},
-	"/iam.v1.AccountService/DeleteAccount":      {"iam.user.delete"},
-	"/iam.v1.AccountService/UpdateAccountRoles": {"iam.user.assign_roles"},
+	"/iam.v1.AccountService/CreateAccount":        {"iam.user.create"},
+	"/iam.v1.AccountService/GetAccount":           {"iam.user.get"},
+	"/iam.v1.AccountService/ListAccounts":         {"iam.user.list"},
+	"/iam.v1.AccountService/UpdateAccount":        {"iam.user.update"},
+	"/iam.v1.AccountService/DeleteAccount":        {"iam.user.delete"},
+	"/iam.v1.AccountService/UpdateAccountRoles":   {"iam.user.assign_roles"},
 	"/iam.v1.AccountService/ResetAccountPassword": {"iam.user.reset_password"},
 	// ApplicationService
 	"/iam.v1.ApplicationService/CreateApplication": {"iam.application.create"},
@@ -83,11 +83,11 @@ var METHOD_PERMISSIONS = map[string][]string{
 	"/iam.v1.ApplicationService/UpdateApplication": {"iam.application.update"},
 	"/iam.v1.ApplicationService/DeleteApplication": {"iam.application.delete"},
 	// MenuService（菜单 = t_menu + t_r_role_menu，组件资源模型已废弃）
-	"/iam.v1.MenuService/CreateMenu":     {"iam.menu.create"},
-	"/iam.v1.MenuService/GetMenu":        {"iam.menu.get"},
-	"/iam.v1.MenuService/ListMenuTree":   {"iam.menu.list"},
-	"/iam.v1.MenuService/UpdateMenu":     {"iam.menu.update"},
-	"/iam.v1.MenuService/DeleteMenu":     {"iam.menu.delete"},
+	"/iam.v1.MenuService/CreateMenu":      {"iam.menu.create"},
+	"/iam.v1.MenuService/GetMenu":         {"iam.menu.get"},
+	"/iam.v1.MenuService/ListMenuTree":    {"iam.menu.list"},
+	"/iam.v1.MenuService/UpdateMenu":      {"iam.menu.update"},
+	"/iam.v1.MenuService/DeleteMenu":      {"iam.menu.delete"},
 	"/iam.v1.MenuService/UpdateRoleMenus": {"iam.menu.update"},
 	"/iam.v1.MenuService/ListRoleMenus":   {"iam.menu.get"},
 	// DictService

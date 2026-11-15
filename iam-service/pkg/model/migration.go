@@ -22,6 +22,7 @@ func init() {
 		RUserRole{},
 		RRolePermission{},
 		RRoleMenu{},
+		RUserApplication{},
 		// 主表
 		User{},
 		Role{},

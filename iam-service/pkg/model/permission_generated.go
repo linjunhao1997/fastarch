@@ -12,11 +12,12 @@ const (
 
 // 手工补回：contrib 生成器会丢失 string 类列与 uniqueIndex 列常量（项目已知问题）
 const (
-	PermissionColumnCode        = "code"
-	PermissionColumnName        = "name"
-	PermissionColumnType        = "type"
-	PermissionColumnDescription = "description"
-	PermissionColumnStatus      = "status"
-	PermissionColumnCreatedBy   = "created_by"
-	PermissionColumnUpdatedBy   = "updated_by"
+	PermissionColumnCode          = "code"
+	PermissionColumnApplicationId = "application_id"
+	PermissionColumnName          = "name"
+	PermissionColumnType          = "type"
+	PermissionColumnDescription   = "description"
+	PermissionColumnStatus        = "status"
+	PermissionColumnCreatedBy     = "created_by"
+	PermissionColumnUpdatedBy     = "updated_by"
 )

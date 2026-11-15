@@ -12,12 +12,13 @@ const (
 
 // 手工补回：contrib 生成器会丢失 string 类列与 uniqueIndex 列常量（项目已知问题）
 const (
-	DictTypeColumnCode      = "code"
-	DictTypeColumnName      = "name"
-	DictTypeColumnRemark    = "remark"
-	DictTypeColumnStatus    = "status"
-	DictTypeColumnCreatedBy = "created_by"
-	DictTypeColumnUpdatedBy = "updated_by"
+	DictTypeColumnCode          = "code"
+	DictTypeColumnApplicationId = "application_id"
+	DictTypeColumnName          = "name"
+	DictTypeColumnRemark        = "remark"
+	DictTypeColumnStatus        = "status"
+	DictTypeColumnCreatedBy     = "created_by"
+	DictTypeColumnUpdatedBy     = "updated_by"
 )
 
 const (

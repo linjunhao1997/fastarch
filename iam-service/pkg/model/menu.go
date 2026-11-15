@@ -6,10 +6,11 @@ import "time"
 // permission_code 绑定权限码（唯一授权词汇），前端按「菜单绑定码 ∩ 用户持有码」
 // 或角色-菜单绑定决定展示。
 // 删除策略: 基础架构型（物理删除 + 引用检查 + 审计日志）
-//
 type Menu struct {
-	Id             int64     `gorm:"column:id;primaryKey"`
-	ParentId       int64     `gorm:"column:parent_id;index;default:0"`
+	Id       int64 `gorm:"column:id;primaryKey"`
+	ParentId int64 `gorm:"column:parent_id;index;default:0"`
+	// ApplicationId 归属应用（多应用数据隔离，裁决 #7-#9）：菜单树按应用独立
+	ApplicationId  int64     `gorm:"column:application_id;index"`
 	Name           string    `gorm:"column:name;size:64"`
 	Path           string    `gorm:"column:path;size:128"`
 	Icon           string    `gorm:"column:icon;size:64"`
@@ -29,7 +30,7 @@ func (m *Menu) TableName() string {
 }
 
 var MenuFields = []string{
-	MenuColumnId, MenuColumnParentId, MenuColumnName, MenuColumnPath, MenuColumnIcon,
+	MenuColumnId, MenuColumnParentId, MenuColumnApplicationId, MenuColumnName, MenuColumnPath, MenuColumnIcon,
 	MenuColumnSort, MenuColumnPermissionCode, MenuColumnStatus, MenuColumnVersion,
 	MenuColumnCreatedBy, MenuColumnUpdatedBy, MenuColumnCreateTime, MenuColumnUpdateTime,
 }
