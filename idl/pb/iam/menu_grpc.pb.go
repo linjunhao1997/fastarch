@@ -28,6 +28,7 @@ const (
 	MenuService_ListMenuTree_FullMethodName    = "/iam.v1.MenuService/ListMenuTree"
 	MenuService_ListMyMenuTree_FullMethodName  = "/iam.v1.MenuService/ListMyMenuTree"
 	MenuService_UpdateRoleMenus_FullMethodName = "/iam.v1.MenuService/UpdateRoleMenus"
+	MenuService_ListRoleMenus_FullMethodName   = "/iam.v1.MenuService/ListRoleMenus"
 )
 
 // MenuServiceClient is the client API for MenuService service.
@@ -49,6 +50,8 @@ type MenuServiceClient interface {
 	ListMyMenuTree(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListMenuTreeResponse, error)
 	// 角色绑定菜单全量覆盖：以 menu_ids 为目标绑定集合做整体替换（事务）
 	UpdateRoleMenus(ctx context.Context, in *UpdateRoleMenusRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// 查询角色绑定的菜单 id 集合（编辑角色页回显用）
+	ListRoleMenus(ctx context.Context, in *ListRoleMenusRequest, opts ...grpc.CallOption) (*ListRoleMenusResponse, error)
 }
 
 type menuServiceClient struct {
@@ -122,6 +125,15 @@ func (c *menuServiceClient) UpdateRoleMenus(ctx context.Context, in *UpdateRoleM
 	return out, nil
 }
 
+func (c *menuServiceClient) ListRoleMenus(ctx context.Context, in *ListRoleMenusRequest, opts ...grpc.CallOption) (*ListRoleMenusResponse, error) {
+	out := new(ListRoleMenusResponse)
+	err := c.cc.Invoke(ctx, MenuService_ListRoleMenus_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MenuServiceServer is the server API for MenuService service.
 // All implementations should embed UnimplementedMenuServiceServer
 // for forward compatibility
@@ -141,6 +153,8 @@ type MenuServiceServer interface {
 	ListMyMenuTree(context.Context, *emptypb.Empty) (*ListMenuTreeResponse, error)
 	// 角色绑定菜单全量覆盖：以 menu_ids 为目标绑定集合做整体替换（事务）
 	UpdateRoleMenus(context.Context, *UpdateRoleMenusRequest) (*emptypb.Empty, error)
+	// 查询角色绑定的菜单 id 集合（编辑角色页回显用）
+	ListRoleMenus(context.Context, *ListRoleMenusRequest) (*ListRoleMenusResponse, error)
 }
 
 // UnimplementedMenuServiceServer should be embedded to have forward compatible implementations.
@@ -167,6 +181,9 @@ func (UnimplementedMenuServiceServer) ListMyMenuTree(context.Context, *emptypb.E
 }
 func (UnimplementedMenuServiceServer) UpdateRoleMenus(context.Context, *UpdateRoleMenusRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateRoleMenus not implemented")
+}
+func (UnimplementedMenuServiceServer) ListRoleMenus(context.Context, *ListRoleMenusRequest) (*ListRoleMenusResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListRoleMenus not implemented")
 }
 
 // UnsafeMenuServiceServer may be embedded to opt out of forward compatibility for this service.
@@ -306,6 +323,24 @@ func _MenuService_UpdateRoleMenus_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MenuService_ListRoleMenus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListRoleMenusRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MenuServiceServer).ListRoleMenus(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MenuService_ListRoleMenus_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MenuServiceServer).ListRoleMenus(ctx, req.(*ListRoleMenusRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MenuService_ServiceDesc is the grpc.ServiceDesc for MenuService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -340,6 +375,10 @@ var MenuService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UpdateRoleMenus",
 			Handler:    _MenuService_UpdateRoleMenus_Handler,
+		},
+		{
+			MethodName: "ListRoleMenus",
+			Handler:    _MenuService_ListRoleMenus_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

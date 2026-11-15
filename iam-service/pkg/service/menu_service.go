@@ -412,3 +412,21 @@ func (s *MenuService) UpdateRoleMenus(ctx context.Context, request *iam_v1.Updat
 	}
 	return &emptypb.Empty{}, nil
 }
+
+// ListRoleMenus 查询角色绑定的菜单 id 集合（编辑角色页回显用）。
+func (s *MenuService) ListRoleMenus(ctx context.Context, request *iam_v1.ListRoleMenusRequest) (*iam_v1.ListRoleMenusResponse, error) {
+	var bindings []model.RRoleMenu
+	err := s.db.WithContext(ctx).Model(model.RRoleMenu{}).
+		Select(model.RRoleMenuColumnMenuId).
+		Where(model.RRoleMenuColumnRoleId, request.RoleId).
+		Find(&bindings).Error
+	if err != nil {
+		slog.Warn("list role menus failed", "role_id", request.RoleId, "error", err)
+		return nil, err
+	}
+	menuIds := make([]string, 0, len(bindings))
+	for _, binding := range bindings {
+		menuIds = append(menuIds, cast.ToString(binding.MenuId))
+	}
+	return &iam_v1.ListRoleMenusResponse{MenuIds: menuIds}, nil
+}

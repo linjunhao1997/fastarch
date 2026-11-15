@@ -89,6 +89,7 @@ var METHOD_PERMISSIONS = map[string][]string{
 	"/iam.v1.MenuService/UpdateMenu":     {"iam.menu.update"},
 	"/iam.v1.MenuService/DeleteMenu":     {"iam.menu.delete"},
 	"/iam.v1.MenuService/UpdateRoleMenus": {"iam.menu.update"},
+	"/iam.v1.MenuService/ListRoleMenus":   {"iam.menu.get"},
 	// DictService
 	"/iam.v1.DictService/CreateDictType": {"iam.dict.create"},
 	"/iam.v1.DictService/UpdateDictType": {"iam.dict.update"},

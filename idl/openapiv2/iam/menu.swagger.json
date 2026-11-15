@@ -232,6 +232,36 @@
       }
     },
     "/menu/roles/{roleId}/menus": {
+      "get": {
+        "summary": "查询角色绑定的菜单 id 集合（编辑角色页回显用）",
+        "operationId": "MenuService_ListRoleMenus",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListRoleMenusResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "roleId",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "int64"
+          }
+        ],
+        "tags": [
+          "MenuService"
+        ]
+      },
       "patch": {
         "summary": "角色绑定菜单全量覆盖：以 menu_ids 为目标绑定集合做整体替换（事务）",
         "operationId": "MenuService_UpdateRoleMenus",
@@ -351,6 +381,18 @@
             "type": "object",
             "$ref": "#/definitions/v1MenuTreeNode"
           }
+        }
+      }
+    },
+    "v1ListRoleMenusResponse": {
+      "type": "object",
+      "properties": {
+        "menuIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "角色绑定的菜单 id 集合（string 编码）"
         }
       }
     },
