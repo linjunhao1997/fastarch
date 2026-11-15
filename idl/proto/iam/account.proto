@@ -70,8 +70,8 @@ service AccountService {
 message CreateAccountRequest {
   string username = 1 [(buf.validate.field).string.min_len = 1];
   string nickname = 2;
-  // 邮箱可选；传了必须合法（protovalidate 对空串跳过 email 规则）
-  string email = 3 [(buf.validate.field).string.email = true];
+  // 邮箱可选；空串经 ignore=IGNORE_IF_ZERO_VALUE 显式跳过，非空时必须合法
+  string email = 3 [(buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE, (buf.validate.field).string.email = true];
   // 初始密码必填（bcrypt 摘要落库，明文不落盘）
   string password = 4 [(buf.validate.field).string.min_len = 8];
   // 初始角色 id 集合（string 编码），可选；缺省不绑定角色

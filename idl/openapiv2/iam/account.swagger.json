@@ -409,7 +409,7 @@
         },
         "email": {
           "type": "string",
-          "title": "邮箱可选；传了必须合法（protovalidate 对空串跳过 email 规则）"
+          "title": "邮箱可选；空串经 ignore=IGNORE_IF_ZERO_VALUE 显式跳过，非空时必须合法"
         },
         "password": {
           "type": "string",
