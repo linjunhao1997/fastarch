@@ -377,29 +377,37 @@ func (s *MenuService) UpdateRoleMenus(ctx context.Context, request *iam_v1.Updat
 	for _, id := range menuIds {
 		targetSet[id] = struct{}{}
 	}
-	addedMenus := make([]model.Menu, 0, len(menuIds))
+	addedMenuIds := make([]int64, 0, len(menuIds))
 	for _, id := range menuIds {
 		if _, exists := boundMenuIds[id]; !exists {
-			addedMenus = append(addedMenus, model.Menu{Id: id})
+			addedMenuIds = append(addedMenuIds, id)
 		}
 	}
-	removedMenus := make([]model.Menu, 0)
+	removedMenuIds := make([]int64, 0, len(role.MenuList))
 	for _, menu := range role.MenuList {
 		if _, exists := targetSet[menu.Id]; !exists {
-			removedMenus = append(removedMenus, *menu)
+			removedMenuIds = append(removedMenuIds, menu.Id)
 		}
 	}
 
+	// 菜单绑定只写关联表 t_r_role_menu，绝不触碰 menu 行；
+	// 不用 Association.Append——传入 stub model.Menu{Id} 会连带 upsert menu 行，
+	// 零值 CreateTime/UpdateTime 触发 MySQL "Incorrect datetime value: '0000-00-00'"。
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		association := tx.Model(&role).Association("MenuList")
-		// GORM Append 空切片仍会重复插入关联行，必须跳过空清单
-		if len(addedMenus) > 0 {
-			if err := association.Append(addedMenus); err != nil {
+		if len(addedMenuIds) > 0 {
+			rows := make([]model.RRoleMenu, 0, len(addedMenuIds))
+			for _, id := range addedMenuIds {
+				rows = append(rows, model.RRoleMenu{RoleId: role.Id, MenuId: id})
+			}
+			if err := tx.Create(&rows).Error; err != nil {
 				return err
 			}
 		}
-		if len(removedMenus) > 0 {
-			return association.Delete(removedMenus)
+		if len(removedMenuIds) > 0 {
+			if err := tx.Where(model.RRoleMenuColumnRoleId+" = ? AND "+model.RRoleMenuColumnMenuId+" IN ?",
+				role.Id, removedMenuIds).Delete(&model.RRoleMenu{}).Error; err != nil {
+				return err
+			}
 		}
 		return nil
 	})

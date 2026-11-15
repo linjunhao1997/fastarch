@@ -212,29 +212,37 @@ func (service *AccountService) UpdateAccountRoles(ctx context.Context, request *
 	for _, role := range user.RoleList {
 		boundRoles[role.Code] = *role
 	}
-	addedRoles := make([]model.Role, 0, len(request.AddedRoleCodeList))
+	addedRoleIds := make([]int64, 0, len(request.AddedRoleCodeList))
 	for _, code := range request.AddedRoleCodeList {
 		if _, exists := boundRoles[code]; !exists {
-			addedRoles = append(addedRoles, roleByCode[code])
+			addedRoleIds = append(addedRoleIds, roleByCode[code].Id)
 		}
 	}
-	removedRoles := make([]model.Role, 0, len(request.RemovedRoleCodeList))
+	removedRoleIds := make([]int64, 0, len(request.RemovedRoleCodeList))
 	for _, code := range request.RemovedRoleCodeList {
 		if role, exists := boundRoles[code]; exists {
-			removedRoles = append(removedRoles, role)
+			removedRoleIds = append(removedRoleIds, role.Id)
 		}
 	}
 
+	// 绑定只写关联表 t_r_user_role，绝不触碰 role 行本身；
+	// 不用 Association.Append——它会对关联记录做 upsert（零值时间触发
+	// MySQL 0000-00-00），且可能重复插入。
 	err = service.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		association := tx.Model(&user).Association("RoleList")
-		// GORM Append 空切片仍会重复插入关联行，必须跳过空清单
-		if len(addedRoles) > 0 {
-			if err := association.Append(addedRoles); err != nil {
+		if len(addedRoleIds) > 0 {
+			rows := make([]model.RUserRole, 0, len(addedRoleIds))
+			for _, id := range addedRoleIds {
+				rows = append(rows, model.RUserRole{UserId: user.Id, RoleId: id})
+			}
+			if err := tx.Create(&rows).Error; err != nil {
 				return err
 			}
 		}
-		if len(removedRoles) > 0 {
-			return association.Delete(removedRoles)
+		if len(removedRoleIds) > 0 {
+			if err := tx.Where(model.RUserRoleColumnUserId+" = ? AND "+model.RUserRoleColumnRoleId+" IN ?",
+				user.Id, removedRoleIds).Delete(&model.RUserRole{}).Error; err != nil {
+				return err
+			}
 		}
 		return nil
 	})
@@ -369,7 +377,6 @@ func (service *AccountService) CreateAccount(ctx context.Context, request *iam_v
 		CreateTime:   now,
 		UpdateTime:   now,
 	}
-	var createdRoles []model.Role
 	err = service.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var count int64
 		err := tx.Model(model.User{}).
@@ -413,15 +420,25 @@ func (service *AccountService) CreateAccount(ctx context.Context, request *iam_v
 				roleIds = append(roleIds, id)
 			}
 			if len(roleIds) > 0 {
+				var roles []model.Role
 				if err := tx.Where(model.RoleColumnId+" IN ?", roleIds).
-					Find(&createdRoles).Error; err != nil {
+					Select(model.RoleFields).
+					Find(&roles).Error; err != nil {
 					return err
 				}
-				if len(createdRoles) != len(roleIds) {
+				if len(roles) != len(roleIds) {
 					slog.Warn("create user rejected: some roles not found", "role_ids", request.RoleIds)
 					return ErrRoleNotFound
 				}
-				if err := tx.Model(&user).Association("RoleList").Append(createdRoles); err != nil {
+				// 绑定只写关联表（t_r_user_role）；Association.Append 会连带
+				// upsert 关联行，stub/零值时间对象将触发 MySQL 严格模式 0000-00-00 报错
+				rows := make([]model.RUserRole, 0, len(roleIds))
+				user.RoleList = make([]*model.Role, 0, len(roles))
+				for i := range roles {
+					rows = append(rows, model.RUserRole{UserId: user.Id, RoleId: roles[i].Id})
+					user.RoleList = append(user.RoleList, &roles[i])
+				}
+				if err := tx.Create(&rows).Error; err != nil {
 					return err
 				}
 			}

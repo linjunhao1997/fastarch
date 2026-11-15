@@ -110,16 +110,16 @@ func (a *AuthorizationService) UpdateRole(ctx context.Context, request *iam_v1.U
 	for _, permission := range role.PermissionList {
 		boundPermissions[permission.Code] = *permission
 	}
-	addedPermissions := make([]model.Permission, 0, len(request.AddedPermissionCodeList))
+	addedPermissionIds := make([]int64, 0, len(request.AddedPermissionCodeList))
 	for _, code := range request.AddedPermissionCodeList {
 		if _, exists := boundPermissions[code]; !exists {
-			addedPermissions = append(addedPermissions, permissionByCode[code])
+			addedPermissionIds = append(addedPermissionIds, permissionByCode[code].Id)
 		}
 	}
-	removedPermissions := make([]model.Permission, 0, len(request.RemovedPermissionCodeList))
+	removedPermissionIds := make([]int64, 0, len(request.RemovedPermissionCodeList))
 	for _, code := range request.RemovedPermissionCodeList {
 		if permission, exists := boundPermissions[code]; exists {
-			removedPermissions = append(removedPermissions, permission)
+			removedPermissionIds = append(removedPermissionIds, permission.Id)
 		}
 	}
 
@@ -135,6 +135,8 @@ func (a *AuthorizationService) UpdateRole(ctx context.Context, request *iam_v1.U
 	updates[model.RoleColumnUpdatedBy] = cast.ToString(auth.GetAccountId(ctx))
 	updates[model.RoleColumnVersion] = gorm.Expr(model.RoleColumnVersion + " + 1")
 
+	// 权限绑定只写关联表 t_r_role_permission，不触碰 permission 行；
+	// 不用 Association.Append（会 upsert 关联记录，零值时间触发 MySQL 严格模式报错）
 	err = a.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		result := tx.Model(model.Role{}).
 			Where(model.RoleColumnId, request.Id).
@@ -146,15 +148,20 @@ func (a *AuthorizationService) UpdateRole(ctx context.Context, request *iam_v1.U
 		if result.RowsAffected == 0 {
 			return ErrUpdateRoleBusy
 		}
-		association := tx.Model(&role).Association("PermissionList")
-		// GORM Append 空切片仍会重复插入关联行，必须跳过空清单
-		if len(addedPermissions) > 0 {
-			if err := association.Append(addedPermissions); err != nil {
+		if len(removedPermissionIds) > 0 {
+			if err := tx.Where(model.RRolePermissionColumnRoleId+" = ? AND "+model.RRolePermissionColumnPermissionId+" IN ?",
+				role.Id, removedPermissionIds).Delete(&model.RRolePermission{}).Error; err != nil {
 				return err
 			}
 		}
-		if len(removedPermissions) > 0 {
-			return association.Delete(removedPermissions)
+		if len(addedPermissionIds) > 0 {
+			rows := make([]model.RRolePermission, 0, len(addedPermissionIds))
+			for _, id := range addedPermissionIds {
+				rows = append(rows, model.RRolePermission{RoleId: role.Id, PermissionId: id})
+			}
+			if err := tx.Create(&rows).Error; err != nil {
+				return err
+			}
 		}
 		return nil
 	})
