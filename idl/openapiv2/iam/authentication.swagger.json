@@ -16,9 +16,32 @@
     "application/json"
   ],
   "paths": {
+    "/authentication/my-applications": {
+      "get": {
+        "summary": "列出当前用户可进入的应用（admin 旁路全部启用应用；\n其他用户按 t_r_user_application 准入绑定过滤）。",
+        "operationId": "AuthenticationService_ListMyApplications",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListMyApplicationsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "AuthenticationService"
+        ]
+      }
+    },
     "/authentication/my-profile": {
       "get": {
-        "summary": "获取当前登录用户的个人信息（基本信息 + 所属应用列表）\n仅凭登录态（JWT accountId）返回，不接收用户标识参数",
+        "summary": "获取当前登录用户的个人信息（基本信息 + 可进入应用列表）\n仅凭登录态（JWT accountId）返回，不接收用户标识参数",
         "operationId": "AuthenticationService_GetMyProfile",
         "responses": {
           "200": {
@@ -64,6 +87,40 @@
             "required": true,
             "schema": {
               "$ref": "#/definitions/v1PasswordAuthRequest"
+            }
+          }
+        ],
+        "tags": [
+          "AuthenticationService"
+        ]
+      }
+    },
+    "/authentication/select-application": {
+      "post": {
+        "summary": "选择当前应用上下文：校验准入后写入 jti→应用映射（切换不重签令牌，\n多应用裁决 #8）。外部/机器令牌的 application_id 在签发时锁定于 claim，\n不经本接口。",
+        "operationId": "AuthenticationService_SelectApplication",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1SelectApplicationRequest"
             }
           }
         ],
@@ -141,7 +198,19 @@
             "type": "object",
             "$ref": "#/definitions/v1MyProfileApplication"
           },
-          "title": "所属应用列表（含停用应用；用户无归属时为空列表）"
+          "title": "可进入应用列表（与 ListMyApplications 同源：admin 全量启用应用，其他按准入绑定）"
+        }
+      }
+    },
+    "v1ListMyApplicationsResponse": {
+      "type": "object",
+      "properties": {
+        "applications": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1MyProfileApplication"
+          }
         }
       }
     },
@@ -184,6 +253,15 @@
       "properties": {
         "accessToken": {
           "type": "string"
+        }
+      }
+    },
+    "v1SelectApplicationRequest": {
+      "type": "object",
+      "properties": {
+        "applicationCode": {
+          "type": "string",
+          "title": "应用服务段编码（人机边界认 code，服务端换 application_id；多应用裁决 #8）"
         }
       }
     }

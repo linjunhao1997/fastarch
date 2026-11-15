@@ -55,17 +55,42 @@ func createTestRole(t *testing.T, db *gorm.DB, id int64, code string, version in
 	return role
 }
 
+// 多应用裁决 #8：测试统一使用 id=900/code=iam 的应用上下文。
+const testAppId = int64(900)
+
+func setupTestApplication(t *testing.T, db *gorm.DB) {
+	t.Helper()
+	app := model.Application{
+		Id:         testAppId,
+		AppId:      "900",
+		Code:       "iam",
+		Name:       "IAM 测试应用",
+		Status:     model.StatusEnabled,
+		Version:    1,
+		CreateTime: time.Now(),
+		UpdateTime: time.Now(),
+	}
+	if err := db.Create(&app).Error; err != nil {
+		t.Fatalf("create application: %v", err)
+	}
+}
+
+func appCtx(ctx context.Context) context.Context {
+	return auth.WithApplicationId(ctx, testAppId)
+}
+
 func createTestPermission(t *testing.T, db *gorm.DB, id int64, code string, version int64) model.Permission {
 	t.Helper()
 	permission := model.Permission{
-		Id:         id,
-		Name:       "permission",
-		Code:       code,
-		Version:    version,
-		Status:     model.StatusEnabled,
-		Type:       "api",
-		CreateTime: time.Now(),
-		UpdateTime: time.Now(),
+		Id:            id,
+		Name:          "permission",
+		Code:          code,
+		ApplicationId: testAppId,
+		Version:       version,
+		Status:        model.StatusEnabled,
+		Type:          "api",
+		CreateTime:    time.Now(),
+		UpdateTime:    time.Now(),
 	}
 	if err := db.Create(&permission).Error; err != nil {
 		t.Fatalf("create permission: %v", err)
@@ -134,10 +159,11 @@ func TestUpdateRole(t *testing.T) {
 
 func TestUpdatePermission(t *testing.T) {
 	db := setupAuthorizationTestDB(t)
+	setupTestApplication(t, db)
 	permission := createTestPermission(t, db, 1, "iam.permission.list", 1)
 	service := NewAuthorizationService(db, nil)
 
-	_, err := service.CreatePermission(context.Background(), &iam_v1.CreatePermissionRequest{
+	_, err := service.CreatePermission(appCtx(context.Background()), &iam_v1.CreatePermissionRequest{
 		Name: "duplicate",
 		Code: permission.Code,
 	})
@@ -145,7 +171,7 @@ func TestUpdatePermission(t *testing.T) {
 		t.Fatalf("CreatePermission() error = %v, want %v", err, ErrPermissionCodeDuplicated)
 	}
 
-	_, err = service.UpdatePermission(context.Background(), &iam_v1.UpdatePermissionRequest{
+	_, err = service.UpdatePermission(appCtx(context.Background()), &iam_v1.UpdatePermissionRequest{
 		Id:      1,
 		Name:    "updated",
 		Version: 2,
@@ -154,7 +180,7 @@ func TestUpdatePermission(t *testing.T) {
 		t.Fatalf("UpdatePermission() error = %v, want %v", err, ErrUpdatePermissionBusy)
 	}
 
-	_, err = service.UpdatePermission(context.Background(), &iam_v1.UpdatePermissionRequest{
+	_, err = service.UpdatePermission(appCtx(context.Background()), &iam_v1.UpdatePermissionRequest{
 		Id:      1,
 		Name:    "updated",
 		Version: 1,
@@ -174,6 +200,7 @@ func TestUpdatePermission(t *testing.T) {
 
 func TestDeletePermission(t *testing.T) {
 	db := setupAuthorizationTestDB(t)
+	setupTestApplication(t, db)
 	role := createTestRole(t, db, 1, "role-code", 1)
 	referenced := createTestPermission(t, db, 10, "iam.permission.list", 1)
 	unreferenced := createTestPermission(t, db, 11, "iam.role.list", 1)
@@ -182,13 +209,13 @@ func TestDeletePermission(t *testing.T) {
 	}
 	service := NewAuthorizationService(db, nil)
 
-	if _, err := service.DeletePermission(context.Background(), &iam_v1.DeletePermissionRequest{Id: referenced.Id}); err != ErrPermissionReferenced {
+	if _, err := service.DeletePermission(appCtx(context.Background()), &iam_v1.DeletePermissionRequest{Id: referenced.Id}); err != ErrPermissionReferenced {
 		t.Fatalf("DeletePermission() error = %v, want %v", err, ErrPermissionReferenced)
 	}
-	if _, err := service.DeletePermission(context.Background(), &iam_v1.DeletePermissionRequest{Id: unreferenced.Id}); err != nil {
+	if _, err := service.DeletePermission(appCtx(context.Background()), &iam_v1.DeletePermissionRequest{Id: unreferenced.Id}); err != nil {
 		t.Fatalf("DeletePermission() error = %v", err)
 	}
-	if _, err := service.DeletePermission(context.Background(), &iam_v1.DeletePermissionRequest{Id: unreferenced.Id}); err != gorm.ErrRecordNotFound {
+	if _, err := service.DeletePermission(appCtx(context.Background()), &iam_v1.DeletePermissionRequest{Id: unreferenced.Id}); err != gorm.ErrRecordNotFound {
 		t.Fatalf("second DeletePermission() error = %v, want %v", err, gorm.ErrRecordNotFound)
 	}
 }
@@ -287,9 +314,10 @@ func TestUpdateRoleInvalidatesBoundAccountsCache(t *testing.T) {
 // 审计字段注入：CreateRole 注入四件套，UpdateRole 仅更新
 // update_time/updated_by，created_by/create_time 保持不变；GetRole 回填审计字段。
 func TestRoleAuditFields(t *testing.T) {
-	createCtx := context.WithValue(context.Background(), "accountId", "42")
-	updateCtx := context.WithValue(context.Background(), "accountId", "43")
+	createCtx := appCtx(context.WithValue(context.Background(), "accountId", "42"))
+	updateCtx := appCtx(context.WithValue(context.Background(), "accountId", "43"))
 	db := setupAuthorizationTestDB(t)
+	setupTestApplication(t, db)
 	service := NewAuthorizationService(db, nil)
 
 	created, err := service.CreateRole(createCtx, &iam_v1.CreateRoleRequest{
@@ -344,9 +372,10 @@ func TestRoleAuditFields(t *testing.T) {
 
 // 审计字段注入：CreatePermission / UpdatePermission 对称覆盖。
 func TestPermissionAuditFields(t *testing.T) {
-	createCtx := context.WithValue(context.Background(), "accountId", "42")
-	updateCtx := context.WithValue(context.Background(), "accountId", "43")
+	createCtx := appCtx(context.WithValue(context.Background(), "accountId", "42"))
+	updateCtx := appCtx(context.WithValue(context.Background(), "accountId", "43"))
 	db := setupAuthorizationTestDB(t)
+	setupTestApplication(t, db)
 	service := NewAuthorizationService(db, nil)
 
 	created, err := service.CreatePermission(createCtx, &iam_v1.CreatePermissionRequest{
@@ -384,7 +413,7 @@ func TestPermissionAuditFields(t *testing.T) {
 		t.Fatalf("create_time = %v, want unchanged %v", got.CreateTime, created.CreateTime.AsTime())
 	}
 
-	detail, err := service.GetPermission(context.Background(), &common_v1.GetRequest{Id: permissionId})
+	detail, err := service.GetPermission(appCtx(context.Background()), &common_v1.GetRequest{Id: permissionId})
 	if err != nil {
 		t.Fatalf("GetPermission() error = %v", err)
 	}
@@ -410,11 +439,12 @@ func TestListRolesKeyword(t *testing.T) {
 
 func TestListPermissionsKeyword(t *testing.T) {
 	db := setupAuthorizationTestDB(t)
+	setupTestApplication(t, db)
 	createTestPermission(t, db, 1, "iam.alpha.code", 1)
 	createTestPermission(t, db, 2, "iam.beta.code", 1)
 	service := NewAuthorizationService(db, nil)
 
-	response, err := service.ListPermissions(context.Background(), &iam_v1.ListPermissionsRequest{Keyword: "alpha"})
+	response, err := service.ListPermissions(appCtx(context.Background()), &iam_v1.ListPermissionsRequest{Keyword: "alpha"})
 	if err != nil {
 		t.Fatalf("ListPermissions() error = %v", err)
 	}
@@ -532,8 +562,9 @@ func TestDeleteRoleRejectsAdminRole(t *testing.T) {
 
 func TestCreatePermissionValidatesCodeFormat(t *testing.T) {
 	db := setupAuthorizationTestDB(t)
+	setupTestApplication(t, db)
 	service := NewAuthorizationService(db, nil)
-	ctx := context.Background()
+	ctx := appCtx(context.Background())
 
 	cases := []struct {
 		name    string
@@ -566,8 +597,9 @@ func TestCreatePermissionValidatesCodeFormat(t *testing.T) {
 
 func TestCreatePermissionCodeDuplicated(t *testing.T) {
 	db := setupAuthorizationTestDB(t)
+	setupTestApplication(t, db)
 	service := NewAuthorizationService(db, nil)
-	ctx := context.Background()
+	ctx := appCtx(context.Background())
 	req := &iam_v1.CreatePermissionRequest{Name: "p", Code: "iam.dup.perm"}
 	if _, err := service.CreatePermission(ctx, req); err != nil {
 		t.Fatalf("CreatePermission() error = %v", err)

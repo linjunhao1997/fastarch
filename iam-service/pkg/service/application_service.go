@@ -37,6 +37,7 @@ func applicationToPb(a model.Application) *iam_v1.Application {
 	return &iam_v1.Application{
 		Id:         cast.ToString(a.Id),
 		AppId:      a.AppId,
+		Code:       a.Code,
 		Name:       a.Name,
 		Status:     a.Status,
 		Version:    a.Version,
@@ -63,6 +64,18 @@ func generateApplicationSecret() (plaintext string, hash string, err error) {
 // CreateApplication 创建应用：服务端生成 app_id 与随机 secret，响应一次性返回
 // secret 明文（服务端只存 sha256 hex 摘要，之后任何接口不再返回）。
 func (s *ApplicationService) CreateApplication(ctx context.Context, request *iam_v1.CreateApplicationRequest) (*iam_v1.CreateApplicationResponse, error) {
+	// 服务段编码唯一性预检（多应用裁决 #8：code 是权限码命名空间，全局唯一）
+	var codeCount int64
+	err := s.db.WithContext(ctx).Model(model.Application{}).
+		Where(model.ApplicationColumnCode, request.Code).
+		Count(&codeCount).Error
+	if err != nil {
+		slog.Warn("check application code failed", "code", request.Code, "error", err)
+		return nil, err
+	}
+	if codeCount > 0 {
+		return nil, ErrApplicationCodeDuplicated
+	}
 	secret, secretHash, err := generateApplicationSecret()
 	if err != nil {
 		slog.Warn("generate application secret failed", "error", err)
@@ -79,6 +92,7 @@ func (s *ApplicationService) CreateApplication(ctx context.Context, request *iam
 	app := model.Application{
 		Id:         pkId,
 		AppId:      cast.ToString(pkId),
+		Code:       request.Code,
 		Name:       request.Name,
 		SecretHash: secretHash,
 		Status:     status,

@@ -324,3 +324,45 @@ func loadRoleMenus(ctx context.Context, db *gorm.DB, role *model.Role) error {
 	}
 	return nil
 }
+
+// loadAccessibleApplications 加载用户可进入的应用清单（多应用裁决 #8）：
+// admin 角色旁路全部启用应用；其他用户按 t_r_user_application 准入绑定过滤。
+// 仅返回启用状态应用；停用应用一律不可进入。
+func loadAccessibleApplications(ctx context.Context, db *gorm.DB, userId int64, isAdmin bool) ([]model.Application, error) {
+	var apps []model.Application
+	if isAdmin {
+		err := db.WithContext(ctx).
+			Where(model.ApplicationColumnStatus, model.StatusEnabled).
+			Select(model.ApplicationFields).
+			Find(&apps).Error
+		if err != nil {
+			return nil, err
+		}
+		return apps, nil
+	}
+	var bindings []model.RUserApplication
+	err := db.WithContext(ctx).
+		Model(model.RUserApplication{}).
+		Where(model.RUserApplicationColumnUserId, userId).
+		Select(model.RUserApplicationFields).
+		Find(&bindings).Error
+	if err != nil {
+		return nil, err
+	}
+	if len(bindings) == 0 {
+		return []model.Application{}, nil
+	}
+	appIds := make([]int64, 0, len(bindings))
+	for _, binding := range bindings {
+		appIds = append(appIds, binding.ApplicationId)
+	}
+	err = db.WithContext(ctx).
+		Where(model.ApplicationColumnId+" IN ?", appIds).
+		Where(model.ApplicationColumnStatus, model.StatusEnabled).
+		Select(model.ApplicationFields).
+		Find(&apps).Error
+	if err != nil {
+		return nil, err
+	}
+	return apps, nil
+}

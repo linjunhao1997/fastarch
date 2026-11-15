@@ -222,8 +222,12 @@ func (a *AuthorizationService) DeleteRole(ctx context.Context, request *iam_v1.D
 }
 
 func (a *AuthorizationService) DeletePermission(ctx context.Context, request *iam_v1.DeletePermissionRequest) (*emptypb.Empty, error) {
+	appId, err := requireApplicationId(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var count int64
-	err := a.db.WithContext(ctx).Model(model.RRolePermission{}).
+	err = a.db.WithContext(ctx).Model(model.RRolePermission{}).
 		Where(model.RRolePermissionColumnPermissionId, request.Id).
 		Count(&count).Error
 	if err != nil {
@@ -236,6 +240,7 @@ func (a *AuthorizationService) DeletePermission(ctx context.Context, request *ia
 	}
 	result := a.db.WithContext(ctx).
 		Where(model.PermissionColumnId, request.Id).
+		Where(model.PermissionColumnApplicationId, appId).
 		Delete(model.Permission{})
 	if result.Error != nil {
 		slog.Warn("delete permission failed", "permission_id", request.Id, "error", result.Error)

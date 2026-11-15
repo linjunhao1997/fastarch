@@ -5,10 +5,12 @@ import "time"
 // DictType 字典类型（t_dict_type）：code 唯一业务码，字典项经 type_id 挂载。
 // 删除策略: 基础架构型（物理删除 + 引用检查 + 审计日志）
 type DictType struct {
-	Id   int64  `gorm:"column:id;primaryKey"`
-	Code string `gorm:"column:code;size:64;uniqueIndex"`
+	Id int64 `gorm:"column:id;primaryKey"`
+	// code 应用内唯一（复合唯一键 uk_dict_app_code，迁移 000008）：
+	// 不同应用可各自定义同名业务字典（如 gender）
+	Code string `gorm:"column:code;size:64;uniqueIndex:uk_dict_app_code,priority:2"`
 	// ApplicationId 归属应用（多应用数据隔离，裁决 #7-#9；应用上下文由 token 承载）
-	ApplicationId int64     `gorm:"column:application_id;index"`
+	ApplicationId int64     `gorm:"column:application_id;uniqueIndex:uk_dict_app_code,priority:1"`
 	Name          string    `gorm:"column:name;size:64"`
 	Remark        string    `gorm:"column:remark;size:255"`
 	Status        string    `gorm:"column:status;size:16;default:enabled"`

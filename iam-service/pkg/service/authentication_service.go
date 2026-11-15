@@ -12,6 +12,7 @@ import (
 	"iam-service/pkg/constant"
 	"iam-service/pkg/model"
 
+	"github.com/go-dev-frame/sponge/pkg/krand"
 	iam_v1 "github.com/linjunhao1997/idl/pb/iam"
 	"github.com/redis/go-redis/v9"
 	"github.com/spf13/cast"
@@ -86,11 +87,24 @@ func (a AuthenticationService) PasswordAuth(ctx context.Context, request *iam_v1
 	if err = a.rdb.Set(ctx, constant.GetAccountPermissionKey(user.Id), jsonData, constant.AccountPermissionSnapshotTTL).Err(); err != nil {
 		return nil, err
 	}
+	// 应用上下文（多应用裁决 #8）：签发 jti 作为映射键；仅有一个可进入应用时
+	// 登录即自动绑定，多个应用时留空由前端 ListMyApplications → SelectApplication 选择。
+	jti := cast.ToString(krand.NewID())
+	accessibleApps, err := loadAccessibleApplications(ctx, a.db, user.Id, isAdmin)
+	if err != nil {
+		return nil, err
+	}
+	if len(accessibleApps) == 1 {
+		if err := auth.SetAppContext(ctx, a.rdb, jti, accessibleApps[0].Id, jwtDuration); err != nil {
+			return nil, err
+		}
+	}
 	jwtStr, err := auth.GenerateJWT(auth.ClaimsParam{
 		UserId:         cast.ToString(user.Id),
 		Username:       user.Username,
 		ExpirationTime: expirationTime,
 		IsAdmin:        isAdmin,
+		Jti:            jti,
 	})
 
 	accessTokenCookie := http.Cookie{
@@ -129,13 +143,98 @@ func (a AuthenticationService) GetMyProfile(ctx context.Context, empty *emptypb.
 		slog.Warn("get my profile failed", "account_id", accountId, "error", err)
 		return nil, err
 	}
+	apps, err := loadAccessibleApplications(ctx, a.db, user.Id, auth.IsAdminFromContext(ctx))
+	if err != nil {
+		return nil, err
+	}
 	return &iam_v1.GetMyProfileResponse{
-		Id:         cast.ToString(user.Id),
-		Username:   user.Username,
-		Nickname:   user.Nickname,
-		Email:      user.EmailString(),
-		Status:     user.Status,
-		CreatedBy:  user.CreatedBy,
-		CreateTime: timestamppb.New(user.CreateTime),
+		Id:           cast.ToString(user.Id),
+		Username:     user.Username,
+		Nickname:     user.Nickname,
+		Email:        user.EmailString(),
+		Status:       user.Status,
+		CreatedBy:    user.CreatedBy,
+		CreateTime:   timestamppb.New(user.CreateTime),
+		Applications: applicationsToMyProfilePb(apps),
 	}, nil
+}
+
+// applicationsToMyProfilePb 应用模型转个人信息/列表响应摘要。
+func applicationsToMyProfilePb(apps []model.Application) []*iam_v1.MyProfileApplication {
+	list := make([]*iam_v1.MyProfileApplication, 0, len(apps))
+	for _, app := range apps {
+		list = append(list, &iam_v1.MyProfileApplication{
+			Id:     cast.ToString(app.Id),
+			Code:   app.Code,
+			Name:   app.Name,
+			Status: app.Status,
+		})
+	}
+	return list
+}
+
+// ListMyApplications 列出当前用户可进入的应用（admin 旁路全部启用应用；
+// 其他用户按 t_r_user_application 准入绑定过滤，多应用裁决 #8）。
+func (a AuthenticationService) ListMyApplications(ctx context.Context, empty *emptypb.Empty) (*iam_v1.ListMyApplicationsResponse, error) {
+	userId := auth.GetAccountId(ctx)
+	if userId == 0 {
+		return nil, status.Error(codes.Unauthenticated, "authentication required")
+	}
+	apps, err := loadAccessibleApplications(ctx, a.db, userId, auth.IsAdminFromContext(ctx))
+	if err != nil {
+		slog.Warn("list my applications failed", "user_id", userId, "error", err)
+		return nil, err
+	}
+	return &iam_v1.ListMyApplicationsResponse{
+		Applications: applicationsToMyProfilePb(apps),
+	}, nil
+}
+
+// SelectApplication 选择当前应用上下文：校验准入后写入 jti→应用映射
+// （切换不重签令牌，多应用裁决 #8）。人机边界认 code，内部换 application_id。
+func (a AuthenticationService) SelectApplication(ctx context.Context, request *iam_v1.SelectApplicationRequest) (*emptypb.Empty, error) {
+	userId := auth.GetAccountId(ctx)
+	if userId == 0 {
+		return nil, status.Error(codes.Unauthenticated, "authentication required")
+	}
+	jti := auth.GetTokenJti(ctx)
+	if jti == "" {
+		// 机器/外部令牌无 jti：应用上下文在签发时锁定于 claim，不可切换
+		return nil, status.Error(codes.FailedPrecondition, "当前令牌不支持切换应用")
+	}
+	var app model.Application
+	err := a.db.WithContext(ctx).
+		Select(model.ApplicationFields).
+		Where(model.ApplicationColumnCode, request.ApplicationCode).
+		First(&app).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, status.Error(codes.NotFound, "应用不存在")
+		}
+		slog.Warn("select application: query app failed", "code", request.ApplicationCode, "error", err)
+		return nil, err
+	}
+	if app.Status != model.StatusEnabled {
+		return nil, status.Error(codes.FailedPrecondition, "应用已停用")
+	}
+	// 准入校验（fail-closed）：admin 旁路；其他用户必须在 t_r_user_application 绑定
+	if !auth.IsAdminFromContext(ctx) {
+		var count int64
+		err = a.db.WithContext(ctx).
+			Model(model.RUserApplication{}).
+			Where(model.RUserApplicationColumnUserId+" = ? AND "+model.RUserApplicationColumnApplicationId+" = ?", userId, app.Id).
+			Count(&count).Error
+		if err != nil {
+			slog.Warn("select application: access check failed", "user_id", userId, "application_id", app.Id, "error", err)
+			return nil, err
+		}
+		if count == 0 {
+			return nil, status.Error(codes.PermissionDenied, "无权进入该应用")
+		}
+	}
+	if err := auth.SetAppContext(ctx, a.rdb, jti, app.Id, constant.AppContextTTL); err != nil {
+		slog.Error("select application: bind app context failed", "user_id", userId, "application_id", app.Id, "error", err)
+		return nil, status.Error(codes.FailedPrecondition, "应用上下文暂不可用，请稍后重试")
+	}
+	return &emptypb.Empty{}, nil
 }

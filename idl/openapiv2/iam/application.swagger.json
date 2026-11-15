@@ -272,6 +272,10 @@
           "type": "string",
           "format": "date-time",
           "title": "修改时间"
+        },
+        "code": {
+          "type": "string",
+          "title": "服务段编码（权限码命名空间，只读回传）"
         }
       },
       "title": "应用信息（t_application 全列；不含 secret 摘要等敏感字段，宪法 XII）"
@@ -285,6 +289,10 @@
         "status": {
           "type": "string",
           "title": "应用状态：\"enabled\" 启用，\"disabled\" 禁用；缺省为 enabled"
+        },
+        "code": {
+          "type": "string",
+          "title": "服务段编码（多应用裁决 #8）：权限码命名空间（iam.order.delete 的 iam 段），\n全局唯一，创建后不可变更；小写字母开头，仅小写字母/数字/下划线"
         }
       }
     },

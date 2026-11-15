@@ -159,24 +159,33 @@ func (a *AuthorizationService) CreatePermission(ctx context.Context, request *ia
 	if !model.IsValidPermissionCode(request.Code) {
 		return nil, ErrInvalidPermissionCode
 	}
+	// 多应用裁决 #8：码归属当前应用上下文，服务段必须等于应用 code
+	appId, err := requireApplicationId(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := requireCodeSegmentMatchesApp(ctx, a.db, appId, request.Code); err != nil {
+		return nil, err
+	}
 	pkId := krand.NewID()
 	now := time.Now()
 	// 审计字段服务端注入：created_by/updated_by 取认证上下文操作者
 	operator := cast.ToString(auth.GetAccountId(ctx))
 	permission := model.Permission{
-		Id:          pkId,
-		Name:        request.Name,
-		Code:        request.Code,
-		Type:        "api",
-		Description: request.Description,
-		Status:      model.StatusEnabled,
-		Version:    1,
-		CreatedBy:  operator,
-		UpdatedBy:  operator,
-		CreateTime: now,
-		UpdateTime: now,
+		Id:            pkId,
+		Name:          request.Name,
+		Code:          request.Code,
+		ApplicationId: appId,
+		Type:          "api",
+		Description:   request.Description,
+		Status:        model.StatusEnabled,
+		Version:       1,
+		CreatedBy:     operator,
+		UpdatedBy:     operator,
+		CreateTime:    now,
+		UpdateTime:    now,
 	}
-	err := a.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = a.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var count int64
 		if err := tx.Model(model.Permission{}).
 			Where(model.PermissionColumnCode, request.Code).
@@ -202,10 +211,16 @@ func (a *AuthorizationService) CreatePermission(ctx context.Context, request *ia
 }
 
 func (a *AuthorizationService) GetPermission(ctx context.Context, request *common_v1.GetRequest) (*iam_v1.Permission, error) {
+	appId, err := requireApplicationId(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var permission model.Permission
-	err := a.db.WithContext(ctx).
+	err = a.db.WithContext(ctx).
 		Select(model.PermissionFields).
-		Where(model.PermissionColumnId, request.Id).First(&permission).Error
+		Where(model.PermissionColumnId, request.Id).
+		Where(model.PermissionColumnApplicationId, appId).
+		First(&permission).Error
 	if err != nil {
 		return nil, err
 	}
@@ -213,16 +228,22 @@ func (a *AuthorizationService) GetPermission(ctx context.Context, request *commo
 }
 
 func (a *AuthorizationService) ListPermissions(ctx context.Context, request *iam_v1.ListPermissionsRequest) (*iam_v1.ListPermissionsResponse, error) {
+	appId, err := requireApplicationId(ctx)
+	if err != nil {
+		return nil, err
+	}
 	limit, offset := helper.GetLimitAndOffset(request.CurrentPage, request.PageSize)
 	keywordConditions := []string{
 		model.PermissionColumnName + " LIKE ?",
 		model.PermissionColumnCode + " LIKE ?",
 	}
 	buildQuery := func() *gorm.DB {
-		return applyKeywordFilter(a.db.WithContext(ctx).Model(model.Permission{}), keywordConditions, request.Keyword)
+		return applyKeywordFilter(
+			a.db.WithContext(ctx).Model(model.Permission{}).Where(model.PermissionColumnApplicationId, appId),
+			keywordConditions, request.Keyword)
 	}
 	var count int64
-	err := buildQuery().Count(&count).Error
+	err = buildQuery().Count(&count).Error
 	if err != nil {
 		return nil, err
 	}
@@ -259,9 +280,14 @@ func (a *AuthorizationService) UpdatePermission(ctx context.Context, request *ia
 	updates[model.PermissionColumnVersion] = gorm.Expr(model.PermissionColumnVersion + " + 1")
 
 	changedStatus := len(request.EnabledStatus) > 0
-	err := a.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	appId, err := requireApplicationId(ctx)
+	if err != nil {
+		return nil, err
+	}
+	err = a.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		result := tx.Model(model.Permission{}).
 			Where(model.PermissionColumnId, request.Id).
+			Where(model.PermissionColumnApplicationId, appId).
 			Where(model.PermissionColumnVersion, request.Version).
 			Updates(updates)
 		if result.Error != nil {

@@ -59,7 +59,28 @@ func dictItemToPb(d model.DictItem) *iam_v1.DictItem {
 }
 
 // CreateDictType 创建字典类型：code 唯一。
+// requireDictTypeInApp 校验字典类型存在且归属当前应用上下文（多应用裁决 #8）；
+// 字典项操作经此保证不跨应用读写。
+func (s *DictService) requireDictTypeInApp(ctx context.Context, typeId int64, appId int64) error {
+	var count int64
+	err := s.db.WithContext(ctx).Model(model.DictType{}).
+		Where(model.DictTypeColumnId, typeId).
+		Where(model.DictTypeColumnApplicationId, appId).
+		Count(&count).Error
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+
 func (s *DictService) CreateDictType(ctx context.Context, request *iam_v1.CreateDictTypeRequest) (*iam_v1.DictType, error) {
+	appId, err := requireApplicationId(ctx)
+	if err != nil {
+		return nil, err
+	}
 	pkId := krand.NewID()
 	now := time.Now()
 	operator := cast.ToString(auth.GetAccountId(ctx))
@@ -68,20 +89,22 @@ func (s *DictService) CreateDictType(ctx context.Context, request *iam_v1.Create
 		status = model.StatusEnabled
 	}
 	dictType := model.DictType{
-		Id:         pkId,
-		Code:       request.Code,
-		Name:       request.Name,
-		Remark:     request.Remark,
-		Status:     status,
-		Version:    1,
-		CreatedBy:  operator,
-		UpdatedBy:  operator,
-		CreateTime: now,
-		UpdateTime: now,
+		Id:            pkId,
+		Code:          request.Code,
+		ApplicationId: appId,
+		Name:          request.Name,
+		Remark:        request.Remark,
+		Status:        status,
+		Version:       1,
+		CreatedBy:     operator,
+		UpdatedBy:     operator,
+		CreateTime:    now,
+		UpdateTime:    now,
 	}
-	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var count int64
 		if err := tx.Model(model.DictType{}).
+			Where(model.DictTypeColumnApplicationId, appId).
 			Where(model.DictTypeColumnCode, request.Code).
 			Count(&count).Error; err != nil {
 			return err
@@ -99,11 +122,17 @@ func (s *DictService) CreateDictType(ctx context.Context, request *iam_v1.Create
 }
 
 // UpdateDictType 修改字典类型：name/remark/status 可选更新（空串 = 不修改）。
+// 限当前应用上下文，跨应用按不存在处理。
 func (s *DictService) UpdateDictType(ctx context.Context, request *iam_v1.UpdateDictTypeRequest) (*emptypb.Empty, error) {
+	appId, err := requireApplicationId(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var dictType model.DictType
-	err := s.db.WithContext(ctx).
+	err = s.db.WithContext(ctx).
 		Select(model.DictTypeFields).
 		Where(model.DictTypeColumnId, request.Id).
+		Where(model.DictTypeColumnApplicationId, appId).
 		First(&dictType).Error
 	if err != nil {
 		return nil, err
@@ -140,10 +169,17 @@ func (s *DictService) UpdateDictType(ctx context.Context, request *iam_v1.Update
 	return &emptypb.Empty{}, nil
 }
 
-// DeleteDictType 删除字典类型：名下字典项引用检查，物理删除。
+// DeleteDictType 删除字典类型：限当前应用上下文；名下字典项引用检查，物理删除。
 func (s *DictService) DeleteDictType(ctx context.Context, request *iam_v1.DeleteDictTypeRequest) (*emptypb.Empty, error) {
+	appId, err := requireApplicationId(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.requireDictTypeInApp(ctx, request.Id, appId); err != nil {
+		return nil, err
+	}
 	var itemCount int64
-	err := s.db.WithContext(ctx).Model(model.DictItem{}).
+	err = s.db.WithContext(ctx).Model(model.DictItem{}).
 		Where(model.DictItemColumnTypeId, request.Id).
 		Count(&itemCount).Error
 	if err != nil {
@@ -156,6 +192,7 @@ func (s *DictService) DeleteDictType(ctx context.Context, request *iam_v1.Delete
 	}
 	result := s.db.WithContext(ctx).
 		Where(model.DictTypeColumnId, request.Id).
+		Where(model.DictTypeColumnApplicationId, appId).
 		Delete(model.DictType{})
 	if result.Error != nil {
 		slog.Warn("delete dict type failed", "dict_type_id", request.Id, "error", result.Error)
@@ -168,18 +205,24 @@ func (s *DictService) DeleteDictType(ctx context.Context, request *iam_v1.Delete
 	return &emptypb.Empty{}, nil
 }
 
-// ListDictTypes 字典类型分页列表：keyword 模糊匹配 code/name。
+// ListDictTypes 字典类型分页列表：限当前应用上下文；keyword 模糊匹配 code/name。
 func (s *DictService) ListDictTypes(ctx context.Context, request *iam_v1.ListDictTypesRequest) (*iam_v1.ListDictTypesResponse, error) {
+	appId, err := requireApplicationId(ctx)
+	if err != nil {
+		return nil, err
+	}
 	limit, offset := helper.GetLimitAndOffset(request.CurrentPage, request.PageSize)
 	keywordConditions := []string{
 		model.DictTypeColumnCode + " LIKE ?",
 		model.DictTypeColumnName + " LIKE ?",
 	}
 	buildQuery := func() *gorm.DB {
-		return applyKeywordFilter(s.db.WithContext(ctx).Model(model.DictType{}), keywordConditions, request.Keyword)
+		return applyKeywordFilter(
+			s.db.WithContext(ctx).Model(model.DictType{}).Where(model.DictTypeColumnApplicationId, appId),
+			keywordConditions, request.Keyword)
 	}
 	var count int64
-	err := buildQuery().Count(&count).Error
+	err = buildQuery().Count(&count).Error
 	if err != nil {
 		return nil, err
 	}
@@ -204,16 +247,13 @@ func (s *DictService) ListDictTypes(ctx context.Context, request *iam_v1.ListDic
 
 // CreateDictItem 创建字典项：type_id 必须指向存在的字典类型。
 func (s *DictService) CreateDictItem(ctx context.Context, request *iam_v1.CreateDictItemRequest) (*iam_v1.DictItem, error) {
-	var typeCount int64
-	err := s.db.WithContext(ctx).Model(model.DictType{}).
-		Where(model.DictTypeColumnId, request.TypeId).
-		Count(&typeCount).Error
+	appId, err := requireApplicationId(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if typeCount == 0 {
-		slog.Warn("create dict item rejected: dict type not found", "type_id", request.TypeId)
-		return nil, gorm.ErrRecordNotFound
+	if err := s.requireDictTypeInApp(ctx, request.TypeId, appId); err != nil {
+		slog.Warn("create dict item rejected: dict type not found in app", "type_id", request.TypeId, "error", err)
+		return nil, err
 	}
 	pkId := krand.NewID()
 	now := time.Now()
@@ -243,13 +283,21 @@ func (s *DictService) CreateDictItem(ctx context.Context, request *iam_v1.Create
 }
 
 // UpdateDictItem 修改字典项：label/value/sort/status 可选更新。
+// 字典项归属经其类型的应用上下文校验（多应用裁决 #8）。
 func (s *DictService) UpdateDictItem(ctx context.Context, request *iam_v1.UpdateDictItemRequest) (*emptypb.Empty, error) {
+	appId, err := requireApplicationId(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var dictItem model.DictItem
-	err := s.db.WithContext(ctx).
+	err = s.db.WithContext(ctx).
 		Select(model.DictItemFields).
 		Where(model.DictItemColumnId, request.Id).
 		First(&dictItem).Error
 	if err != nil {
+		return nil, err
+	}
+	if err := s.requireDictTypeInApp(ctx, dictItem.TypeId, appId); err != nil {
 		return nil, err
 	}
 	updates := map[string]interface{}{}
@@ -287,8 +335,23 @@ func (s *DictService) UpdateDictItem(ctx context.Context, request *iam_v1.Update
 	return &emptypb.Empty{}, nil
 }
 
-// DeleteDictItem 删除字典项：物理删除。
+// DeleteDictItem 删除字典项：归属经其类型的应用上下文校验，物理删除。
 func (s *DictService) DeleteDictItem(ctx context.Context, request *iam_v1.DeleteDictItemRequest) (*emptypb.Empty, error) {
+	appId, err := requireApplicationId(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var dictItem model.DictItem
+	err = s.db.WithContext(ctx).
+		Select(model.DictItemFields).
+		Where(model.DictItemColumnId, request.Id).
+		First(&dictItem).Error
+	if err != nil {
+		return nil, err
+	}
+	if err := s.requireDictTypeInApp(ctx, dictItem.TypeId, appId); err != nil {
+		return nil, err
+	}
 	result := s.db.WithContext(ctx).
 		Where(model.DictItemColumnId, request.Id).
 		Delete(model.DictItem{})
@@ -303,8 +366,15 @@ func (s *DictService) DeleteDictItem(ctx context.Context, request *iam_v1.Delete
 	return &emptypb.Empty{}, nil
 }
 
-// ListDictItems 字典项列表：按 type_id 筛选，keyword 模糊匹配 label/value。
+// ListDictItems 字典项列表：按 type_id 筛选（类型须归属当前应用），keyword 模糊匹配 label/value。
 func (s *DictService) ListDictItems(ctx context.Context, request *iam_v1.ListDictItemsRequest) (*iam_v1.ListDictItemsResponse, error) {
+	appId, err := requireApplicationId(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.requireDictTypeInApp(ctx, request.TypeId, appId); err != nil {
+		return nil, err
+	}
 	limit, offset := helper.GetLimitAndOffset(request.CurrentPage, request.PageSize)
 	keywordConditions := []string{
 		model.DictItemColumnLabel + " LIKE ?",
@@ -316,7 +386,7 @@ func (s *DictService) ListDictItems(ctx context.Context, request *iam_v1.ListDic
 		return applyKeywordFilter(query, keywordConditions, request.Keyword)
 	}
 	var count int64
-	err := buildQuery().Count(&count).Error
+	err = buildQuery().Count(&count).Error
 	if err != nil {
 		return nil, err
 	}

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 
@@ -72,11 +73,13 @@ func menuTreeNodes(menus []model.Menu) []*iam_v1.MenuTreeNode {
 
 // loadVisibleMenus 按账号角色取可见菜单（011 模型：t_menu + t_r_role_menu）。
 // 管理员取全量启用菜单；普通用户取角色绑定菜单并回补祖先路径，保证树结构完整。
-func loadVisibleMenus(ctx context.Context, db *gorm.DB, accountId int64, isAdmin bool) []model.Menu {
+// appId 为当前应用上下文（多应用裁决 #8）：仅返回该应用下的菜单。
+func loadVisibleMenus(ctx context.Context, db *gorm.DB, accountId int64, isAdmin bool, appId int64) []model.Menu {
 	var menus []model.Menu
 	query := db.WithContext(ctx).
 		Select(model.MenuFields).
-		Where(model.MenuColumnStatus, model.StatusEnabled)
+		Where(model.MenuColumnStatus, model.StatusEnabled).
+		Where(model.MenuColumnApplicationId, appId)
 	if !isAdmin {
 		var roleIds []int64
 		err := db.WithContext(ctx).Model(model.RUserRole{}).
@@ -111,12 +114,12 @@ func loadVisibleMenus(ctx context.Context, db *gorm.DB, accountId int64, isAdmin
 		return nil
 	}
 	// 回补祖先路径：把选中菜单的各级父节点并入集合，保证树从根可达
-	return fillMenuAncestors(ctx, db, menus)
+	return fillMenuAncestors(ctx, db, menus, appId)
 }
 
 // fillMenuAncestors 把菜单集合缺失的祖先菜单并入返回集合。
 // 一次性载入全量启用菜单后纯内存回溯（菜单树规模有限），避免循环内点查。
-func fillMenuAncestors(ctx context.Context, db *gorm.DB, menus []model.Menu) []model.Menu {
+func fillMenuAncestors(ctx context.Context, db *gorm.DB, menus []model.Menu, appId int64) []model.Menu {
 	included := make(map[int64]struct{}, len(menus))
 	for _, menu := range menus {
 		included[menu.Id] = struct{}{}
@@ -125,6 +128,7 @@ func fillMenuAncestors(ctx context.Context, db *gorm.DB, menus []model.Menu) []m
 	err := db.WithContext(ctx).
 		Select(model.MenuFields).
 		Where(model.MenuColumnStatus, model.StatusEnabled).
+		Where(model.MenuColumnApplicationId, appId).
 		Find(&allMenus).Error
 	if err != nil {
 		slog.Warn("load all menus for ancestor fill failed", "error", err)
@@ -154,10 +158,16 @@ func fillMenuAncestors(ctx context.Context, db *gorm.DB, menus []model.Menu) []m
 }
 
 // ListMenuTree 管理员视角全量菜单树（含停用菜单，前端置灰）。
+// 数据范围 = 当前应用上下文（token 承载，多应用裁决 #8）。
 func (s *MenuService) ListMenuTree(ctx context.Context, empty *emptypb.Empty) (*iam_v1.ListMenuTreeResponse, error) {
+	appId, err := requireApplicationId(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var menus []model.Menu
-	err := s.db.WithContext(ctx).
+	err = s.db.WithContext(ctx).
 		Select(model.MenuFields).
+		Where(model.MenuColumnApplicationId, appId).
 		Order(model.MenuColumnSort + " ASC").
 		Find(&menus).Error
 	if err != nil {
@@ -169,21 +179,35 @@ func (s *MenuService) ListMenuTree(ctx context.Context, empty *emptypb.Empty) (*
 	}, nil
 }
 
-// ListMyMenuTree 当前登录用户可见菜单树：管理员全量启用菜单，
-// 普通用户按角色绑定过滤并回补祖先路径。
+// ListMyMenuTree 当前登录用户可见菜单树：管理员取当前应用全量启用菜单，
+// 普通用户按角色绑定过滤并回补祖先路径（应用上下文由 token 承载）。
 func (s *MenuService) ListMyMenuTree(ctx context.Context, empty *emptypb.Empty) (*iam_v1.ListMenuTreeResponse, error) {
+	appId, err := requireApplicationId(ctx)
+	if err != nil {
+		return nil, err
+	}
 	isAdmin := auth.IsAdminFromContext(ctx)
 	accountId := auth.GetAccountId(ctx)
-	menus := loadVisibleMenus(ctx, s.db, accountId, isAdmin)
+	menus := loadVisibleMenus(ctx, s.db, accountId, isAdmin, appId)
 	return &iam_v1.ListMenuTreeResponse{
 		Roots: menuTreeNodes(menus),
 	}, nil
 }
 
-// CreateMenu 创建菜单，返回创建出的菜单（含 id）。
+// CreateMenu 创建菜单，返回创建出的菜单（含 id）。归属应用取当前上下文；
+// 绑定权限码时校验服务段与当前应用 code 一致（服务段隔离裁决）。
 func (s *MenuService) CreateMenu(ctx context.Context, request *iam_v1.CreateMenuRequest) (*iam_v1.Menu, error) {
-	if len(request.PermissionCode) > 0 && !model.IsValidPermissionCode(request.PermissionCode) {
-		return nil, ErrInvalidPermissionCode
+	appId, err := requireApplicationId(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(request.PermissionCode) > 0 {
+		if !model.IsValidPermissionCode(request.PermissionCode) {
+			return nil, ErrInvalidPermissionCode
+		}
+		if err := requireCodeSegmentMatchesApp(ctx, s.db, appId, request.PermissionCode); err != nil {
+			return nil, err
+		}
 	}
 	pkId := krand.NewID()
 	now := time.Now()
@@ -195,6 +219,7 @@ func (s *MenuService) CreateMenu(ctx context.Context, request *iam_v1.CreateMenu
 	menu := model.Menu{
 		Id:             pkId,
 		ParentId:       request.ParentId,
+		ApplicationId:  appId,
 		Name:           request.Name,
 		Path:           request.Path,
 		Icon:           request.Icon,
@@ -214,14 +239,22 @@ func (s *MenuService) CreateMenu(ctx context.Context, request *iam_v1.CreateMenu
 	return menuToPb(menu), nil
 }
 
-// GetMenu 获取菜单信息。
+// GetMenu 获取菜单信息（限当前应用上下文，跨应用按不存在处理）。
 func (s *MenuService) GetMenu(ctx context.Context, request *common_v1.GetRequest) (*iam_v1.Menu, error) {
+	appId, err := requireApplicationId(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var menu model.Menu
-	err := s.db.WithContext(ctx).
+	err = s.db.WithContext(ctx).
 		Select(model.MenuFields).
 		Where(model.MenuColumnId, request.Id).
+		Where(model.MenuColumnApplicationId, appId).
 		First(&menu).Error
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrMenuNotFound
+		}
 		return nil, err
 	}
 	return menuToPb(menu), nil
@@ -230,16 +263,29 @@ func (s *MenuService) GetMenu(ctx context.Context, request *common_v1.GetRequest
 // UpdateMenu 修改菜单：字段缺省 = 不修改；parent_id 默认不改，
 // 仅在 parent_cleared = true 时按传入值整体移动（含挂到顶级）。
 func (s *MenuService) UpdateMenu(ctx context.Context, request *iam_v1.UpdateMenuRequest) (*emptypb.Empty, error) {
-	var menu model.Menu
-	err := s.db.WithContext(ctx).
-		Select(model.MenuFields).
-		Where(model.MenuColumnId, request.Id).
-		First(&menu).Error
+	appId, err := requireApplicationId(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if len(request.PermissionCode) > 0 && !model.IsValidPermissionCode(request.PermissionCode) {
-		return nil, ErrInvalidPermissionCode
+	var menu model.Menu
+	err = s.db.WithContext(ctx).
+		Select(model.MenuFields).
+		Where(model.MenuColumnId, request.Id).
+		Where(model.MenuColumnApplicationId, appId).
+		First(&menu).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrMenuNotFound
+		}
+		return nil, err
+	}
+	if len(request.PermissionCode) > 0 {
+		if !model.IsValidPermissionCode(request.PermissionCode) {
+			return nil, ErrInvalidPermissionCode
+		}
+		if err := requireCodeSegmentMatchesApp(ctx, s.db, appId, request.PermissionCode); err != nil {
+			return nil, err
+		}
 	}
 
 	updates := map[string]interface{}{}
@@ -284,11 +330,17 @@ func (s *MenuService) UpdateMenu(ctx context.Context, request *iam_v1.UpdateMenu
 	return &emptypb.Empty{}, nil
 }
 
-// DeleteMenu 删除菜单：子菜单与角色绑定引用检查，物理删除（基础架构型，宪法 XIV）。
+// DeleteMenu 删除菜单：限当前应用上下文；子菜单与角色绑定引用检查，
+// 物理删除（基础架构型，宪法 XIV）。
 func (s *MenuService) DeleteMenu(ctx context.Context, request *iam_v1.DeleteMenuRequest) (*emptypb.Empty, error) {
+	appId, err := requireApplicationId(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var childCount int64
-	err := s.db.WithContext(ctx).Model(model.Menu{}).
+	err = s.db.WithContext(ctx).Model(model.Menu{}).
 		Where(model.MenuColumnParentId, request.Id).
+		Where(model.MenuColumnApplicationId, appId).
 		Count(&childCount).Error
 	if err != nil {
 		slog.Warn("check menu children failed", "menu_id", request.Id, "error", err)
@@ -313,6 +365,7 @@ func (s *MenuService) DeleteMenu(ctx context.Context, request *iam_v1.DeleteMenu
 
 	result := s.db.WithContext(ctx).
 		Where(model.MenuColumnId, request.Id).
+		Where(model.MenuColumnApplicationId, appId).
 		Delete(model.Menu{})
 	if result.Error != nil {
 		slog.Warn("delete menu failed", "menu_id", request.Id, "error", result.Error)
@@ -320,7 +373,7 @@ func (s *MenuService) DeleteMenu(ctx context.Context, request *iam_v1.DeleteMenu
 	}
 	if result.RowsAffected == 0 {
 		slog.Warn("delete menu rejected: menu not found", "menu_id", request.Id)
-		return nil, gorm.ErrRecordNotFound
+		return nil, ErrMenuNotFound
 	}
 	return &emptypb.Empty{}, nil
 }

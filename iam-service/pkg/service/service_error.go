@@ -81,4 +81,9 @@ var (
 	ErrDictTypeReferenced      = NewErrorWithCode("1001054", codes.FailedPrecondition, errors.New("字典类型名下存在字典项，请先删除字典项"))
 	ErrUpdateDictTypeBusy      = NewErrorWithCode("1001055", codes.FailedPrecondition, errors.New("字典类型已被他人修改，请刷新后重试"))
 	ErrUpdateDictItemBusy      = NewErrorWithCode("1001056", codes.FailedPrecondition, errors.New("字典项已被他人修改，请刷新后重试"))
+	// 多应用域（#8 裁决：应用上下文由 token 承载，数据按应用隔离）
+	ErrApplicationContextRequired    = NewErrorWithCode("1001057", codes.FailedPrecondition, errors.New("请先选择应用"))
+	ErrPermissionCodeSegmentMismatch = NewErrorWithCode("1001058", codes.InvalidArgument, errors.New("权限码服务段与当前应用不一致"))
+	ErrApplicationNotFoundForScope   = NewErrorWithCode("1001059", codes.NotFound, errors.New("应用不存在"))
+	ErrApplicationCodeDuplicated     = NewErrorWithCode("1001060", codes.AlreadyExists, errors.New("应用服务段编码已被占用"))
 )

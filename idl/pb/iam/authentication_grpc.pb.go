@@ -20,8 +20,10 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	AuthenticationService_PasswordAuth_FullMethodName = "/iam.v1.AuthenticationService/PasswordAuth"
-	AuthenticationService_GetMyProfile_FullMethodName = "/iam.v1.AuthenticationService/GetMyProfile"
+	AuthenticationService_PasswordAuth_FullMethodName       = "/iam.v1.AuthenticationService/PasswordAuth"
+	AuthenticationService_GetMyProfile_FullMethodName       = "/iam.v1.AuthenticationService/GetMyProfile"
+	AuthenticationService_ListMyApplications_FullMethodName = "/iam.v1.AuthenticationService/ListMyApplications"
+	AuthenticationService_SelectApplication_FullMethodName  = "/iam.v1.AuthenticationService/SelectApplication"
 )
 
 // AuthenticationServiceClient is the client API for AuthenticationService service.
@@ -30,9 +32,16 @@ const (
 type AuthenticationServiceClient interface {
 	// 密码认证：identifier 即登录标识（username 或 email，服务端双路径查询）
 	PasswordAuth(ctx context.Context, in *PasswordAuthRequest, opts ...grpc.CallOption) (*PasswordAuthResponse, error)
-	// 获取当前登录用户的个人信息（基本信息 + 所属应用列表）
+	// 获取当前登录用户的个人信息（基本信息 + 可进入应用列表）
 	// 仅凭登录态（JWT accountId）返回，不接收用户标识参数
 	GetMyProfile(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetMyProfileResponse, error)
+	// 列出当前用户可进入的应用（admin 旁路全部启用应用；
+	// 其他用户按 t_r_user_application 准入绑定过滤）。
+	ListMyApplications(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListMyApplicationsResponse, error)
+	// 选择当前应用上下文：校验准入后写入 jti→应用映射（切换不重签令牌，
+	// 多应用裁决 #8）。外部/机器令牌的 application_id 在签发时锁定于 claim，
+	// 不经本接口。
+	SelectApplication(ctx context.Context, in *SelectApplicationRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
 
 type authenticationServiceClient struct {
@@ -61,15 +70,40 @@ func (c *authenticationServiceClient) GetMyProfile(ctx context.Context, in *empt
 	return out, nil
 }
 
+func (c *authenticationServiceClient) ListMyApplications(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListMyApplicationsResponse, error) {
+	out := new(ListMyApplicationsResponse)
+	err := c.cc.Invoke(ctx, AuthenticationService_ListMyApplications_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authenticationServiceClient) SelectApplication(ctx context.Context, in *SelectApplicationRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, AuthenticationService_SelectApplication_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AuthenticationServiceServer is the server API for AuthenticationService service.
 // All implementations should embed UnimplementedAuthenticationServiceServer
 // for forward compatibility
 type AuthenticationServiceServer interface {
 	// 密码认证：identifier 即登录标识（username 或 email，服务端双路径查询）
 	PasswordAuth(context.Context, *PasswordAuthRequest) (*PasswordAuthResponse, error)
-	// 获取当前登录用户的个人信息（基本信息 + 所属应用列表）
+	// 获取当前登录用户的个人信息（基本信息 + 可进入应用列表）
 	// 仅凭登录态（JWT accountId）返回，不接收用户标识参数
 	GetMyProfile(context.Context, *emptypb.Empty) (*GetMyProfileResponse, error)
+	// 列出当前用户可进入的应用（admin 旁路全部启用应用；
+	// 其他用户按 t_r_user_application 准入绑定过滤）。
+	ListMyApplications(context.Context, *emptypb.Empty) (*ListMyApplicationsResponse, error)
+	// 选择当前应用上下文：校验准入后写入 jti→应用映射（切换不重签令牌，
+	// 多应用裁决 #8）。外部/机器令牌的 application_id 在签发时锁定于 claim，
+	// 不经本接口。
+	SelectApplication(context.Context, *SelectApplicationRequest) (*emptypb.Empty, error)
 }
 
 // UnimplementedAuthenticationServiceServer should be embedded to have forward compatible implementations.
@@ -81,6 +115,12 @@ func (UnimplementedAuthenticationServiceServer) PasswordAuth(context.Context, *P
 }
 func (UnimplementedAuthenticationServiceServer) GetMyProfile(context.Context, *emptypb.Empty) (*GetMyProfileResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetMyProfile not implemented")
+}
+func (UnimplementedAuthenticationServiceServer) ListMyApplications(context.Context, *emptypb.Empty) (*ListMyApplicationsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListMyApplications not implemented")
+}
+func (UnimplementedAuthenticationServiceServer) SelectApplication(context.Context, *SelectApplicationRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SelectApplication not implemented")
 }
 
 // UnsafeAuthenticationServiceServer may be embedded to opt out of forward compatibility for this service.
@@ -130,6 +170,42 @@ func _AuthenticationService_GetMyProfile_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AuthenticationService_ListMyApplications_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthenticationServiceServer).ListMyApplications(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthenticationService_ListMyApplications_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthenticationServiceServer).ListMyApplications(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthenticationService_SelectApplication_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SelectApplicationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthenticationServiceServer).SelectApplication(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthenticationService_SelectApplication_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthenticationServiceServer).SelectApplication(ctx, req.(*SelectApplicationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AuthenticationService_ServiceDesc is the grpc.ServiceDesc for AuthenticationService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -144,6 +220,14 @@ var AuthenticationService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetMyProfile",
 			Handler:    _AuthenticationService_GetMyProfile_Handler,
+		},
+		{
+			MethodName: "ListMyApplications",
+			Handler:    _AuthenticationService_ListMyApplications_Handler,
+		},
+		{
+			MethodName: "SelectApplication",
+			Handler:    _AuthenticationService_SelectApplication_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -67,14 +67,19 @@ func TestServiceQueriesDoNotUseSelectStar(t *testing.T) {
 	if err := db.Select(model.RoleFields).Create(&role).Error; err != nil {
 		t.Fatal(err)
 	}
-	permission := model.Permission{Code: "test.perm.one", Name: "Test Permission", Type: "api", Status: model.StatusEnabled, Version: 1}
+	// 多应用裁决 #8：权限/菜单管理接口需要应用上下文，冒烟夹具同步补应用
+	app := model.Application{AppId: "900", Code: "test", Name: "Test App", Status: model.StatusEnabled, Version: 1}
+	if err := db.Select(model.ApplicationFields).Create(&app).Error; err != nil {
+		t.Fatal(err)
+	}
+	permission := model.Permission{Code: "test.perm.one", Name: "Test Permission", ApplicationId: app.Id, Type: "api", Status: model.StatusEnabled, Version: 1}
 	if err := db.Select(model.PermissionFields).Create(&permission).Error; err != nil {
 		t.Fatal(err)
 	}
 
 	capture := &sqlCapture{}
 	db.Logger = capture
-	ctx := auth.WithAccountId(context.Background(), user.Id)
+	ctx := auth.WithApplicationId(auth.WithAccountId(context.Background(), user.Id), app.Id)
 	services := service.NewAuthorizationService(db, redisClient)
 	if _, err := services.GetRole(ctx, &commonv1.GetRequest{Id: role.Id}); err != nil {
 		t.Fatal(err)

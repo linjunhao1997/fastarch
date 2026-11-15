@@ -58,6 +58,9 @@ message CreateApplicationRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
   // 应用状态："enabled" 启用，"disabled" 禁用；缺省为 enabled
   string status = 2 [(buf.validate.field).string = { in: ["", "enabled", "disabled"] }];
+  // 服务段编码（多应用裁决 #8）：权限码命名空间（iam.order.delete 的 iam 段），
+  // 全局唯一，创建后不可变更；小写字母开头，仅小写字母/数字/下划线
+  string code = 3 [(buf.validate.field).string = {min_len: 1, max_len: 32, pattern: "^[a-z][a-z0-9_]*$"}];
 }
 
 message CreateApplicationResponse {
@@ -102,4 +105,5 @@ message Application {
   string updated_by = 7;                       // 修改人（用户 id）
   google.protobuf.Timestamp create_time = 8;   // 创建时间
   google.protobuf.Timestamp update_time = 9;   // 修改时间
+  string code = 10;                            // 服务段编码（权限码命名空间，只读回传）
 }
