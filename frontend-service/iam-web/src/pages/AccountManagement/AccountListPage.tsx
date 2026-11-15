@@ -11,6 +11,7 @@ import { usePermissions } from '../../hooks/permission-context';
 import { useTableQuery } from '../../hooks/useTableQuery';
 import type { Account } from '../../types';
 import { ACTIONS, buildSuccessMessage } from '../../types/copywriting';
+import { formatDateTime } from '../../utils/datetime';
 
 const { Search } = Input;
 
@@ -50,9 +51,9 @@ export default function AccountListPage() {
           : '—',
     },
     { title: '创建人', dataIndex: 'createdBy', key: 'createdBy' },
-    { title: '创建时间', dataIndex: 'createTime', key: 'createTime', render: (value: string) => value || '—' },
+    { title: '创建时间', dataIndex: 'createTime', key: 'createTime', render: formatDateTime },
     { title: '修改人', dataIndex: 'updatedBy', key: 'updatedBy' },
-    { title: '修改时间', dataIndex: 'updateTime', key: 'updateTime', render: (value: string) => value || '—' },
+    { title: '修改时间', dataIndex: 'updateTime', key: 'updateTime', render: formatDateTime },
     {
       title: '操作',
       key: 'action',

@@ -14,15 +14,7 @@ import { useTableQuery } from '../../hooks/useTableQuery';
 import type { AccessCredential, AccessCredentialStatus, Account } from '../../types';
 import { ACTIONS, buildSuccessMessage } from '../../types/copywriting';
 import { PERMISSIONS } from '../../types/permissions';
-
-const TIME_FORMAT = 'YYYY-MM-DD HH:mm:ss';
-
-/** ISO 时间格式化展示；空值显示占位符 */
-const formatDateTime = (value: string | null | undefined): string => {
-  if (!value) return '—';
-  const parsed = dayjs(value);
-  return parsed.isValid() ? parsed.format(TIME_FORMAT) : value;
-};
+import { formatDateTime } from '../../utils/datetime';
 
 const STATUS_OPTIONS: { value: AccessCredentialStatus; label: string }[] = [
   { value: 'enabled', label: '启用' },
@@ -445,9 +437,9 @@ export default function AccessCredentialListPage() {
     },
     { title: '版本', dataIndex: 'version', key: 'version', width: 70 },
     { title: '创建人', dataIndex: 'createdBy', key: 'createdBy', width: 110, ellipsis: true },
-    { title: '创建时间', dataIndex: 'createTime', key: 'createTime', width: 160 },
+    { title: '创建时间', dataIndex: 'createTime', key: 'createTime', width: 160, render: formatDateTime },
     { title: '修改人', dataIndex: 'updatedBy', key: 'updatedBy', width: 110, ellipsis: true },
-    { title: '修改时间', dataIndex: 'updateTime', key: 'updateTime', width: 160 },
+    { title: '修改时间', dataIndex: 'updateTime', key: 'updateTime', width: 160, render: formatDateTime },
     {
       title: '操作',
       key: 'action',

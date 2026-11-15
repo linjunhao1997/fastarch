@@ -10,6 +10,7 @@ import { useTableQuery } from '../../hooks/useTableQuery';
 import type { Permission, PermissionKind } from '../../types';
 import { PERMISSION_KIND_LABELS } from '../../types';
 import { ACTIONS, buildSuccessMessage } from '../../types/copywriting';
+import { formatDateTime } from '../../utils/datetime';
 
 const KIND_TAG_COLORS: Record<PermissionKind, string> = {
   menu: 'blue',
@@ -61,9 +62,9 @@ export default function PermissionListPage() {
         : <Tag icon={<StopOutlined />}>禁用</Tag>,
     },
     { title: '创建人', dataIndex: 'createdBy', key: 'createdBy' },
-    { title: '创建时间', dataIndex: 'createTime', key: 'createTime', render: (value: string) => value || '—' },
+    { title: '创建时间', dataIndex: 'createTime', key: 'createTime', render: formatDateTime },
     { title: '修改人', dataIndex: 'updatedBy', key: 'updatedBy' },
-    { title: '修改时间', dataIndex: 'updateTime', key: 'updateTime', render: (value: string) => value || '—' },
+    { title: '修改时间', dataIndex: 'updateTime', key: 'updateTime', render: formatDateTime },
     {
       title: '操作',
       key: 'action',

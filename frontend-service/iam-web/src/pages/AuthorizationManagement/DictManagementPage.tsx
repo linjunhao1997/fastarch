@@ -14,6 +14,7 @@ import { useSubmitLock } from '../../hooks/useSubmitLock';
 import { useTableQuery } from '../../hooks/useTableQuery';
 import type { DictItem, DictType } from '../../types';
 import { ACTIONS, buildSuccessMessage } from '../../types/copywriting';
+import { formatDateTime } from '../../utils/datetime';
 
 interface DictTypeFormValues {
   code: string;
@@ -134,7 +135,7 @@ export default function DictManagementPage() {
     { title: '类型名称', dataIndex: 'name', key: 'name' },
     { title: '备注', dataIndex: 'remark', key: 'remark', render: (value: string) => value || '—' },
     { title: '状态', dataIndex: 'status', key: 'status', render: (status: string) => <StatusTag status={status} /> },
-    { title: '创建时间', dataIndex: 'createTime', key: 'createTime', render: (value: string) => value || '—' },
+    { title: '创建时间', dataIndex: 'createTime', key: 'createTime', render: formatDateTime },
     {
       title: '操作', key: 'action', width: 240,
       render: (_: unknown, record: DictType) => (
