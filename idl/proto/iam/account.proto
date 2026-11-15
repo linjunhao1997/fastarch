@@ -58,6 +58,14 @@ service AccountService {
     };
   }
 
+  // 分配用户可进入的应用（多应用裁决 #8）：全量覆盖语义，空数组 = 清空准入
+  rpc UpdateAccountApplications(UpdateAccountApplicationsRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      patch: "/account/accounts/{account_id}/applications"
+      body: "*"
+    };
+  }
+
   // 管理员重置用户密码：新密码 bcrypt 落库，不要求提供旧密码
   rpc ResetAccountPassword(ResetAccountPasswordRequest) returns (google.protobuf.Empty) {
     option (google.api.http) = {
@@ -107,6 +115,12 @@ message UpdateAccountRolesRequest {
   repeated string removed_role_code_list = 3;
 }
 
+message UpdateAccountApplicationsRequest {
+  int64 account_id = 1 [(buf.validate.field).required = true];
+  // 目标应用 id 集合（string 编码）：全量覆盖语义，空数组 = 清空准入
+  repeated string application_ids = 2;
+}
+
 message ResetAccountPasswordRequest {
   int64 id = 1 [(buf.validate.field).required = true];
   // 新密码（管理员重置，无需旧密码）
@@ -134,4 +148,6 @@ message Account {
   string updated_by = 9;                      // 修改人（用户 id）
   google.protobuf.Timestamp create_time = 10; // 创建时间
   google.protobuf.Timestamp update_time = 11; // 修改时间
+  // 可进入的应用 id 集合（只读回传，string 编码；仅 GetAccount 填充，列表不回填）
+  repeated string application_id_list = 12;
 }

@@ -68,7 +68,110 @@ func (service *AccountService) GetAccount(ctx context.Context, request *common_v
 	if err := loadUserRoles(ctx, service.db, &res); err != nil {
 		return nil, err
 	}
-	return accountToPb(res), nil
+	account := accountToPb(res)
+	// 可进入应用清单（多应用裁决 #8）：仅 GetAccount 回填，列表不回填避免 N+1
+	var appIds []int64
+	err = service.db.WithContext(ctx).Model(model.RUserApplication{}).
+		Where(model.RUserApplicationColumnUserId, res.Id).
+		Pluck(model.RUserApplicationColumnApplicationId, &appIds).Error
+	if err != nil {
+		return nil, err
+	}
+	account.ApplicationIdList = make([]string, 0, len(appIds))
+	for _, id := range appIds {
+		account.ApplicationIdList = append(account.ApplicationIdList, cast.ToString(id))
+	}
+	return account, nil
+}
+
+// UpdateAccountApplications 分配用户可进入的应用（多应用裁决 #8）：
+// 全量覆盖语义（空数组 = 清空准入）；只写关联表 t_r_user_application，
+// 不触碰应用行（Association.Append 教训，见记忆 gorm-association-append-upserts-rows）。
+func (service *AccountService) UpdateAccountApplications(ctx context.Context, request *iam_v1.UpdateAccountApplicationsRequest) (*emptypb.Empty, error) {
+	var user model.User
+	err := service.db.WithContext(ctx).
+		Select(model.UserFields).
+		Where(model.UserColumnId, request.AccountId).
+		First(&user).Error
+	if err != nil {
+		return nil, err
+	}
+	appIds := make([]int64, 0, len(request.ApplicationIds))
+	seen := make(map[int64]struct{}, len(request.ApplicationIds))
+	for _, raw := range request.ApplicationIds {
+		id := cast.ToInt64(raw)
+		if id <= 0 {
+			continue
+		}
+		if _, dup := seen[id]; dup {
+			continue
+		}
+		seen[id] = struct{}{}
+		appIds = append(appIds, id)
+	}
+	if len(appIds) > 0 {
+		var count int64
+		err = service.db.WithContext(ctx).Model(model.Application{}).
+			Where(model.ApplicationColumnId+" IN ?", appIds).
+			Count(&count).Error
+		if err != nil {
+			return nil, err
+		}
+		if count != int64(len(appIds)) {
+			slog.Warn("update account applications rejected: some applications not found",
+				"account_id", request.AccountId, "application_ids", request.ApplicationIds)
+			return nil, ErrApplicationNotFoundForScope
+		}
+	}
+	var currentIds []int64
+	err = service.db.WithContext(ctx).Model(model.RUserApplication{}).
+		Where(model.RUserApplicationColumnUserId, user.Id).
+		Pluck(model.RUserApplicationColumnApplicationId, &currentIds).Error
+	if err != nil {
+		return nil, err
+	}
+	currentSet := make(map[int64]struct{}, len(currentIds))
+	for _, id := range currentIds {
+		currentSet[id] = struct{}{}
+	}
+	targetSet := make(map[int64]struct{}, len(appIds))
+	for _, id := range appIds {
+		targetSet[id] = struct{}{}
+	}
+	addedIds := make([]int64, 0, len(appIds))
+	for _, id := range appIds {
+		if _, exists := currentSet[id]; !exists {
+			addedIds = append(addedIds, id)
+		}
+	}
+	removedIds := make([]int64, 0, len(currentIds))
+	for _, id := range currentIds {
+		if _, exists := targetSet[id]; !exists {
+			removedIds = append(removedIds, id)
+		}
+	}
+	err = service.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if len(removedIds) > 0 {
+			if err := tx.Where(model.RUserApplicationColumnUserId+" = ? AND "+model.RUserApplicationColumnApplicationId+" IN ?",
+				user.Id, removedIds).Delete(&model.RUserApplication{}).Error; err != nil {
+				return err
+			}
+		}
+		if len(addedIds) > 0 {
+			rows := make([]model.RUserApplication, 0, len(addedIds))
+			for _, id := range addedIds {
+				rows = append(rows, model.RUserApplication{UserId: user.Id, ApplicationId: id})
+			}
+			return tx.Create(&rows).Error
+		}
+		return nil
+	})
+	if err != nil {
+		slog.Warn("commit account application binding failed",
+			"account_id", request.AccountId, "application_ids", request.ApplicationIds, "error", err)
+		return nil, err
+	}
+	return &emptypb.Empty{}, nil
 }
 
 func (service *AccountService) ListAccounts(ctx context.Context, request *iam_v1.ListAccountsRequest) (*iam_v1.ListAccountsResponse, error) {

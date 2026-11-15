@@ -21,13 +21,14 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	AccountService_CreateAccount_FullMethodName        = "/iam.v1.AccountService/CreateAccount"
-	AccountService_GetAccount_FullMethodName           = "/iam.v1.AccountService/GetAccount"
-	AccountService_ListAccounts_FullMethodName         = "/iam.v1.AccountService/ListAccounts"
-	AccountService_UpdateAccount_FullMethodName        = "/iam.v1.AccountService/UpdateAccount"
-	AccountService_DeleteAccount_FullMethodName        = "/iam.v1.AccountService/DeleteAccount"
-	AccountService_UpdateAccountRoles_FullMethodName   = "/iam.v1.AccountService/UpdateAccountRoles"
-	AccountService_ResetAccountPassword_FullMethodName = "/iam.v1.AccountService/ResetAccountPassword"
+	AccountService_CreateAccount_FullMethodName             = "/iam.v1.AccountService/CreateAccount"
+	AccountService_GetAccount_FullMethodName                = "/iam.v1.AccountService/GetAccount"
+	AccountService_ListAccounts_FullMethodName              = "/iam.v1.AccountService/ListAccounts"
+	AccountService_UpdateAccount_FullMethodName             = "/iam.v1.AccountService/UpdateAccount"
+	AccountService_DeleteAccount_FullMethodName             = "/iam.v1.AccountService/DeleteAccount"
+	AccountService_UpdateAccountRoles_FullMethodName        = "/iam.v1.AccountService/UpdateAccountRoles"
+	AccountService_UpdateAccountApplications_FullMethodName = "/iam.v1.AccountService/UpdateAccountApplications"
+	AccountService_ResetAccountPassword_FullMethodName      = "/iam.v1.AccountService/ResetAccountPassword"
 )
 
 // AccountServiceClient is the client API for AccountService service.
@@ -44,6 +45,8 @@ type AccountServiceClient interface {
 	UpdateAccount(ctx context.Context, in *UpdateAccountRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	DeleteAccount(ctx context.Context, in *DeleteAccountRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	UpdateAccountRoles(ctx context.Context, in *UpdateAccountRolesRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// 分配用户可进入的应用（多应用裁决 #8）：全量覆盖语义，空数组 = 清空准入
+	UpdateAccountApplications(ctx context.Context, in *UpdateAccountApplicationsRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// 管理员重置用户密码：新密码 bcrypt 落库，不要求提供旧密码
 	ResetAccountPassword(ctx context.Context, in *ResetAccountPasswordRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
@@ -110,6 +113,15 @@ func (c *accountServiceClient) UpdateAccountRoles(ctx context.Context, in *Updat
 	return out, nil
 }
 
+func (c *accountServiceClient) UpdateAccountApplications(ctx context.Context, in *UpdateAccountApplicationsRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, AccountService_UpdateAccountApplications_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *accountServiceClient) ResetAccountPassword(ctx context.Context, in *ResetAccountPasswordRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, AccountService_ResetAccountPassword_FullMethodName, in, out, opts...)
@@ -133,6 +145,8 @@ type AccountServiceServer interface {
 	UpdateAccount(context.Context, *UpdateAccountRequest) (*emptypb.Empty, error)
 	DeleteAccount(context.Context, *DeleteAccountRequest) (*emptypb.Empty, error)
 	UpdateAccountRoles(context.Context, *UpdateAccountRolesRequest) (*emptypb.Empty, error)
+	// 分配用户可进入的应用（多应用裁决 #8）：全量覆盖语义，空数组 = 清空准入
+	UpdateAccountApplications(context.Context, *UpdateAccountApplicationsRequest) (*emptypb.Empty, error)
 	// 管理员重置用户密码：新密码 bcrypt 落库，不要求提供旧密码
 	ResetAccountPassword(context.Context, *ResetAccountPasswordRequest) (*emptypb.Empty, error)
 }
@@ -158,6 +172,9 @@ func (UnimplementedAccountServiceServer) DeleteAccount(context.Context, *DeleteA
 }
 func (UnimplementedAccountServiceServer) UpdateAccountRoles(context.Context, *UpdateAccountRolesRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateAccountRoles not implemented")
+}
+func (UnimplementedAccountServiceServer) UpdateAccountApplications(context.Context, *UpdateAccountApplicationsRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateAccountApplications not implemented")
 }
 func (UnimplementedAccountServiceServer) ResetAccountPassword(context.Context, *ResetAccountPasswordRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ResetAccountPassword not implemented")
@@ -282,6 +299,24 @@ func _AccountService_UpdateAccountRoles_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AccountService_UpdateAccountApplications_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateAccountApplicationsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AccountServiceServer).UpdateAccountApplications(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AccountService_UpdateAccountApplications_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AccountServiceServer).UpdateAccountApplications(ctx, req.(*UpdateAccountApplicationsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AccountService_ResetAccountPassword_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ResetAccountPasswordRequest)
 	if err := dec(in); err != nil {
@@ -330,6 +365,10 @@ var AccountService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UpdateAccountRoles",
 			Handler:    _AccountService_UpdateAccountRoles_Handler,
+		},
+		{
+			MethodName: "UpdateAccountApplications",
+			Handler:    _AccountService_UpdateAccountApplications_Handler,
 		},
 		{
 			MethodName: "ResetAccountPassword",

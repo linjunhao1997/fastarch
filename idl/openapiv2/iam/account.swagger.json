@@ -93,6 +93,56 @@
         ]
       }
     },
+    "/account/accounts/{accountId}/applications": {
+      "patch": {
+        "summary": "分配用户可进入的应用（多应用裁决 #8）：全量覆盖语义，空数组 = 清空准入",
+        "operationId": "AccountService_UpdateAccountApplications",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "accountId",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "applicationIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "目标应用 id 集合（string 编码）：全量覆盖语义，空数组 = 清空准入"
+                }
+              }
+            }
+          }
+        ],
+        "tags": [
+          "AccountService"
+        ]
+      }
+    },
     "/account/accounts/{accountId}/roles": {
       "patch": {
         "operationId": "AccountService_UpdateAccountRoles",
@@ -394,6 +444,13 @@
           "type": "string",
           "format": "date-time",
           "title": "修改时间"
+        },
+        "applicationIdList": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "可进入的应用 id 集合（只读回传，string 编码；仅 GetAccount 填充，列表不回填）"
         }
       },
       "title": "用户信息（t_user 语义；不含密码摘要等敏感字段，宪法 XII）"

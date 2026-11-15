@@ -9,7 +9,8 @@ import "regexp"
 //     （存量库经数据迁移补种权限行）
 
 // PERMISSION_CODES 是全部 API 权限码词汇（与迁移 SQL 000003+000005 种子镜像，
-// 共 43 个码：000005 补种 iam.user.reset_password）。
+// 共 44 个码：000005 补种 iam.user.reset_password，000009 补种
+// iam.user.assign_applications（多应用裁决 #8））。
 var PERMISSION_CODES = []string{
 	// 用户模块（iam.account.* 已随 011 模型改名 iam.user.*）
 	"iam.user.create",
@@ -19,6 +20,7 @@ var PERMISSION_CODES = []string{
 	"iam.user.delete",
 	"iam.user.assign_roles",
 	"iam.user.reset_password",
+	"iam.user.assign_applications",
 	// 应用模块
 	"iam.application.create",
 	"iam.application.get",
@@ -69,13 +71,14 @@ var PERMISSION_CODES = []string{
 // 未登记的方法一律拒绝。登录、自查类方法不在此表（拦截器 authOnly 豁免）。
 var METHOD_PERMISSIONS = map[string][]string{
 	// AccountService（用户服务语义，proto 方法名未动）
-	"/iam.v1.AccountService/CreateAccount":        {"iam.user.create"},
-	"/iam.v1.AccountService/GetAccount":           {"iam.user.get"},
-	"/iam.v1.AccountService/ListAccounts":         {"iam.user.list"},
-	"/iam.v1.AccountService/UpdateAccount":        {"iam.user.update"},
-	"/iam.v1.AccountService/DeleteAccount":        {"iam.user.delete"},
-	"/iam.v1.AccountService/UpdateAccountRoles":   {"iam.user.assign_roles"},
-	"/iam.v1.AccountService/ResetAccountPassword": {"iam.user.reset_password"},
+	"/iam.v1.AccountService/CreateAccount":             {"iam.user.create"},
+	"/iam.v1.AccountService/GetAccount":                {"iam.user.get"},
+	"/iam.v1.AccountService/ListAccounts":              {"iam.user.list"},
+	"/iam.v1.AccountService/UpdateAccount":             {"iam.user.update"},
+	"/iam.v1.AccountService/DeleteAccount":             {"iam.user.delete"},
+	"/iam.v1.AccountService/UpdateAccountRoles":        {"iam.user.assign_roles"},
+	"/iam.v1.AccountService/ResetAccountPassword":      {"iam.user.reset_password"},
+	"/iam.v1.AccountService/UpdateAccountApplications": {"iam.user.assign_applications"},
 	// ApplicationService
 	"/iam.v1.ApplicationService/CreateApplication": {"iam.application.create"},
 	"/iam.v1.ApplicationService/GetApplication":    {"iam.application.get"},

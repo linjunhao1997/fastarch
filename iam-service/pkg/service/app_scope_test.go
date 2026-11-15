@@ -8,6 +8,7 @@ import (
 	"iam-service/pkg/auth"
 	"iam-service/pkg/model"
 
+	common_v1 "github.com/linjunhao1997/idl/pb/common"
 	iam_v1 "github.com/linjunhao1997/idl/pb/iam"
 	"github.com/spf13/cast"
 	"google.golang.org/grpc/codes"
@@ -289,5 +290,66 @@ func TestListMyApplicationsScoping(t *testing.T) {
 	}
 	if len(adminResp.Applications) != 2 {
 		t.Fatalf("ListMyApplications(admin) = %d apps, want 2 enabled", len(adminResp.Applications))
+	}
+}
+
+// ── 用户应用准入分配（全量覆盖）─────────────────────────────────────────
+
+func TestUpdateAccountApplications(t *testing.T) {
+	db := setupAuthorizationTestDB(t)
+	rdb, _ := setupTestRedis(t)
+	createTestApp(t, db, testAppIdIam, "iam", model.StatusEnabled)
+	createTestApp(t, db, testAppIdOrder, "order", model.StatusEnabled)
+	user := createTestUser(t, db, 5, "scoped-user", 1)
+	svc := &AccountService{db: db, rdb: rdb}
+	ctx := auth.WithAccountId(context.Background(), 1)
+
+	// 初始为空
+	got, err := svc.GetAccount(ctx, &common_v1.GetRequest{Id: user.Id})
+	if err != nil {
+		t.Fatalf("GetAccount() error = %v", err)
+	}
+	if len(got.ApplicationIdList) != 0 {
+		t.Fatalf("initial ApplicationIdList = %v, want empty", got.ApplicationIdList)
+	}
+	// 全量覆盖分配两个应用
+	_, err = svc.UpdateAccountApplications(ctx, &iam_v1.UpdateAccountApplicationsRequest{
+		AccountId: user.Id, ApplicationIds: []string{"900", "901"},
+	})
+	if err != nil {
+		t.Fatalf("UpdateAccountApplications() error = %v", err)
+	}
+	got, _ = svc.GetAccount(ctx, &common_v1.GetRequest{Id: user.Id})
+	if len(got.ApplicationIdList) != 2 {
+		t.Fatalf("ApplicationIdList = %v, want 2 apps", got.ApplicationIdList)
+	}
+	// 覆盖为单个（差集删除生效）
+	_, err = svc.UpdateAccountApplications(ctx, &iam_v1.UpdateAccountApplicationsRequest{
+		AccountId: user.Id, ApplicationIds: []string{"901"},
+	})
+	if err != nil {
+		t.Fatalf("UpdateAccountApplications(shrink) error = %v", err)
+	}
+	got, _ = svc.GetAccount(ctx, &common_v1.GetRequest{Id: user.Id})
+	if len(got.ApplicationIdList) != 1 || got.ApplicationIdList[0] != "901" {
+		t.Fatalf("ApplicationIdList = %v, want [901]", got.ApplicationIdList)
+	}
+	// 清空
+	_, err = svc.UpdateAccountApplications(ctx, &iam_v1.UpdateAccountApplicationsRequest{
+		AccountId: user.Id, ApplicationIds: []string{},
+	})
+	if err != nil {
+		t.Fatalf("UpdateAccountApplications(clear) error = %v", err)
+	}
+	got, _ = svc.GetAccount(ctx, &common_v1.GetRequest{Id: user.Id})
+	if len(got.ApplicationIdList) != 0 {
+		t.Fatalf("ApplicationIdList = %v, want empty after clear", got.ApplicationIdList)
+	}
+	// 不存在的应用拒绝
+	_, err = svc.UpdateAccountApplications(ctx, &iam_v1.UpdateAccountApplicationsRequest{
+		AccountId: user.Id, ApplicationIds: []string{"12345"},
+	})
+	if err != ErrApplicationNotFoundForScope {
+		t.Fatalf("UpdateAccountApplications(missing) error = %v, want %v", err, ErrApplicationNotFoundForScope)
 	}
 }
