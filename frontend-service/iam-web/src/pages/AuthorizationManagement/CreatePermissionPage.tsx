@@ -1,4 +1,5 @@
 ﻿import { useEffect, useState } from "react";
+import { useQueryClient } from '@tanstack/react-query';
 import { Form, Input, Button, Radio, Select, message } from "antd";
 import { useNavigate } from "react-router";
 import { applicationApi, permissionApi } from "../../api/iam";
@@ -16,6 +17,7 @@ const KIND_OPTIONS = [
 export default function CreatePermissionPage() {
   const navigate = useNavigate();
   const [form] = Form.useForm();
+  const queryClient = useQueryClient();
   const { isSubmitting, run } = useSubmitLock();
   const showNotification = useApiErrorNotification();
   const [applications, setApplications] = useState<{ label: string; value: string }[]>([]);
@@ -46,6 +48,7 @@ export default function CreatePermissionPage() {
         description: values.description,
       });
       message.success(`${ACTIONS.create}成功`);
+      queryClient.invalidateQueries({ queryKey: ['permissions'] });
       navigate('/authorization_management/permission_list');
     }).catch((error) => showNotification(error, "权限创建失败"));
   };

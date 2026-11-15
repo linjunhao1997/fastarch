@@ -1,4 +1,5 @@
 ﻿import { useEffect } from "react";
+import { useQueryClient } from '@tanstack/react-query';
 import { Form, Input, Button, Radio, message } from "antd";
 import { useNavigate, useParams } from "react-router";
 import { applicationApi } from "../../api/iam";
@@ -10,6 +11,7 @@ export default function EditApplicationPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const [form] = Form.useForm();
+  const queryClient = useQueryClient();
   const showNotification = useApiErrorNotification();
   const { isSubmitting, run } = useSubmitLock();
 
@@ -39,6 +41,7 @@ export default function EditApplicationPage() {
         enabledStatus: values.enabledStatus,
       });
       message.success(`${ACTIONS.save}成功`);
+      queryClient.invalidateQueries({ queryKey: ['applications'] });
       navigate('/application_management/application_list');
     }).catch((error) => showNotification(error, "应用保存失败"));
   };

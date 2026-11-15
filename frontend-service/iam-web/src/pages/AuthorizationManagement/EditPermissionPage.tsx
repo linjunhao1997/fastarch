@@ -1,4 +1,5 @@
 ﻿import { useEffect, useState } from "react";
+import { useQueryClient } from '@tanstack/react-query';
 import { Form, Input, Button, Select, message, Descriptions, Spin } from "antd";
 import { useNavigate, useParams } from "react-router";
 import { permissionApi } from "../../api/iam";
@@ -10,6 +11,7 @@ export default function EditPermissionPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const [form] = Form.useForm();
+  const queryClient = useQueryClient();
   const [loading, setLoading] = useState(true);
   const [permission, setPermission] = useState<Permission | null>(null);
   const showNotification = useApiErrorNotification();
@@ -48,6 +50,7 @@ export default function EditPermissionPage() {
         version,
       });
       message.success(`${ACTIONS.save}成功`);
+      queryClient.invalidateQueries({ queryKey: ['permissions'] });
       navigate('/authorization_management/permission_list');
     }).catch((error) => showNotification(error, "权限保存失败"));
   };

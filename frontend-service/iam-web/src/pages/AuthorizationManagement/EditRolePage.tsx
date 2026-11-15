@@ -1,4 +1,5 @@
 ﻿import { useEffect, useState } from "react";
+import { useQueryClient } from '@tanstack/react-query';
 import { Button, Card, Form, Input, Select, Space, Tree, message } from "antd";
 import { useNavigate, useParams } from "react-router";
 import { menuApi, permissionApi, roleApi } from "../../api/iam";
@@ -25,6 +26,7 @@ export default function EditRolePage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const [form] = Form.useForm();
+  const queryClient = useQueryClient();
   const [loading, setLoading] = useState(true);
   const showNotification = useApiErrorNotification();
   const { isSubmitting, run } = useSubmitLock();
@@ -113,6 +115,7 @@ export default function EditRolePage() {
         version,
       });
       message.success(`${ACTIONS.save}成功`);
+      queryClient.invalidateQueries({ queryKey: ['roles'] });
       navigate('/authorization_management/role_management');
     }).catch((error) => showNotification(error, "角色保存失败"));
   };

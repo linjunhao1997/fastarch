@@ -1,4 +1,5 @@
 ﻿import { useCallback, useEffect, useState } from "react";
+import { useQueryClient } from '@tanstack/react-query';
 import { Form, Input, Button, Card, Divider, Radio, message } from "antd";
 import { useNavigate, useParams } from "react-router-dom";
 import { accountApi } from "../../api/iam";
@@ -8,6 +9,7 @@ import { ACTIONS } from "../../types/copywriting";
 
 export default function EditAccountPage() {
   const [form] = Form.useForm();
+  const queryClient = useQueryClient();
   const [pwdForm] = Form.useForm();
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
@@ -54,6 +56,7 @@ export default function EditAccountPage() {
         version,
       });
       message.success(`${ACTIONS.save}成功`);
+      queryClient.invalidateQueries({ queryKey: ['accounts'] });
       navigate('/account_management/account_list');
     }).catch((error) => showNotification(error, "用户保存失败"));
   };

@@ -1,4 +1,5 @@
 ﻿import { Form, Input, Button, Radio, Card, message } from "antd";
+import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from "react-router-dom";
 import { accountApi } from "../../api/iam";
 import { useApiErrorNotification } from "../../hooks/useApiError";
@@ -7,6 +8,7 @@ import { ACTIONS } from "../../types/copywriting";
 
 export default function CreateAccountPage() {
   const [form] = Form.useForm();
+  const queryClient = useQueryClient();
   const navigate = useNavigate();
   const showNotification = useApiErrorNotification();
   const { isSubmitting, run } = useSubmitLock();
@@ -28,6 +30,7 @@ export default function CreateAccountPage() {
         status: values.status,
       });
       message.success(`${ACTIONS.create}成功`);
+      queryClient.invalidateQueries({ queryKey: ['accounts'] });
       navigate('/account_management/account_list');
     }).catch((error) => showNotification(error, "用户创建失败"));
   };

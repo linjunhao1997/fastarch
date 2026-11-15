@@ -1,4 +1,5 @@
 ﻿import { Form, Input, Button, Radio, message } from "antd";
+import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from "react-router";
 import { applicationApi } from "../../api/iam";
 import { useApiErrorNotification } from "../../hooks/useApiError";
@@ -8,6 +9,7 @@ import { ACTIONS } from "../../types/copywriting";
 export default function CreateApplicationPage() {
   const navigate = useNavigate();
   const [form] = Form.useForm();
+  const queryClient = useQueryClient();
   const showNotification = useApiErrorNotification();
   const { isSubmitting, run } = useSubmitLock();
 
@@ -19,6 +21,7 @@ export default function CreateApplicationPage() {
         enabledStatus: values.enabledStatus,
       });
       message.success(`${ACTIONS.create}成功`);
+      queryClient.invalidateQueries({ queryKey: ['applications'] });
       navigate('/application_management/application_list');
     }).catch((error) => showNotification(error, "应用创建失败"));
   };

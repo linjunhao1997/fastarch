@@ -1,4 +1,5 @@
 ﻿import { useEffect, useState } from "react";
+import { useQueryClient } from '@tanstack/react-query';
 import { Form, Input, Button, Select, message } from "antd";
 import { useNavigate } from "react-router";
 import { applicationApi, roleApi } from "../../api/iam";
@@ -10,6 +11,7 @@ import { ACTIONS } from "../../types/copywriting";
 export default function CreateRolePage() {
   const navigate = useNavigate();
   const [form] = Form.useForm();
+  const queryClient = useQueryClient();
   const { isSubmitting, run } = useSubmitLock();
   const showNotification = useApiErrorNotification();
   const [applications, setApplications] = useState<{ label: string; value: string }[]>([]);
@@ -32,6 +34,7 @@ export default function CreateRolePage() {
     run(async () => {
       await roleApi.create(values);
       message.success(`${ACTIONS.create}成功`);
+      queryClient.invalidateQueries({ queryKey: ['roles'] });
       navigate('/authorization_management/role_management');
     }).catch((error) => showNotification(error, "角色创建失败"));
   };
