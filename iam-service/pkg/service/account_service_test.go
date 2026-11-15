@@ -674,3 +674,52 @@ func TestAccountAuditFieldsWithoutAuthContext(t *testing.T) {
 		t.Fatalf("created_by = %q, want empty/0 without auth context", created.CreatedBy)
 	}
 }
+
+// TestPermissionSnapshotDerivesCodesFromMenus 验证 #6 裁决：角色绑定菜单的
+// permission_code 自动并入权限快照（启用菜单产码；停用菜单与空码分组节点不产码）。
+func TestPermissionSnapshotDerivesCodesFromMenus(t *testing.T) {
+	db := setupAccountTestDB(t)
+	user := createTestUser(t, db, 7, "menu-only", 1)
+	role := model.Role{
+		Id: 7, Name: "role seven", Code: "role-seven",
+		Status: model.StatusEnabled, Version: 1,
+		CreateTime: time.Now(), UpdateTime: time.Now(),
+	}
+	if err := db.Create(&role).Error; err != nil {
+		t.Fatalf("create role: %v", err)
+	}
+	if err := db.Create(&model.RUserRole{UserId: user.Id, RoleId: role.Id}).Error; err != nil {
+		t.Fatalf("bind user role: %v", err)
+	}
+	menus := []model.Menu{
+		{Id: 701, Name: "启用带码", PermissionCode: "iam.role.list", Status: model.StatusEnabled, Version: 1},
+		{Id: 702, Name: "停用带码", PermissionCode: "iam.menu.list", Status: model.StatusDisabled, Version: 1},
+		{Id: 703, Name: "分组空码", PermissionCode: "", Status: model.StatusEnabled, Version: 1},
+	}
+	for i := range menus {
+		if err := db.Create(&menus[i]).Error; err != nil {
+			t.Fatalf("create menu %d: %v", menus[i].Id, err)
+		}
+		if err := db.Create(&model.RRoleMenu{RoleId: role.Id, MenuId: menus[i].Id}).Error; err != nil {
+			t.Fatalf("bind role menu %d: %v", menus[i].Id, err)
+		}
+	}
+
+	codes, err := NewPermissionSnapshotLoader(db)(context.Background(), user.Id)
+	if err != nil {
+		t.Fatalf("snapshot loader error = %v", err)
+	}
+	got := make(map[string]struct{}, len(codes))
+	for _, code := range codes {
+		got[code] = struct{}{}
+	}
+	if _, ok := got["iam.role.list"]; !ok {
+		t.Fatalf("codes = %v, want contains iam.role.list (derived from enabled menu)", codes)
+	}
+	if _, ok := got["iam.menu.list"]; ok {
+		t.Fatalf("codes = %v, want NOT contains iam.menu.list (disabled menu must not grant)", codes)
+	}
+	if len(got) != 1 {
+		t.Fatalf("codes = %v, want exactly 1 derived code", codes)
+	}
+}

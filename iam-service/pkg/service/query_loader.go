@@ -100,12 +100,6 @@ func loadUserPermissionGraph(ctx context.Context, db *gorm.DB, user *model.User)
 		Find(&bindings).Error; err != nil {
 		return err
 	}
-	if len(bindings) == 0 {
-		for _, role := range user.RoleList {
-			role.PermissionList = []*model.Permission{}
-		}
-		return nil
-	}
 	permissionIds := make([]int64, 0, len(bindings))
 	bindingSeen := make(map[int64]struct{}, len(bindings))
 	for _, binding := range bindings {
@@ -134,6 +128,53 @@ func loadUserPermissionGraph(ctx context.Context, db *gorm.DB, user *model.User)
 	}
 	for _, role := range user.RoleList {
 		role.PermissionList = permissionsByRole[role.Id]
+		if role.PermissionList == nil {
+			role.PermissionList = []*model.Permission{}
+		}
+	}
+
+	// 菜单授权推导（重构 #6 裁决）：批量加载角色绑定的菜单，
+	// 其 permission_code 在快照层并入权限码集合（停用菜单不产码，状态过滤在 collect）。
+	var menuBindings []model.RRoleMenu
+	if err := db.WithContext(ctx).
+		Where(model.RRoleMenuColumnRoleId+" IN ?", roleIds).
+		Select(model.RRoleMenuFields).
+		Find(&menuBindings).Error; err != nil {
+		return err
+	}
+	menusByRole := make(map[int64][]*model.Menu, len(user.RoleList))
+	if len(menuBindings) > 0 {
+		menuIds := make([]int64, 0, len(menuBindings))
+		menuIdSeen := make(map[int64]struct{}, len(menuBindings))
+		for _, binding := range menuBindings {
+			if _, exists := menuIdSeen[binding.MenuId]; exists {
+				continue
+			}
+			menuIdSeen[binding.MenuId] = struct{}{}
+			menuIds = append(menuIds, binding.MenuId)
+		}
+		var menus []*model.Menu
+		if err := db.WithContext(ctx).
+			Where(model.MenuColumnId+" IN ?", menuIds).
+			Select(model.MenuFields).
+			Find(&menus).Error; err != nil {
+			return err
+		}
+		menuById := make(map[int64]*model.Menu, len(menus))
+		for _, menu := range menus {
+			menuById[menu.Id] = menu
+		}
+		for _, binding := range menuBindings {
+			if menu, exists := menuById[binding.MenuId]; exists {
+				menusByRole[binding.RoleId] = append(menusByRole[binding.RoleId], menu)
+			}
+		}
+	}
+	for _, role := range user.RoleList {
+		role.MenuList = menusByRole[role.Id]
+		if role.MenuList == nil {
+			role.MenuList = []*model.Menu{}
+		}
 	}
 	return nil
 }

@@ -6,9 +6,11 @@ import (
 	"time"
 
 	"iam-service/pkg/auth"
+	"iam-service/pkg/constant"
 	"iam-service/pkg/model"
 
 	"github.com/go-dev-frame/sponge/pkg/krand"
+	"github.com/redis/go-redis/v9"
 	common_v1 "github.com/linjunhao1997/idl/pb/common"
 	iam_v1 "github.com/linjunhao1997/idl/pb/iam"
 	"github.com/spf13/cast"
@@ -18,13 +20,14 @@ import (
 )
 
 type MenuService struct {
-	db *gorm.DB
+	db  *gorm.DB
+	rdb *redis.Client
 }
 
 var _ iam_v1.MenuServiceServer = (*MenuService)(nil)
 
-func NewMenuService(db *gorm.DB) *MenuService {
-	return &MenuService{db: db}
+func NewMenuService(db *gorm.DB, rdb *redis.Client) *MenuService {
+	return &MenuService{db: db, rdb: rdb}
 }
 
 // menuToPb 模型转 pb（t_menu 全列映射）。
@@ -418,7 +421,30 @@ func (s *MenuService) UpdateRoleMenus(ctx context.Context, request *iam_v1.Updat
 			"error", err)
 		return nil, err
 	}
+	// 菜单绑定参与授权推导（#6 裁决）：绑定变更后立即失效持有该角色用户的权限快照
+	s.invalidateRoleUsersSnapshot(ctx, role.Id)
 	return &emptypb.Empty{}, nil
+}
+
+// invalidateRoleUsersSnapshot 删除持有指定角色的全部用户的权限快照键。
+// 快照为派生数据：删除失败仅记日志，由短 TTL 兜底。
+func (s *MenuService) invalidateRoleUsersSnapshot(ctx context.Context, roleId int64) {
+	if s.rdb == nil {
+		return
+	}
+	var userIds []int64
+	err := s.db.Model(model.RUserRole{}).
+		Where(model.RUserRoleColumnRoleId, roleId).
+		Pluck(model.RUserRoleColumnUserId, &userIds).Error
+	if err != nil {
+		slog.Warn("pluck role user ids failed", "role_id", roleId, "error", err)
+		return
+	}
+	for _, userId := range userIds {
+		if err := s.rdb.Del(ctx, constant.GetAccountPermissionKey(userId)).Err(); err != nil {
+			slog.Warn("invalidate user permission snapshot failed", "user_id", userId, "error", err)
+		}
+	}
 }
 
 // ListRoleMenus 查询角色绑定的菜单 id 集合（编辑角色页回显用）。

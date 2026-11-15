@@ -1,6 +1,6 @@
-﻿import { useEffect, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from '@tanstack/react-query';
-import { Button, Card, Form, Input, Select, Space, Tree, message } from "antd";
+import { Button, Card, Divider, Form, Input, Select, Space, Tag, Tree, Typography, message } from "antd";
 import { useNavigate, useParams } from "react-router";
 import { menuApi, permissionApi, roleApi } from "../../api/iam";
 import { useApiErrorNotification } from "../../hooks/useApiError";
@@ -22,6 +22,15 @@ const toTreeData = (nodes: MenuTreeNode[]): MenuTreeData[] =>
     children: node.children.length > 0 ? toTreeData(node.children) : undefined,
   }));
 
+/** 收集菜单节点 id → permission_code（仅非空码，推导展示用） */
+const collectMenuCodes = (nodes: MenuTreeNode[], out: Record<string, string> = {}): Record<string, string> => {
+  for (const node of nodes) {
+    if (node.menu.permissionCode) out[node.menu.id] = node.menu.permissionCode;
+    if (node.children.length > 0) collectMenuCodes(node.children, out);
+  }
+  return out;
+};
+
 export default function EditRolePage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
@@ -34,11 +43,23 @@ export default function EditRolePage() {
   const [currentPermissionCodes, setCurrentPermissionCodes] = useState<string[]>([]);
   const [permissionOptions, setPermissionOptions] = useState<{ label: string; value: string }[]>([]);
 
-  // 菜单绑定（t_r_role_menu）：全量覆盖语义，独立于基本信息表单保存
+  // 菜单绑定（t_r_role_menu）：全量覆盖语义，独立于基本信息表单保存；
+  // #6 裁决：勾选菜单即授予其绑定的查看权限码（快照层自动推导，不入下方权限清单）
   const [menuTreeData, setMenuTreeData] = useState<MenuTreeData[]>([]);
+  const [menuCodeById, setMenuCodeById] = useState<Record<string, string>>({});
   const [checkedMenuKeys, setCheckedMenuKeys] = useState<string[]>([]);
   const [menuBindingLoading, setMenuBindingLoading] = useState(true);
   const { isSubmitting: isMenuSubmitting, run: runMenu } = useSubmitLock();
+
+  // 当前勾选菜单推导出的权限码（去重展示）
+  const derivedCodes = useMemo(() => {
+    const codes = new Set<string>();
+    for (const key of checkedMenuKeys) {
+      const code = menuCodeById[key];
+      if (code) codes.add(code);
+    }
+    return [...codes];
+  }, [checkedMenuKeys, menuCodeById]);
 
   useEffect(() => {
     const fetchRole = async () => {
@@ -85,6 +106,7 @@ export default function EditRolePage() {
           menuApi.listRoleMenus(id),
         ]);
         setMenuTreeData(toTreeData(tree.roots || []));
+        setMenuCodeById(collectMenuCodes(tree.roots || []));
         setCheckedMenuKeys(bound.menuIds || []);
       } catch (error) {
         showNotification(error, "获取菜单绑定失败");
@@ -128,7 +150,12 @@ export default function EditRolePage() {
           <Input disabled={loading} />
         </Form.Item>
 
-        <Form.Item label="权限" name="permissionCodeList" initialValue={currentPermissionCodes}>
+        <Form.Item
+          label="权限"
+          name="permissionCodeList"
+          initialValue={currentPermissionCodes}
+          extra="操作级码（增删改/重置密码等）在此授予；页面查看码由下方菜单绑定自动推导，无需重复勾选"
+        >
           <Select mode="multiple" options={permissionOptions} disabled={loading} />
         </Form.Item>
         <Form.Item label="状态" name="enabledStatus" rules={[{ required: true, message: "请选择状态" }]}>
@@ -170,6 +197,16 @@ export default function EditRolePage() {
               setCheckedMenuKeys(keys.map(String));
             }}
           />
+          <Divider style={{ margin: '12px 0' }} />
+          <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
+            勾选菜单即授予其绑定的查看权限码（保存后立即生效，无需在上方权限清单重复勾选）；取消绑定自动收回。
+          </Typography.Paragraph>
+          <Space wrap size={4}>
+            <Typography.Text type="secondary">当前菜单推导码：</Typography.Text>
+            {derivedCodes.length > 0
+              ? derivedCodes.map((code) => <Tag key={code} color="blue">{code}</Tag>)
+              : <Typography.Text type="secondary">无</Typography.Text>}
+          </Space>
         </Card>
 
         <Form.Item>
