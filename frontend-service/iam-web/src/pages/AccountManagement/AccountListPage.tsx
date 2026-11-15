@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router';
 import { accountApi } from '../../api/iam';
 import { useConfirmDelete } from '../../components/ConfirmDelete';
 import { BindRolesModal } from '../../components/BindRolesModal';
+import { AssignApplicationsModal } from '../../components/AssignApplicationsModal';
 import { EmptyState, ErrorState } from '../../components/states';
 import { useApiErrorNotification } from '../../hooks/useApiError';
 import { usePermissions } from '../../hooks/permission-context';
@@ -20,6 +21,7 @@ export default function AccountListPage() {
   const showNotification = useApiErrorNotification();
   const { reload } = usePermissions();
   const [bindRolesAccount, setBindRolesAccount] = useState<Account | null>(null);
+  const [assignAppsAccount, setAssignAppsAccount] = useState<Account | null>(null);
   const confirmDelete = useConfirmDelete();
 
   const tableQuery = useTableQuery({
@@ -63,6 +65,7 @@ export default function AccountListPage() {
             {ACTIONS.edit}
           </Button>
           <Button type="link" onClick={() => setBindRolesAccount(record)}>{ACTIONS.bindRoles}</Button>
+          <Button type="link" onClick={() => setAssignAppsAccount(record)}>分配应用</Button>
           <Button
             type="link"
             danger
@@ -134,6 +137,15 @@ export default function AccountListPage() {
           await tableQuery.refresh();
           await reload();
           message.success(buildSuccessMessage(ACTIONS.bindRoles));
+        }}
+      />
+      <AssignApplicationsModal
+        open={assignAppsAccount !== null}
+        account={assignAppsAccount}
+        onClose={() => setAssignAppsAccount(null)}
+        onSuccess={async () => {
+          await tableQuery.refresh();
+          message.success('分配应用成功');
         }}
       />
     </div>

@@ -61,13 +61,15 @@ function UnauthorizedRedirect() {
 export default function IndexPage() {
   const [collapsed, setCollapsed] = useState(false);
   const navigate = useNavigate();
-  const { applications, currentApplicationId, setCurrentApplicationId } = useApplicationContext();
+  const { applications, currentApplicationId, setCurrentApplicationId, loading: contextLoading } = useApplicationContext();
 
   // 菜单树：服务端按角色菜单绑定（t_r_role_menu）过滤下发，管理员全量；
   // 不再依赖应用上下文（重构 #6：应用与用户解绑）。
   const menuTreeQuery = useQuery({
-    queryKey: ['my-menu-tree'],
+    // 应用上下文在服务端（token→app 映射），queryKey 带 appId 仅为按应用隔离缓存
+    queryKey: ['my-menu-tree', currentApplicationId],
     queryFn: () => menuApi.listMyTree(),
+    enabled: !!currentApplicationId,
     placeholderData: (previous) => previous,
     retry: 1,
   });
@@ -111,6 +113,16 @@ export default function IndexPage() {
   );
 
   const renderSiderBody = () => {
+    // 无可进入应用（非 admin 且未被分配准入）：引导联系管理员
+    if (!contextLoading && applications.length === 0) {
+      return (
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+          description="暂无可进入的应用，请联系管理员分配"
+          style={{ padding: 24 }}
+        />
+      );
+    }
     // 菜单树加载中（且无旧数据可保留）
     if (menuTreeQuery.isPending && !menuTreeQuery.data) {
       return (
@@ -195,7 +207,7 @@ export default function IndexPage() {
                 items: collapsedAppMenuItems,
                 selectable: true,
                 selectedKeys: currentApplicationId ? [currentApplicationId] : [],
-                onClick: ({ key }) => setCurrentApplicationId(key),
+                onClick: ({ key }) => void setCurrentApplicationId(key),
               }}
               disabled={applications.length === 0}
             >
@@ -206,7 +218,7 @@ export default function IndexPage() {
               <Select
                 variant="borderless"
                 value={currentApplicationId ?? undefined}
-                onChange={(value) => setCurrentApplicationId(value)}
+                onChange={(value) => void setCurrentApplicationId(value)}
                 loading={menuTreeQuery.isFetching && !menuTreeQuery.isPlaceholderData}
                 placeholder="选择应用"
                 style={{ width: '100%' }}

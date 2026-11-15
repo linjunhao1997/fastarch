@@ -9,6 +9,7 @@ import { useApiErrorNotification } from '../../hooks/useApiError';
 import { useTableQuery } from '../../hooks/useTableQuery';
 import type { Application } from '../../types';
 import { ACTIONS, buildSuccessMessage } from '../../types/copywriting';
+import { formatDateTime } from '../../utils/datetime';
 
 export default function ApplicationListPage() {
   const navigate = useNavigate();
@@ -23,20 +24,22 @@ export default function ApplicationListPage() {
 
   const columns = useMemo(() => [
     { title: 'ID', dataIndex: 'id', key: 'id' },
-    { title: '名称', dataIndex: 'name', key: 'name' },
-    { title: '应用编码', dataIndex: 'appCode', key: 'appCode' },
-    { title: '描述', dataIndex: 'description', key: 'description' },
+    { title: '应用标识', dataIndex: 'appId', key: 'appId' },
     {
-      title: '状态',
-      dataIndex: 'enabledStatus',
-      key: 'enabledStatus',
+      title: '服务段编码', dataIndex: 'code', key: 'code',
+      render: (code: string) => <Tag color="geekblue">{code}</Tag>,
+    },
+    { title: '应用名称', dataIndex: 'name', key: 'name' },
+    {
+      title: '状态', dataIndex: 'status', key: 'status',
       render: (status: string) => status === 'enabled'
         ? <Tag icon={<CheckCircleOutlined />}>启用</Tag>
         : <Tag icon={<StopOutlined />}>禁用</Tag>,
     },
+    { title: '创建时间', dataIndex: 'createTime', key: 'createTime', render: formatDateTime },
+    { title: '修改时间', dataIndex: 'updateTime', key: 'updateTime', render: formatDateTime },
     {
-      title: '操作',
-      key: 'action',
+      title: '操作', key: 'action',
       render: (_: unknown, record: Application) => (
         <Flex gap={0}>
           <Button type="link" onClick={() => navigate(`/application_management/edit_application/${record.id}`)}>
@@ -67,7 +70,7 @@ export default function ApplicationListPage() {
     <ListPageShell<Application>
       columns={columns}
       tableQuery={tableQuery}
-      searchPlaceholder="搜索名称或编码"
+      searchPlaceholder="搜索应用名称"
       keyword={searchParams.get('keyword') ?? ''}
       onSearch={tableQuery.setKeyword}
       emptyDescription="暂无应用"

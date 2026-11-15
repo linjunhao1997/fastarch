@@ -9,6 +9,7 @@ import type {
   CreateAccessCredentialResponse,
   CreateAccountRequest,
   CreateApplicationRequest,
+  CreateApplicationResponse,
   CreateDictItemRequest,
   CreateDictTypeRequest,
   CreateMenuRequest,
@@ -20,6 +21,7 @@ import type {
   ListDictTypesResponse,
   ListMenuTreeResponse,
   Menu,
+  MyProfileApplication,
   ResetAccountPasswordRequest,
   UpdateDictItemRequest,
   UpdateDictTypeRequest,
@@ -86,12 +88,25 @@ const buildListUrl = (baseUrl: string, currentPage: number, pageSize: number, ke
   return `${baseUrl}?${params.toString()}`;
 };
 
+export interface ListMyApplicationsResponse {
+  applications: MyProfileApplication[];
+}
+
 export const authApi = {
   login: (data: { identifier: string; password: string }) =>
     request<PasswordAuthResponse>('/authentication/password-auth', {
       method: 'POST',
       body: data,
       skipToken: true,
+    }),
+  /** 当前用户可进入的应用（admin 全量启用应用；其他按准入绑定） */
+  listMyApplications: () =>
+    request<ListMyApplicationsResponse>('/authentication/my-applications'),
+  /** 选择当前应用上下文：服务端写 jti→应用映射（切换不重签令牌） */
+  selectApplication: (applicationCode: string) =>
+    request<void>('/authentication/select-application', {
+      method: 'POST',
+      body: { applicationCode },
     }),
 };
 
@@ -136,14 +151,21 @@ export const accountApi = {
   updateRoles: (id: string, data: UpdateAccountRolesRequest) =>
     request<void>(`/account/accounts/${id}/roles`, { method: 'PATCH', body: data }),
   /** 管理员重置用户密码（无需旧密码；新密码 ≥8 位） */
+  /** 分配可进入应用：全量覆盖语义（空数组 = 清空准入） */
+  updateApplications: (id: string, applicationIds: string[]) =>
+    request<void>(`/account/accounts/${id}/applications`, {
+      method: 'PATCH',
+      body: { accountId: id, applicationIds },
+    }),
   resetPassword: (id: string, data: ResetAccountPasswordRequest) =>
     request<void>(`/account/accounts/${id}/reset-password`, { method: 'POST', body: data }),
   delete: (id: string) => request<void>(`/account/accounts/${id}`, { method: 'DELETE' }),
 };
 
 export const applicationApi = {
+  /** 创建响应一次性返回 secret 明文（服务端仅存 sha256 摘要） */
   create: (data: CreateApplicationRequest) =>
-    request<Application>('/application/applications', { method: 'POST', body: data }),
+    request<CreateApplicationResponse>('/application/applications', { method: 'POST', body: data }),
   get: (id: string) => request<Application>(`/application/applications/${id}`),
   list: (currentPage = 1, pageSize = 10, keyword = '') =>
     request<ListApplicationsResponse>(

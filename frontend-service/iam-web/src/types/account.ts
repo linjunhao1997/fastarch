@@ -7,6 +7,8 @@ export interface Account {
   /** 用户状态：enabled 启用 / disabled 禁用 */
   status: string;
   roleCodeList: string[];
+  /** 可进入的应用 id 集合（仅 GetAccount 详情回填，列表接口不返回） */
+  applicationIdList: string[];
   version: number;
   createdBy: string;
   updatedBy: string;
