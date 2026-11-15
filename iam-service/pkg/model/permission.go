@@ -6,7 +6,6 @@ import "time"
 // code 为点式权限码（服务.模块.操作，唯一授权词汇），type 取值 api 等词汇类别。
 // 删除策略: 基础架构型（物理删除 + 引用检查 + 审计日志）
 //
-//go:generate contrib gen_gorm_mysql_repository -m permission.go
 type Permission struct {
 	Id          int64     `gorm:"column:id;primaryKey"`
 	Code        string    `gorm:"column:code;size:64;uniqueIndex"`

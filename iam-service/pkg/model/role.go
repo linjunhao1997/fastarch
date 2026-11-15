@@ -8,7 +8,6 @@ const RoleAdmin = "admin"
 // status 取值 enabled/disabled；与权限、菜单经关联表绑定。
 // 删除策略: 基础架构型（物理删除 + 引用检查 + 审计日志）
 //
-//go:generate contrib gen_gorm_mysql_repository -m role.go
 type Role struct {
 	Id             int64         `gorm:"column:id;primaryKey"`
 	Code           string        `gorm:"column:code;size:64;uniqueIndex"`

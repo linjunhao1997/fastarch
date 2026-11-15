@@ -7,7 +7,6 @@ import "time"
 // 审计字段 created_by/updated_by 为 varchar（记录操作者账号 id 字符串）。
 // 删除策略: 基础架构型（物理删除 + 引用检查 + 审计日志）
 //
-//go:generate contrib gen_gorm_mysql_repository -m user.go
 type User struct {
 	Id           int64     `gorm:"column:id;primaryKey"`
 	Username     string    `gorm:"column:username;size:64;uniqueIndex"`

@@ -6,7 +6,6 @@ import "time"
 // app_id 唯一应用标识，secret_hash 为应用密钥摘要（AK/SK 双轨的应用级凭证）。
 // 删除策略: 基础架构型（物理删除 + 引用检查 + 审计日志）
 //
-//go:generate contrib gen_gorm_mysql_repository -m application.go
 type Application struct {
 	Id         int64     `gorm:"column:id;primaryKey"`
 	AppId      string    `gorm:"column:app_id;size:64;uniqueIndex"`

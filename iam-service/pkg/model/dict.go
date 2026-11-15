@@ -5,7 +5,6 @@ import "time"
 // DictType 字典类型（t_dict_type）：code 唯一业务码，字典项经 type_id 挂载。
 // 删除策略: 基础架构型（物理删除 + 引用检查 + 审计日志）
 //
-//go:generate contrib gen_gorm_mysql_repository -m dict.go
 type DictType struct {
 	Id         int64     `gorm:"column:id;primaryKey"`
 	Code       string    `gorm:"column:code;size:64;uniqueIndex"`

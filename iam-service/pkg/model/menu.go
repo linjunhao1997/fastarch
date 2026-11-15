@@ -7,7 +7,6 @@ import "time"
 // 或角色-菜单绑定决定展示。
 // 删除策略: 基础架构型（物理删除 + 引用检查 + 审计日志）
 //
-//go:generate contrib gen_gorm_mysql_repository -m menu.go
 type Menu struct {
 	Id             int64     `gorm:"column:id;primaryKey"`
 	ParentId       int64     `gorm:"column:parent_id;index;default:0"`
