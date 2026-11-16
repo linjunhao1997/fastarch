@@ -445,15 +445,36 @@
           "format": "date-time",
           "title": "修改时间"
         },
-        "applicationIdList": {
+        "applications": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "object",
+            "$ref": "#/definitions/v1AccountApplication"
           },
-          "title": "可进入的应用 id 集合（只读回传，string 编码；仅 GetAccount 填充，列表不回填）"
+          "title": "可进入的应用清单（只读回传；GetAccount 与 ListAccounts 均回填，含展示字段，\n前端直接渲染，无需二次查询应用目录）"
         }
       },
       "title": "用户信息（t_user 语义；不含密码摘要等敏感字段，宪法 XII）"
+    },
+    "v1AccountApplication": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "code": {
+          "type": "string",
+          "title": "服务段命名空间（iam/order…）"
+        },
+        "name": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "title": "enabled / disabled"
+        }
+      },
+      "title": "准入应用摘要（用户详情/列表展示用；不含 app_id/密钥等机器字段，宪法 XII）"
     },
     "v1CreateAccountRequest": {
       "type": "object",

@@ -15,7 +15,7 @@ interface AssignApplicationsModalProps {
 
 /**
  * 分配用户可进入的应用（多应用裁决 #8）：全量覆盖语义。
- * 已绑定清单从 GetAccount 详情读取（列表接口不回填 applicationIdList）。
+ * 已绑定清单从 GetAccount 详情读取（以详情为准，列表回填仅供展示）。
  */
 export function AssignApplicationsModal({ open, account, onClose, onSuccess }: AssignApplicationsModalProps) {
   const [applications, setApplications] = useState<Application[]>([]);
@@ -32,7 +32,7 @@ export function AssignApplicationsModal({ open, account, onClose, onSuccess }: A
       .then(([appsResponse, detail]) => {
         if (!isMounted) return;
         setApplications(appsResponse.applications);
-        setSelectedIds(detail.applicationIdList ?? []);
+        setSelectedIds(detail.applications?.map((app) => app.id) ?? []);
       })
       .catch((error) => {
         if (isMounted) showNotification(error, '获取应用/用户信息失败');

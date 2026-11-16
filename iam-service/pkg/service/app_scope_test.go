@@ -311,8 +311,8 @@ func TestUpdateAccountApplications(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetAccount() error = %v", err)
 	}
-	if len(got.ApplicationIdList) != 0 {
-		t.Fatalf("initial ApplicationIdList = %v, want empty", got.ApplicationIdList)
+	if len(got.Applications) != 0 {
+		t.Fatalf("initial Applications = %v, want empty", got.Applications)
 	}
 	// 全量覆盖分配两个应用
 	_, err = svc.UpdateAccountApplications(ctx, &iam_v1.UpdateAccountApplicationsRequest{
@@ -322,8 +322,8 @@ func TestUpdateAccountApplications(t *testing.T) {
 		t.Fatalf("UpdateAccountApplications() error = %v", err)
 	}
 	got, _ = svc.GetAccount(ctx, &common_v1.GetRequest{Id: user.Id})
-	if len(got.ApplicationIdList) != 2 {
-		t.Fatalf("ApplicationIdList = %v, want 2 apps", got.ApplicationIdList)
+	if len(got.Applications) != 2 {
+		t.Fatalf("Applications = %v, want 2 apps", got.Applications)
 	}
 	// 覆盖为单个（差集删除生效）
 	_, err = svc.UpdateAccountApplications(ctx, &iam_v1.UpdateAccountApplicationsRequest{
@@ -333,8 +333,8 @@ func TestUpdateAccountApplications(t *testing.T) {
 		t.Fatalf("UpdateAccountApplications(shrink) error = %v", err)
 	}
 	got, _ = svc.GetAccount(ctx, &common_v1.GetRequest{Id: user.Id})
-	if len(got.ApplicationIdList) != 1 || got.ApplicationIdList[0] != "901" {
-		t.Fatalf("ApplicationIdList = %v, want [901]", got.ApplicationIdList)
+	if len(got.Applications) != 1 || got.Applications[0].Id != "901" {
+		t.Fatalf("Applications = %v, want [901]", got.Applications)
 	}
 	// 清空
 	_, err = svc.UpdateAccountApplications(ctx, &iam_v1.UpdateAccountApplicationsRequest{
@@ -344,8 +344,8 @@ func TestUpdateAccountApplications(t *testing.T) {
 		t.Fatalf("UpdateAccountApplications(clear) error = %v", err)
 	}
 	got, _ = svc.GetAccount(ctx, &common_v1.GetRequest{Id: user.Id})
-	if len(got.ApplicationIdList) != 0 {
-		t.Fatalf("ApplicationIdList = %v, want empty after clear", got.ApplicationIdList)
+	if len(got.Applications) != 0 {
+		t.Fatalf("Applications = %v, want empty after clear", got.Applications)
 	}
 	// 不存在的应用拒绝
 	_, err = svc.UpdateAccountApplications(ctx, &iam_v1.UpdateAccountApplicationsRequest{

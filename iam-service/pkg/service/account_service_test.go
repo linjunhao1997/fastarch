@@ -224,6 +224,57 @@ func TestListAccountsKeywordMatchesEmail(t *testing.T) {
 	}
 }
 
+// 列表批量回填准入应用摘要（含展示字段）：有准入的用户返回 id/code/name/status，
+// 无准入的返回空切片（非 nil）。
+func TestListAccountsBackfillsApplications(t *testing.T) {
+	db := setupAccountTestDB(t)
+	createTestUser(t, db, 1, "alpha", 0)
+	createTestUser(t, db, 2, "beta", 0)
+	now := time.Now()
+	for _, app := range []model.Application{
+		{Id: 101, AppId: "app-101", Code: "iam", Name: "IAM 控制台", Status: model.StatusEnabled, Version: 1, CreateTime: now, UpdateTime: now},
+		{Id: 102, AppId: "app-102", Code: "order", Name: "订单管理", Status: model.StatusEnabled, Version: 1, CreateTime: now, UpdateTime: now},
+	} {
+		if err := db.Create(&app).Error; err != nil {
+			t.Fatalf("create application: %v", err)
+		}
+	}
+	for _, appId := range []int64{101, 102} {
+		if err := db.Create(&model.RUserApplication{UserId: 1, ApplicationId: appId}).Error; err != nil {
+			t.Fatalf("create user application binding: %v", err)
+		}
+	}
+	service := NewAccountService(db, nil)
+
+	response, err := service.ListAccounts(context.Background(), &iam_v1.ListAccountsRequest{})
+	if err != nil {
+		t.Fatalf("ListAccounts() error = %v", err)
+	}
+	if len(response.Accounts) != 2 {
+		t.Fatalf("ListAccounts() returned %d accounts, want 2", len(response.Accounts))
+	}
+	alpha, beta := response.Accounts[0], response.Accounts[1]
+	if alpha.Username != "alpha" || beta.Username != "beta" {
+		t.Fatalf("ListAccounts() order = [%s %s], want [alpha beta]", alpha.Username, beta.Username)
+	}
+	if len(alpha.Applications) != 2 {
+		t.Fatalf("alpha.Applications = %v, want 2 entries", alpha.Applications)
+	}
+	byId := make(map[string]*iam_v1.AccountApplication, 2)
+	for _, app := range alpha.Applications {
+		byId[app.Id] = app
+	}
+	if app := byId["101"]; app == nil || app.Code != "iam" || app.Name != "IAM 控制台" || app.Status != model.StatusEnabled {
+		t.Fatalf("alpha.Applications[101] = %v, want iam/IAM 控制台/enabled", byId["101"])
+	}
+	if app := byId["102"]; app == nil || app.Code != "order" || app.Name != "订单管理" {
+		t.Fatalf("alpha.Applications[102] = %v, want order/订单管理", byId["102"])
+	}
+	if beta.Applications == nil || len(beta.Applications) != 0 {
+		t.Fatalf("beta.Applications = %v, want empty non-nil slice", beta.Applications)
+	}
+}
+
 func TestUpdateAccount(t *testing.T) {
 	tests := []struct {
 		name      string

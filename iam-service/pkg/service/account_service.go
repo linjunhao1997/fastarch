@@ -69,19 +69,27 @@ func (service *AccountService) GetAccount(ctx context.Context, request *common_v
 		return nil, err
 	}
 	account := accountToPb(res)
-	// 可进入应用清单（多应用裁决 #8）：仅 GetAccount 回填，列表不回填避免 N+1
-	var appIds []int64
-	err = service.db.WithContext(ctx).Model(model.RUserApplication{}).
-		Where(model.RUserApplicationColumnUserId, res.Id).
-		Pluck(model.RUserApplicationColumnApplicationId, &appIds).Error
+	// 可进入应用清单（多应用裁决 #8）：详情/列表统一经批量查询回填（含展示字段）
+	appsByUser, err := loadUsersApplications(ctx, service.db, []model.User{res})
 	if err != nil {
 		return nil, err
 	}
-	account.ApplicationIdList = make([]string, 0, len(appIds))
-	for _, id := range appIds {
-		account.ApplicationIdList = append(account.ApplicationIdList, cast.ToString(id))
-	}
+	account.Applications = applicationsToPb(appsByUser[res.Id])
 	return account, nil
+}
+
+// applicationsToPb 准入应用模型转摘要 pb（仅展示字段，不含机器字段）。
+func applicationsToPb(apps []*model.Application) []*iam_v1.AccountApplication {
+	list := make([]*iam_v1.AccountApplication, 0, len(apps))
+	for _, app := range apps {
+		list = append(list, &iam_v1.AccountApplication{
+			Id:     cast.ToString(app.Id),
+			Code:   app.Code,
+			Name:   app.Name,
+			Status: app.Status,
+		})
+	}
+	return list
 }
 
 // UpdateAccountApplications 分配用户可进入的应用（多应用裁决 #8）：
@@ -203,9 +211,16 @@ func (service *AccountService) ListAccounts(ctx context.Context, request *iam_v1
 	if err := loadUsersRoles(ctx, service.db, res); err != nil {
 		return nil, err
 	}
+	// 准入应用清单批量回填（绑定 + 应用两次 IN 查询按用户分组，避免 N+1）
+	appsByUser, err := loadUsersApplications(ctx, service.db, res)
+	if err != nil {
+		return nil, err
+	}
 	users := make([]*iam_v1.Account, 0, len(res))
 	for _, v := range res {
-		users = append(users, accountToPb(v))
+		account := accountToPb(v)
+		account.Applications = applicationsToPb(appsByUser[v.Id])
+		users = append(users, account)
 	}
 	return &iam_v1.ListAccountsResponse{
 		Accounts: users,

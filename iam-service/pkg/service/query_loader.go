@@ -9,6 +9,58 @@ import (
 	"gorm.io/gorm"
 )
 
+// loadUsersApplications 批量查询用户准入的应用（t_r_user_application → t_application），
+// 按用户分组返回应用模型；无准入的用户得到空切片（非 nil）。
+// 两次 IN 查询（绑定 + 应用行），供详情/列表回填避免 N+1；
+// 绑定指向已删除应用时跳过（fail-safe，不产出幽灵应用）。
+func loadUsersApplications(ctx context.Context, db *gorm.DB, users []model.User) (map[int64][]*model.Application, error) {
+	appsByUser := make(map[int64][]*model.Application, len(users))
+	if len(users) == 0 {
+		return appsByUser, nil
+	}
+	userIds := make([]int64, 0, len(users))
+	for _, user := range users {
+		userIds = append(userIds, user.Id)
+		appsByUser[user.Id] = []*model.Application{}
+	}
+	var bindings []model.RUserApplication
+	if err := db.WithContext(ctx).
+		Where(model.RUserApplicationColumnUserId+" IN ?", userIds).
+		Select(model.RUserApplicationFields).
+		Find(&bindings).Error; err != nil {
+		return nil, err
+	}
+	if len(bindings) == 0 {
+		return appsByUser, nil
+	}
+	appIds := make([]int64, 0, len(bindings))
+	seen := make(map[int64]struct{}, len(bindings))
+	for _, binding := range bindings {
+		if _, exists := seen[binding.ApplicationId]; exists {
+			continue
+		}
+		seen[binding.ApplicationId] = struct{}{}
+		appIds = append(appIds, binding.ApplicationId)
+	}
+	var apps []*model.Application
+	if err := db.WithContext(ctx).
+		Where(model.ApplicationColumnId+" IN ?", appIds).
+		Select(model.ApplicationFields).
+		Find(&apps).Error; err != nil {
+		return nil, err
+	}
+	appById := make(map[int64]*model.Application, len(apps))
+	for _, app := range apps {
+		appById[app.Id] = app
+	}
+	for _, binding := range bindings {
+		if app, exists := appById[binding.ApplicationId]; exists {
+			appsByUser[binding.UserId] = append(appsByUser[binding.UserId], app)
+		}
+	}
+	return appsByUser, nil
+}
+
 // loadUserRoles 加载用户的角色列表（经 t_r_user_role 关联，按绑定顺序）。
 func loadUserRoles(ctx context.Context, db *gorm.DB, user *model.User) error {
 	var bindings []model.RUserRole

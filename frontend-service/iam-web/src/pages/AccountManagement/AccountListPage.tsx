@@ -10,7 +10,7 @@ import { EmptyState, ErrorState } from '../../components/states';
 import { useApiErrorNotification } from '../../hooks/useApiError';
 import { usePermissions } from '../../hooks/permission-context';
 import { useTableQuery } from '../../hooks/useTableQuery';
-import type { Account } from '../../types';
+import type { Account, AccountApplication } from '../../types';
 import { ACTIONS, buildSuccessMessage } from '../../types/copywriting';
 import { formatDateTime } from '../../utils/datetime';
 
@@ -50,6 +50,19 @@ export default function AccountListPage() {
       render: (roleCodeList: string[] | undefined) =>
         roleCodeList && roleCodeList.length > 0
           ? <Flex gap={4} wrap>{roleCodeList.map((code) => <Tag key={code}>{code}</Tag>)}</Flex>
+          : '—',
+    },
+    {
+      title: '准入应用',
+      dataIndex: 'applications',
+      key: 'applications',
+      render: (applications: AccountApplication[] | undefined) =>
+        applications && applications.length > 0
+          ? <Flex gap={4} wrap>{applications.map((app) => (
+              <Tag key={app.id} color="geekblue">
+                {app.status === 'enabled' ? `${app.name}（${app.code}）` : `${app.name}（${app.code}·已停用）`}
+              </Tag>
+            ))}</Flex>
           : '—',
     },
     { title: '创建人', dataIndex: 'createdBy', key: 'createdBy' },

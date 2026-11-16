@@ -1,4 +1,14 @@
 /** 用户（t_user 语义；username 为唯一登录名，email 可空唯一） */
+/** 准入应用摘要（后端回填展示字段，前端直接渲染） */
+export interface AccountApplication {
+  id: string;
+  /** 服务段命名空间（iam/order…） */
+  code: string;
+  name: string;
+  /** enabled / disabled */
+  status: string;
+}
+
 export interface Account {
   id: string;
   username: string;
@@ -7,8 +17,8 @@ export interface Account {
   /** 用户状态：enabled 启用 / disabled 禁用 */
   status: string;
   roleCodeList: string[];
-  /** 可进入的应用 id 集合（仅 GetAccount 详情回填，列表接口不返回） */
-  applicationIdList: string[];
+  /** 可进入的应用清单（GetAccount 详情与列表接口均回填，含展示字段，直接渲染） */
+  applications: AccountApplication[];
   version: number;
   createdBy: string;
   updatedBy: string;
