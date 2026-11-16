@@ -424,9 +424,15 @@ func (s *MenuService) DeleteMenu(ctx context.Context, request *iam_v1.DeleteMenu
 }
 
 // UpdateRoleMenus 角色绑定菜单全量覆盖：以 menu_ids 为目标集合做整体替换
-// （差集增量写，避免清空重写引发无谓行变更）。角色存在性经宿主钩子校验；
+// （差集增量写，避免清空重写引发无谓行变更）。限当前应用上下文：目标菜单
+// 必须全部归属当前应用（跨应用按不存在处理），差集只增删当前应用内的绑定，
+// 其他应用的绑定不受影响。角色存在性经宿主钩子校验；
 // 变更后回调 OnRoleMenusChanged（宿主失效权限快照）。
 func (s *MenuService) UpdateRoleMenus(ctx context.Context, request *iam_v1.UpdateRoleMenusRequest) (*emptypb.Empty, error) {
+	appId, err := s.cfg.ApplicationIdFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
 	menuIds := make([]int64, 0, len(request.MenuIds))
 	seen := make(map[int64]struct{}, len(request.MenuIds))
 	for _, raw := range request.MenuIds {
@@ -441,11 +447,12 @@ func (s *MenuService) UpdateRoleMenus(ctx context.Context, request *iam_v1.Updat
 		menuIds = append(menuIds, id)
 	}
 
-	// 菜单必须全部存在（避免静默丢弃非法 id）
+	// 菜单必须全部存在且归属当前应用（避免静默丢弃非法 id / 跨应用绑定）
 	if len(menuIds) > 0 {
 		var count int64
 		err := s.cfg.DB.WithContext(ctx).Model(model.Menu{}).
 			Where(model.MenuColumnId+" IN ?", menuIds).
+			Where(model.MenuColumnApplicationId, appId).
 			Count(&count).Error
 		if err != nil {
 			slog.Warn("check menus for role binding failed", "role_id", request.RoleId, "error", err)
@@ -466,7 +473,7 @@ func (s *MenuService) UpdateRoleMenus(ctx context.Context, request *iam_v1.Updat
 		return nil, ErrRoleNotFound
 	}
 
-	boundMenuIds, err := s.listRoleMenuIds(ctx, request.RoleId)
+	boundMenuIds, err := s.listRoleMenuIds(ctx, request.RoleId, appId)
 	if err != nil {
 		return nil, err
 	}
@@ -527,27 +534,45 @@ func (s *MenuService) UpdateRoleMenus(ctx context.Context, request *iam_v1.Updat
 // ErrRoleNotFound 角色不存在（宿主钩子判定）。
 var ErrRoleNotFound = bizerr.NewErrorWithCode("1001010", codes.InvalidArgument, errors.New("角色不存在"))
 
-// listRoleMenuIds 查询角色已绑定的菜单 id 集合。
-func (s *MenuService) listRoleMenuIds(ctx context.Context, roleId int64) (map[int64]struct{}, error) {
-	var bindings []model.RRoleMenu
+// listRoleMenuIds 查询角色已绑定的菜单 id 集合，限当前应用上下文。
+// 关联表无应用列，归属经菜单行的 application_id 过滤（绑定引用检查保证
+// 被绑菜单必然存在）；跨应用绑定不进入集合，差集计算才不会误删其他应用绑定。
+func (s *MenuService) listRoleMenuIds(ctx context.Context, roleId int64, appId int64) (map[int64]struct{}, error) {
+	var menuIds []int64
 	err := s.cfg.DB.WithContext(ctx).Model(model.RRoleMenu{}).
-		Select(model.RRoleMenuFields).
 		Where(model.RRoleMenuColumnRoleId, roleId).
-		Find(&bindings).Error
+		Distinct().
+		Pluck(model.RRoleMenuColumnMenuId, &menuIds).Error
 	if err != nil {
 		slog.Warn("list role menus failed", "role_id", roleId, "error", err)
 		return nil, err
 	}
-	bound := make(map[int64]struct{}, len(bindings))
-	for _, binding := range bindings {
-		bound[binding.MenuId] = struct{}{}
+	bound := make(map[int64]struct{}, len(menuIds))
+	if len(menuIds) == 0 {
+		return bound, nil
+	}
+	var appMenuIds []int64
+	err = s.cfg.DB.WithContext(ctx).Model(model.Menu{}).
+		Where(model.MenuColumnId+" IN ?", menuIds).
+		Where(model.MenuColumnApplicationId, appId).
+		Pluck(model.MenuColumnId, &appMenuIds).Error
+	if err != nil {
+		slog.Warn("filter role menus by application failed", "role_id", roleId, "application_id", appId, "error", err)
+		return nil, err
+	}
+	for _, id := range appMenuIds {
+		bound[id] = struct{}{}
 	}
 	return bound, nil
 }
 
-// ListRoleMenus 查询角色绑定的菜单 id 集合（编辑角色页回显用）。
+// ListRoleMenus 查询角色绑定的菜单 id 集合（编辑角色页回显用，限当前应用上下文）。
 func (s *MenuService) ListRoleMenus(ctx context.Context, request *iam_v1.ListRoleMenusRequest) (*iam_v1.ListRoleMenusResponse, error) {
-	bound, err := s.listRoleMenuIds(ctx, request.RoleId)
+	appId, err := s.cfg.ApplicationIdFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	bound, err := s.listRoleMenuIds(ctx, request.RoleId, appId)
 	if err != nil {
 		return nil, err
 	}
