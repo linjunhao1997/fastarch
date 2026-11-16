@@ -3,7 +3,8 @@ package model
 import "time"
 
 // Menu 菜单模型（t_menu）：通用菜单树能力（ADR 0001，每服务嵌入自持）。
-// permission_code 单列绑定权限码（可空）；展示结构归管理员维护，授权判定归宿主。
+// permission_code 为展示所需权限码（可空）：前端展示门槛，用户持有才显示该菜单，
+// 不授予权限（ADR 0002，菜单回归纯展示配置，授权仅角色直授码）。
 // 归属应用 application_id：多应用数据隔离（应用上下文由宿主 token 承载）。
 // 删除策略: 基础架构型（物理删除 + 引用检查 + 审计日志）
 type Menu struct {
@@ -36,7 +37,7 @@ var MenuFields = []string{
 
 // RRoleMenu 角色-菜单关联表（t_r_role_menu）：无独立审计字段，
 // 绑定变更审计记录在角色操作日志中。角色概念属宿主，本表只存绑定关系；
-// 宿主经绑定关系做页面码授权推导（勾菜单=授码）。
+// 绑定仅决定菜单可见性，不授予权限（ADR 0002）。
 // 删除策略: 基础架构型关联表（物理删除 + 引用检查）
 type RRoleMenu struct {
 	Id     int64 `gorm:"column:id;primaryKey"`

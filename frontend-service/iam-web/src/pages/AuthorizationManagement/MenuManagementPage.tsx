@@ -168,7 +168,7 @@ export default function MenuManagementPage() {
     { title: '路由路径', dataIndex: 'path', key: 'path', render: (value: string) => value || '—' },
     { title: '排序', dataIndex: 'sort', key: 'sort', width: 80 },
     {
-      title: '权限码', dataIndex: 'permissionCode', key: 'permissionCode',
+      title: '展示所需码', dataIndex: 'permissionCode', key: 'permissionCode',
       render: (code: string) => code ? <Tag>{code}</Tag> : '—',
     },
     {
@@ -253,11 +253,11 @@ export default function MenuManagementPage() {
             <InputNumber min={0} style={{ width: '100%' }} />
           </Form.Item>
           <Form.Item
-            label="权限码"
+            label="展示所需权限码"
             name="permissionCode"
-            tooltip="可空 = 绑定该菜单的角色均可见；绑定后按钮级显隐由前端按码交集判定"
+            tooltip="可空 = 绑定该菜单的角色均可见；设置后仅持有此码的用户可见该菜单。前端展示门槛，不授予权限（授权请在角色页直授码）"
           >
-            <Select options={permissionCodeOptions} allowClear showSearch placeholder="绑定权限码（可留空）" loading={permissionQuery.isPending} />
+            <Select options={permissionCodeOptions} allowClear showSearch placeholder="展示所需权限码（可留空）" loading={permissionQuery.isPending} />
           </Form.Item>
           <Form.Item label="状态" name="status" rules={[{ required: true }]}>
             <Radio.Group>

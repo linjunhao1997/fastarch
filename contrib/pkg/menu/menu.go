@@ -20,7 +20,8 @@ import (
 
 // 通用菜单能力（ADR 0001）：每服务嵌入自持，契约共享（iam.v1.MenuService）。
 // 宿主差异经 Config 钩子注入：应用上下文、账号/管理员身份、角色绑定、
-// 权限码校验（授权词汇规则归宿主）、快照失效回调。
+// 权限码校验（授权词汇规则归宿主）。菜单不参与授权（ADR 0002）：
+// 角色绑定仅决定可见性，permission_code 为前端展示门槛，绑定变更不产码。
 
 // 业务错误（业务码与既有客户端约定保持不变）。
 // 权限码格式/服务段等授权词汇规则归宿主（ValidatePermissionCode 钩子），
@@ -46,10 +47,9 @@ type Config struct {
 	RoleIdsForAccount func(ctx context.Context, accountId int64) ([]int64, error)
 	// RoleExists 校验角色存在（角色绑定菜单前）；false = 不存在。
 	RoleExists func(ctx context.Context, roleId int64) (bool, error)
-	// ValidatePermissionCode 可选：校验菜单绑定的权限码（格式/服务段隔离等宿主规则）。
+	// ValidatePermissionCode 可选：校验菜单展示码（格式/服务段隔离等宿主规则）。
+	// 码语义为前端展示门槛（用户持有才显示该菜单），不授予权限（ADR 0002）。
 	ValidatePermissionCode func(ctx context.Context, appId int64, code string) error
-	// OnRoleMenusChanged 可选：角色-菜单绑定变更后回调（宿主失效权限快照）。
-	OnRoleMenusChanged func(ctx context.Context, roleId int64)
 }
 
 type MenuService struct {
@@ -426,8 +426,8 @@ func (s *MenuService) DeleteMenu(ctx context.Context, request *iam_v1.DeleteMenu
 // UpdateRoleMenus 角色绑定菜单全量覆盖：以 menu_ids 为目标集合做整体替换
 // （差集增量写，避免清空重写引发无谓行变更）。限当前应用上下文：目标菜单
 // 必须全部归属当前应用（跨应用按不存在处理），差集只增删当前应用内的绑定，
-// 其他应用的绑定不受影响。角色存在性经宿主钩子校验；
-// 变更后回调 OnRoleMenusChanged（宿主失效权限快照）。
+// 其他应用的绑定不受影响。角色存在性经宿主钩子校验。
+// 绑定仅决定菜单可见性，不授予权限（ADR 0002）。
 func (s *MenuService) UpdateRoleMenus(ctx context.Context, request *iam_v1.UpdateRoleMenusRequest) (*emptypb.Empty, error) {
 	appId, err := s.cfg.ApplicationIdFromContext(ctx)
 	if err != nil {
@@ -523,10 +523,6 @@ func (s *MenuService) UpdateRoleMenus(ctx context.Context, request *iam_v1.Updat
 			"menu_ids", request.MenuIds,
 			"error", err)
 		return nil, err
-	}
-	// 菜单绑定参与授权推导：绑定变更后回调宿主失效权限快照
-	if s.cfg.OnRoleMenusChanged != nil {
-		s.cfg.OnRoleMenusChanged(ctx, request.RoleId)
 	}
 	return &emptypb.Empty{}, nil
 }

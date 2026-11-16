@@ -62,6 +62,7 @@ export default function IndexPage() {
   const [collapsed, setCollapsed] = useState(false);
   const navigate = useNavigate();
   const { applications, currentApplicationId, setCurrentApplicationId, loading: contextLoading } = useApplicationContext();
+  const { permissionCodes } = usePermissions();
 
   // 菜单树：服务端按角色菜单绑定（t_r_role_menu）过滤下发，管理员全量；
   // 不再依赖应用上下文（重构 #6：应用与用户解绑）。
@@ -76,10 +77,11 @@ export default function IndexPage() {
 
   // 菜单由服务端菜单树直接渲染（重构 #6）：层级/名称/图标/顺序取自 t_menu，
   // 跳转按 menu.path 匹配路由表；未知 path 跳过并告警。
+  // 展示门槛（ADR 0002）：再按菜单 permission_code 与用户持有码二次过滤显隐。
   const routeMeta = useMemo(() => collectRouteMeta(routes), []);
   const menuItems = useMemo(
-    () => buildMenuItemsFromTree(menuTreeQuery.data?.roots ?? [], routeMeta),
-    [menuTreeQuery.data, routeMeta],
+    () => buildMenuItemsFromTree(menuTreeQuery.data?.roots ?? [], routeMeta, permissionCodes),
+    [menuTreeQuery.data, routeMeta, permissionCodes],
   );
 
   // 选中态：取当前 pathname 的最长已注册菜单 path 前缀（create/edit 等子页高亮列表项）

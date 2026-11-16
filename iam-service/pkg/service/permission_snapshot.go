@@ -28,13 +28,12 @@ func NewPermissionSnapshotLoader(db *gorm.DB) auth.PermissionLoader {
 	}
 }
 
-// collectUserPermissionCodes 计算用户绑定角色的权限码并集。
-// 来源两条（重构 #6 裁决：菜单授权推导）：
-//  1. 角色直授权的启用权限码（t_r_role_permission）；
-//  2. 角色绑定菜单的 permission_code（t_r_role_menu → t_menu），
-//     即勾选菜单自动授予该页查看码，解绑自动收回。
+// collectUserPermissionCodes 计算用户绑定角色的直授权限码并集。
+// 唯一来源：角色直授权的启用权限码（t_r_role_permission）。
 //
-// 仅统计启用角色下的启用权限/启用菜单；停用不产码；菜单空码（分组节点）跳过。
+// 菜单不再产码（2026-11-17 裁决 B，ADR 0002：菜单回归纯展示配置，
+// 授权仅角色直授；t_menu.permission_code 语义为前端展示门槛，不参与授权）。
+// 仅统计启用角色下的启用权限；停用角色/停用权限不产码。
 func collectUserPermissionCodes(user model.User) []string {
 	codeDict := make(map[string]struct{})
 	for _, role := range user.RoleList {
@@ -46,12 +45,6 @@ func collectUserPermissionCodes(user model.User) []string {
 				continue
 			}
 			codeDict[permission.Code] = struct{}{}
-		}
-		for _, menu := range role.MenuList {
-			if menu.Status != model.StatusEnabled || menu.PermissionCode == "" {
-				continue
-			}
-			codeDict[menu.PermissionCode] = struct{}{}
 		}
 	}
 	codes := make([]string, 0, len(codeDict))

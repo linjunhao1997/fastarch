@@ -270,19 +270,25 @@ export const collectRouteMeta = (routeList: RouteObject[]): Map<string, RouteMet
  * 以服务端菜单树（my-menu-tree，t_menu 语义）直接构建左侧菜单：
  * 层级/名称/图标/顺序均取自服务端（结构与展示归管理员维护），
  * 跳转按 menu.path 匹配路由表；未知 path 告警并跳过（页面未开发时隐藏入口）。
+ *
+ * 展示门槛（ADR 0002）：服务端已按角色绑定过滤基础可见性；此处再按菜单声明的
+ * permission_code 与用户持有码（heldCodes）二次过滤——声明了码且用户未持有则隐藏。
+ * 纯 UX 显隐，非安全边界（API 访问仍由服务端 fail-closed 判码）。
  */
 export const buildMenuItemsFromTree = (
   nodes: MenuTreeNode[],
   routeMeta: ReadonlyMap<string, RouteMeta>,
+  heldCodes: ReadonlySet<string>,
 ): MenuItem[] => {
   const items: MenuItem[] = [];
   for (const node of nodes) {
     const icon = MENU_ICONS[node.menu.icon];
     if (node.children.length > 0) {
-      const children = buildMenuItemsFromTree(node.children, routeMeta);
+      const children = buildMenuItemsFromTree(node.children, routeMeta, heldCodes);
       if (children.length === 0) continue;
       items.push({ key: `dir-${node.menu.id}`, icon, label: node.menu.name, children });
     } else {
+      if (node.menu.permissionCode && !heldCodes.has(node.menu.permissionCode)) continue;
       const meta = routeMeta.get(node.menu.path);
       if (!meta) {
         console.warn(`[menu] 菜单 "${node.menu.name}" 的路径 "${node.menu.path}" 在路由表中无对应页面，已跳过`);

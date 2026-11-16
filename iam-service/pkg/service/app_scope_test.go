@@ -59,7 +59,7 @@ func createTestMenu(t *testing.T, db *gorm.DB, id int64, appId int64, name strin
 
 func TestAppScopedRpcRequiresApplicationContext(t *testing.T) {
 	db := setupAuthorizationTestDB(t)
-	menuSvc := NewMenuService(db, nil)
+	menuSvc := NewMenuService(db)
 	dictSvc := NewDictService(db)
 	authzSvc := NewAuthorizationService(db, nil)
 	bare := auth.WithAccountId(context.Background(), 1)
@@ -86,7 +86,7 @@ func TestMenuTreeScopedByApplication(t *testing.T) {
 	createTestApp(t, db, testAppIdOrder, "order", model.StatusEnabled)
 	createTestMenu(t, db, 1, testAppIdIam, "iam-menu", "")
 	createTestMenu(t, db, 2, testAppIdOrder, "order-menu", "")
-	svc := NewMenuService(db, nil)
+	svc := NewMenuService(db)
 
 	resp, err := svc.ListMenuTree(ctxWithApp(testAppIdIam), &emptypb.Empty{})
 	if err != nil {
@@ -110,7 +110,7 @@ func TestMenuTreeScopedByApplication(t *testing.T) {
 func TestCreateMenuRejectsForeignSegmentCode(t *testing.T) {
 	db := setupAuthorizationTestDB(t)
 	createTestApp(t, db, testAppIdIam, "iam", model.StatusEnabled)
-	svc := NewMenuService(db, nil)
+	svc := NewMenuService(db)
 
 	_, err := svc.CreateMenu(ctxWithApp(testAppIdIam), &iam_v1.CreateMenuRequest{
 		Name: "越权菜单", PermissionCode: "order.menu.list",

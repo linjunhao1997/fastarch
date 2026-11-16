@@ -728,9 +728,10 @@ func TestAccountAuditFieldsWithoutAuthContext(t *testing.T) {
 	}
 }
 
-// TestPermissionSnapshotDerivesCodesFromMenus 验证 #6 裁决：角色绑定菜单的
-// permission_code 自动并入权限快照（启用菜单产码；停用菜单与空码分组节点不产码）。
-func TestPermissionSnapshotDerivesCodesFromMenus(t *testing.T) {
+// TestPermissionSnapshotDoesNotDeriveFromMenus 验证 ADR 0002（裁决 B）：
+// 菜单回归纯展示配置，角色绑定菜单的 permission_code 不再并入权限快照；
+// 快照仅取角色直授码。本例角色无任何直授权，故快照为空（即便绑了带码启用菜单）。
+func TestPermissionSnapshotDoesNotDeriveFromMenus(t *testing.T) {
 	db := setupAccountTestDB(t)
 	user := createTestUser(t, db, 7, "menu-only", 1)
 	role := model.Role{
@@ -762,17 +763,7 @@ func TestPermissionSnapshotDerivesCodesFromMenus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("snapshot loader error = %v", err)
 	}
-	got := make(map[string]struct{}, len(codes))
-	for _, code := range codes {
-		got[code] = struct{}{}
-	}
-	if _, ok := got["iam.role.list"]; !ok {
-		t.Fatalf("codes = %v, want contains iam.role.list (derived from enabled menu)", codes)
-	}
-	if _, ok := got["iam.menu.list"]; ok {
-		t.Fatalf("codes = %v, want NOT contains iam.menu.list (disabled menu must not grant)", codes)
-	}
-	if len(got) != 1 {
-		t.Fatalf("codes = %v, want exactly 1 derived code", codes)
+	if len(codes) != 0 {
+		t.Fatalf("codes = %v, want empty (menus must not grant codes; no direct grants exist)", codes)
 	}
 }

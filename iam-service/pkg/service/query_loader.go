@@ -185,50 +185,8 @@ func loadUserPermissionGraph(ctx context.Context, db *gorm.DB, user *model.User)
 			role.PermissionList = []*model.Permission{}
 		}
 	}
-
-	// 菜单授权推导（重构 #6 裁决）：批量加载角色绑定的菜单，
-	// 其 permission_code 在快照层并入权限码集合（停用菜单不产码，状态过滤在 collect）。
-	var menuBindings []contribmodel.RRoleMenu
-	if err := db.WithContext(ctx).
-		Where(contribmodel.RRoleMenuColumnRoleId+" IN ?", roleIds).
-		Select(contribmodel.RRoleMenuFields).
-		Find(&menuBindings).Error; err != nil {
-		return err
-	}
-	menusByRole := make(map[int64][]*contribmodel.Menu, len(user.RoleList))
-	if len(menuBindings) > 0 {
-		menuIds := make([]int64, 0, len(menuBindings))
-		menuIdSeen := make(map[int64]struct{}, len(menuBindings))
-		for _, binding := range menuBindings {
-			if _, exists := menuIdSeen[binding.MenuId]; exists {
-				continue
-			}
-			menuIdSeen[binding.MenuId] = struct{}{}
-			menuIds = append(menuIds, binding.MenuId)
-		}
-		var menus []*contribmodel.Menu
-		if err := db.WithContext(ctx).
-			Where(contribmodel.MenuColumnId+" IN ?", menuIds).
-			Select(contribmodel.MenuFields).
-			Find(&menus).Error; err != nil {
-			return err
-		}
-		menuById := make(map[int64]*contribmodel.Menu, len(menus))
-		for _, menu := range menus {
-			menuById[menu.Id] = menu
-		}
-		for _, binding := range menuBindings {
-			if menu, exists := menuById[binding.MenuId]; exists {
-				menusByRole[binding.RoleId] = append(menusByRole[binding.RoleId], menu)
-			}
-		}
-	}
-	for _, role := range user.RoleList {
-		role.MenuList = menusByRole[role.Id]
-		if role.MenuList == nil {
-			role.MenuList = []*contribmodel.Menu{}
-		}
-	}
+	// 菜单不再参与授权推导（ADR 0002）：快照仅取角色直授码，
+	// 故此处不加载角色绑定菜单（菜单可见性由 my-menu-tree 独立读取）。
 	return nil
 }
 
