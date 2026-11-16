@@ -7,7 +7,7 @@ export default function HomePage() {
   return (
     <Card>
       <Typography.Title level={4} style={{ marginTop: 0 }}>
-        欢迎使用 FastArch 身份认证平台
+        {currentApplication ? `欢迎使用${currentApplication.name}` : '欢迎使用'}
       </Typography.Title>
       <Typography.Paragraph type="secondary">
         当前应用：{currentApplication ? `${currentApplication.name}（${currentApplication.code}）` : '未选择'}

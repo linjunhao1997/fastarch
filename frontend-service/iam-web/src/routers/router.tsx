@@ -63,7 +63,6 @@ export const routes: RouteObject[] = [
   { path: '/login', element: withSuspense(<LoginPage />) },
   {
     path: '/',
-    handle: { label: '身份访问管理', breadcrumb: '身份访问管理' },
     element: withSuspense(<AuthWrapper><IndexPage /></AuthWrapper>),
     children: [
       {
