@@ -7,6 +7,7 @@ import type { TableColumnsType } from 'antd';
 import { CheckCircleOutlined, PlusOutlined, StopOutlined } from '@ant-design/icons';
 import { useSearchParams } from 'react-router';
 import { dictApi } from '../../api/iam';
+import { useApplicationContext } from '../../context/ApplicationContext';
 import { ListPageShell } from '../../components/ListPageShell';
 import { useConfirmDelete } from '../../components/ConfirmDelete';
 import { useApiErrorNotification } from '../../hooks/useApiError';
@@ -41,6 +42,7 @@ export default function DictManagementPage() {
   const showNotification = useApiErrorNotification();
   const confirmDelete = useConfirmDelete();
   const { isSubmitting, run } = useSubmitLock();
+  const { currentApplicationId } = useApplicationContext();
 
   const [typeForm] = Form.useForm<DictTypeFormValues>();
   const [editingType, setEditingType] = useState<{ mode: 'create' | 'edit'; type?: DictType } | null>(null);
@@ -56,7 +58,8 @@ export default function DictManagementPage() {
   });
 
   const itemsQuery = useQuery({
-    queryKey: ['dict-items', drawerType?.id],
+    // 缓存按应用隔离（#9），与 useTableQuery 同策略
+    queryKey: ['dict-items', currentApplicationId, drawerType?.id],
     queryFn: () => dictApi.listItems(drawerType?.id ?? ''),
     enabled: drawerType !== null,
   });
@@ -96,7 +99,7 @@ export default function DictManagementPage() {
       message.success(buildSuccessMessage(editingItem?.mode === 'edit' ? ACTIONS.save : ACTIONS.create));
       setEditingItem(null);
       itemForm.resetFields();
-      await queryClient.invalidateQueries({ queryKey: ['dict-items', drawerType?.id] });
+      await queryClient.invalidateQueries({ queryKey: ['dict-items', currentApplicationId, drawerType?.id] });
     }).catch((error) => showNotification(error, '字典条目保存失败'));
   };
 
@@ -187,7 +190,7 @@ export default function DictManagementPage() {
               entityName: record.label,
               onDelete: async () => {
                 await dictApi.deleteItem(record.id);
-                await queryClient.invalidateQueries({ queryKey: ['dict-items', drawerType?.id] });
+                await queryClient.invalidateQueries({ queryKey: ['dict-items', currentApplicationId, drawerType?.id] });
                 message.success(buildSuccessMessage(ACTIONS.delete));
               },
               onError: (error) => showNotification(error, '删除字典条目失败'),
@@ -198,7 +201,7 @@ export default function DictManagementPage() {
         </Flex>
       ),
     },
-  ], [confirmDelete, drawerType, queryClient, showNotification]);
+  ], [confirmDelete, currentApplicationId, drawerType, queryClient, showNotification]);
 
   return (
     <div>

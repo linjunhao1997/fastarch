@@ -7,6 +7,7 @@ import type { TableColumnsType } from 'antd';
 import { CheckCircleOutlined, PlusOutlined, StopOutlined } from '@ant-design/icons';
 import { menuApi, permissionApi } from '../../api/iam';
 import { useConfirmDelete } from '../../components/ConfirmDelete';
+import { useApplicationContext } from '../../context/ApplicationContext';
 import { useApiErrorNotification } from '../../hooks/useApiError';
 import { useSubmitLock } from '../../hooks/useSubmitLock';
 import { MENU_ICONS } from '../../routers/router';
@@ -53,13 +54,15 @@ export default function MenuManagementPage() {
   const [form] = Form.useForm<MenuFormValues>();
   const [editing, setEditing] = useState<EditingState | null>(null);
   const { isSubmitting, run } = useSubmitLock();
+  const { currentApplicationId } = useApplicationContext();
 
   const treeQuery = useQuery({
-    queryKey: ['menu-tree'],
+    // 缓存按应用隔离（#9）：服务端按 token→app 隔离数据，键带 appId 防串应用旧缓存
+    queryKey: ['menu-tree', currentApplicationId],
     queryFn: () => menuApi.listTree(),
   });
   const permissionQuery = useQuery({
-    queryKey: ['permissions', 'all'],
+    queryKey: ['permissions', 'all', currentApplicationId],
     queryFn: () => permissionApi.list(1, 500),
   });
 
