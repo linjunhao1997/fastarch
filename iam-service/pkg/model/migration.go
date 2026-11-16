@@ -24,7 +24,6 @@ func init() {
 		// 关联表先行
 		RUserRole{},
 		RRolePermission{},
-		contribmodel.RRoleMenu{},
 		RUserApplication{},
 		// 主表（菜单/字典模型来自 contrib，ADR 0001）
 		User{},

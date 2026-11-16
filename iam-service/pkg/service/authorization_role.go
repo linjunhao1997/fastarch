@@ -208,10 +208,6 @@ func (a *AuthorizationService) DeleteRole(ctx context.Context, request *iam_v1.D
 		if err := tx.Model(&role).Association("PermissionList").Clear(); err != nil {
 			return err
 		}
-		// 级联清理角色-菜单绑定（t_r_role_menu）
-		if err := tx.Model(&role).Association("MenuList").Clear(); err != nil {
-			return err
-		}
 		return tx.Where(model.RoleColumnId, request.Id).Delete(model.Role{}).Error
 	})
 	if err != nil {

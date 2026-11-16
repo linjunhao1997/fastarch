@@ -729,8 +729,8 @@ func TestAccountAuditFieldsWithoutAuthContext(t *testing.T) {
 }
 
 // TestPermissionSnapshotDoesNotDeriveFromMenus 验证 ADR 0002（裁决 B）：
-// 菜单回归纯展示配置，角色绑定菜单的 permission_code 不再并入权限快照；
-// 快照仅取角色直授码。本例角色无任何直授权，故快照为空（即便绑了带码启用菜单）。
+// 菜单回归纯展示配置，菜单 permission_code 不并入权限快照；快照仅取角色直授码。
+// 本例角色无任何直授权，故快照为空（即便存在带码启用菜单）。
 func TestPermissionSnapshotDoesNotDeriveFromMenus(t *testing.T) {
 	db := setupAccountTestDB(t)
 	user := createTestUser(t, db, 7, "menu-only", 1)
@@ -753,9 +753,6 @@ func TestPermissionSnapshotDoesNotDeriveFromMenus(t *testing.T) {
 	for i := range menus {
 		if err := db.Create(&menus[i]).Error; err != nil {
 			t.Fatalf("create menu %d: %v", menus[i].Id, err)
-		}
-		if err := db.Create(&contribmodel.RRoleMenu{RoleId: role.Id, MenuId: menus[i].Id}).Error; err != nil {
-			t.Fatalf("bind role menu %d: %v", menus[i].Id, err)
 		}
 	}
 

@@ -35,20 +35,3 @@ var MenuFields = []string{
 	MenuColumnCreatedBy, MenuColumnUpdatedBy, MenuColumnCreateTime, MenuColumnUpdateTime,
 }
 
-// RRoleMenu 角色-菜单关联表（t_r_role_menu）：无独立审计字段，
-// 绑定变更审计记录在角色操作日志中。角色概念属宿主，本表只存绑定关系；
-// 绑定仅决定菜单可见性，不授予权限（ADR 0002）。
-// 删除策略: 基础架构型关联表（物理删除 + 引用检查）
-type RRoleMenu struct {
-	Id     int64 `gorm:"column:id;primaryKey"`
-	RoleId int64 `gorm:"column:role_id;index"`
-	MenuId int64 `gorm:"column:menu_id"`
-}
-
-func (r *RRoleMenu) TableName() string {
-	return "t_r_role_menu"
-}
-
-var RRoleMenuFields = []string{
-	RRoleMenuColumnId, RRoleMenuColumnRoleId, RRoleMenuColumnMenuId,
-}

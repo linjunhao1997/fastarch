@@ -237,9 +237,9 @@ export const profileApi = {
 };
 
 /**
- * 菜单（t_menu 语义）：结构与展示由服务端下发，可见性 = 角色菜单绑定（t_r_role_menu）。
- * listMyTree 为当前登录用户的可见菜单树（含停用应用的祖先回补由服务端完成，
- * 管理员返回全量启用菜单）。id/parentId 一律 string。
+ * 菜单（t_menu 语义，纯展示配置）：结构与展示由服务端下发。
+ * listMyTree 返回当前应用全量启用菜单（纯码门槛裁决，服务端不做角色过滤）；
+ * 可见性由前端按菜单 permission_code 与用户快照码过滤。id/parentId 一律 string。
  */
 export const menuApi = {
   listMyTree: () => request<ListMenuTreeResponse>('/iam/menu/my-menu-tree'),
@@ -251,15 +251,6 @@ export const menuApi = {
   update: (id: string, data: UpdateMenuRequest) =>
     request<void>(`/iam/menu/menus/${id}`, { method: 'PATCH', body: data }),
   delete: (id: string) => request<void>(`/iam/menu/menus/${id}`, { method: 'DELETE' }),
-  /** 角色菜单绑定：全量覆盖语义（空数组 = 清空绑定） */
-  updateRoleMenus: (roleId: string, menuIds: string[]) =>
-    request<void>(`/iam/menu/roles/${roleId}/menus`, {
-      method: 'PATCH',
-      body: { roleId, menuIds },
-    }),
-  /** 角色已绑定菜单 id 集合（编辑角色页回显） */
-  listRoleMenus: (roleId: string) =>
-    request<{ menuIds: string[] }>(`/iam/menu/roles/${roleId}/menus`),
 };
 
 /**

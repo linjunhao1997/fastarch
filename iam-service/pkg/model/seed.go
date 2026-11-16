@@ -167,8 +167,9 @@ func seedVocabularyPermissions(tx *gorm.DB, adminRoleId int64) error {
 	return nil
 }
 
-// seedMenus 按菜单树种子建 t_menu 行（固定 id，与迁移 SQL 000003 镜像），并全量绑定 admin 角色。
-func seedMenus(tx *gorm.DB, adminRoleId int64) error {
+// seedMenus 按菜单树种子建 t_menu 行（固定 id，与迁移 SQL 000003 镜像）。
+// 菜单为纯展示配置（纯码门槛裁决），不再绑定 admin 角色（t_r_role_menu 已退役）。
+func seedMenus(tx *gorm.DB, _ int64) error {
 	now := time.Now()
 	for _, item := range MENU_SEEDS {
 		menu := contribmodel.Menu{
@@ -194,32 +195,6 @@ func seedMenus(tx *gorm.DB, adminRoleId int64) error {
 			continue
 		}
 		if err := tx.Select(contribmodel.MenuFields).Create(&menu).Error; err != nil {
-			return err
-		}
-	}
-	var menus []contribmodel.Menu
-	if err := tx.Select(contribmodel.MenuFields).Find(&menus).Error; err != nil {
-		return err
-	}
-	grantedSet := make(map[int64]struct{})
-	var granted []int64
-	if err := tx.Raw(
-		"SELECT menu_id FROM t_r_role_menu WHERE role_id = ?", adminRoleId,
-	).Scan(&granted).Error; err != nil {
-		return err
-	}
-	for _, id := range granted {
-		grantedSet[id] = struct{}{}
-	}
-	newGrants := make([]contribmodel.RRoleMenu, 0)
-	for _, menu := range menus {
-		if _, ok := grantedSet[menu.Id]; ok {
-			continue
-		}
-		newGrants = append(newGrants, contribmodel.RRoleMenu{RoleId: adminRoleId, MenuId: menu.Id})
-	}
-	if len(newGrants) > 0 {
-		if err := tx.Create(&newGrants).Error; err != nil {
 			return err
 		}
 	}

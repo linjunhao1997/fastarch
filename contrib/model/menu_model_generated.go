@@ -22,9 +22,3 @@ const (
 	MenuColumnCreatedBy      = "created_by"
 	MenuColumnUpdatedBy      = "updated_by"
 )
-
-const (
-	RRoleMenuColumnId     = "id"
-	RRoleMenuColumnRoleId = "role_id"
-	RRoleMenuColumnMenuId = "menu_id"
-)

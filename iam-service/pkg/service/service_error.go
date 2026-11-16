@@ -77,7 +77,6 @@ var (
 	// 此处保留别名以维持既有引用与业务码
 	ErrMenuNotFound           = menu.ErrMenuNotFound
 	ErrMenuHasChildren        = menu.ErrMenuHasChildren
-	ErrMenuReferenced         = menu.ErrMenuReferenced
 	ErrUpdateMenuBusy         = menu.ErrUpdateMenuBusy
 	ErrDictTypeCodeDuplicated = dict.ErrDictTypeCodeDuplicated
 	ErrDictTypeReferenced     = dict.ErrDictTypeReferenced

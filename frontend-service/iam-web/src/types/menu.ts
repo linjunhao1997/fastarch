@@ -1,6 +1,6 @@
 /**
  * 菜单（t_menu 语义）：结构与展示均由服务端提供（path/icon/sort），
- * 可见性 = 角色菜单绑定（t_r_role_menu），服务端在 my-menu-tree 中已按登录用户过滤。
+ * 可见性 = 前端按 permission_code 与用户快照码过滤（纯码门槛），服务端 my-menu-tree 返回应用全量启用菜单。
  * id/parentId 为 string 编码（雪花 ID 惯例）；permissionCode 可空 = 不绑定权限。
  */
 export interface Menu {

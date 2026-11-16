@@ -64,8 +64,8 @@ export default function IndexPage() {
   const { applications, currentApplicationId, setCurrentApplicationId, loading: contextLoading } = useApplicationContext();
   const { permissionCodes } = usePermissions();
 
-  // 菜单树：服务端按角色菜单绑定（t_r_role_menu）过滤下发，管理员全量；
-  // 不再依赖应用上下文（重构 #6：应用与用户解绑）。
+  // 菜单树：服务端按应用上下文返回全量启用菜单（纯码门槛裁决）；
+  // 可见性由前端按菜单 permission_code 与用户快照码过滤。
   const menuTreeQuery = useQuery({
     // 应用上下文在服务端（token→app 映射），queryKey 带 appId 仅为按应用隔离缓存
     queryKey: ['my-menu-tree', currentApplicationId],

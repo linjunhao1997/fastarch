@@ -5,7 +5,6 @@ import (
 
 	"iam-service/pkg/model"
 
-	contribmodel "github.com/linjunhao1997/contrib/model"
 	"gorm.io/gorm"
 )
 
@@ -299,42 +298,6 @@ func loadUsersRoles(ctx context.Context, db *gorm.DB, users []model.User) error 
 	return nil
 }
 
-// loadRoleMenus 加载角色的菜单列表（经 t_r_role_menu 关联，按绑定顺序）。
-func loadRoleMenus(ctx context.Context, db *gorm.DB, role *model.Role) error {
-	var bindings []contribmodel.RRoleMenu
-	if err := db.WithContext(ctx).
-		Where(contribmodel.RRoleMenuColumnRoleId, role.Id).
-		Select(contribmodel.RRoleMenuFields).
-		Find(&bindings).Error; err != nil {
-		return err
-	}
-	if len(bindings) == 0 {
-		role.MenuList = []*contribmodel.Menu{}
-		return nil
-	}
-	menuIds := make([]int64, 0, len(bindings))
-	for _, binding := range bindings {
-		menuIds = append(menuIds, binding.MenuId)
-	}
-	var menus []*contribmodel.Menu
-	if err := db.WithContext(ctx).
-		Where(contribmodel.MenuColumnId+" IN ?", menuIds).
-		Select(contribmodel.MenuFields).
-		Find(&menus).Error; err != nil {
-		return err
-	}
-	menuById := make(map[int64]*contribmodel.Menu, len(menus))
-	for _, menu := range menus {
-		menuById[menu.Id] = menu
-	}
-	role.MenuList = make([]*contribmodel.Menu, 0, len(bindings))
-	for _, binding := range bindings {
-		if menu, exists := menuById[binding.MenuId]; exists {
-			role.MenuList = append(role.MenuList, menu)
-		}
-	}
-	return nil
-}
 
 // loadAccessibleApplications 加载用户可进入的应用清单（多应用裁决 #8）：
 // admin 角色旁路全部启用应用；其他用户按 t_r_user_application 准入绑定过滤。

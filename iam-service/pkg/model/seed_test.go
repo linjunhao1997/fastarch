@@ -137,17 +137,12 @@ func TestSeedVocabularyPermissions(t *testing.T) {
 	}
 }
 
-// 菜单树种子：MENU_SEEDS 全部存在（固定 id）、绑定码合法且在词汇表内；
-// admin 角色全量绑定菜单。
+// 菜单树种子：MENU_SEEDS 全部存在（固定 id）、展示码合法且在词汇表内。
+// 菜单为纯展示配置（纯码门槛），不再绑定 admin 角色。
 func TestSeedMenus(t *testing.T) {
 	db := setupSeedTestDB(t)
 	if err := Seed(context.Background(), db); err != nil {
 		t.Fatalf("Seed() error = %v", err)
-	}
-
-	adminRole := Role{}
-	if err := db.Where(RoleColumnCode, RoleAdmin).First(&adminRole).Error; err != nil {
-		t.Fatalf("get admin role: %v", err)
 	}
 
 	for _, seed := range MENU_SEEDS {
@@ -160,16 +155,6 @@ func TestSeedMenus(t *testing.T) {
 		}
 		if len(seed.PermissionCode) > 0 && !IsValidPermissionCode(menu.PermissionCode) {
 			t.Fatalf("menu id=%d invalid permission code %q", seed.Id, menu.PermissionCode)
-		}
-		var bound int64
-		if err := db.Raw(
-			"SELECT COUNT(1) FROM t_r_role_menu WHERE role_id = ? AND menu_id = ?",
-			adminRole.Id, seed.Id,
-		).Scan(&bound).Error; err != nil {
-			t.Fatalf("count menu binding: %v", err)
-		}
-		if bound != 1 {
-			t.Fatalf("menu id=%d bound to admin %d times, want 1", seed.Id, bound)
 		}
 	}
 

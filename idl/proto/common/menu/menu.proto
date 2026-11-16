@@ -64,12 +64,6 @@ message DeleteMenuRequest {
   int64 id = 1 [(buf.validate.field).required = true];
 }
 
-message UpdateRoleMenusRequest {
-  int64 role_id = 1 [(buf.validate.field).required = true];
-  // 目标菜单 id 集合（string 编码）：全量覆盖语义，空数组 = 清空绑定
-  repeated string menu_ids = 2;
-}
-
 // 菜单树节点
 message MenuTreeNode {
   Menu menu = 1;
@@ -78,13 +72,4 @@ message MenuTreeNode {
 
 message ListMenuTreeResponse {
   repeated MenuTreeNode roots = 1;
-}
-
-message ListRoleMenusRequest {
-  int64 role_id = 1 [(buf.validate.field).required = true];
-}
-
-message ListRoleMenusResponse {
-  // 角色绑定的菜单 id 集合（string 编码）
-  repeated string menu_ids = 1;
 }

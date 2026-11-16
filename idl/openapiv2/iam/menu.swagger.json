@@ -210,7 +210,7 @@
     },
     "/iam/menu/my-menu-tree": {
       "get": {
-        "summary": "当前登录用户可见菜单树：按用户角色绑定（t_r_role_menu）过滤并回补祖先路径，\n仅需登录态（self-scoped，无需菜单权限）",
+        "summary": "当前应用全量启用菜单树（纯码门槛裁决）：服务端不做角色过滤，\n可见性由前端按菜单 permission_code 与用户快照码过滤。仅需登录态。",
         "operationId": "MenuService_ListMyMenuTree",
         "responses": {
           "200": {
@@ -226,86 +226,6 @@
             }
           }
         },
-        "tags": [
-          "MenuService"
-        ]
-      }
-    },
-    "/iam/menu/roles/{roleId}/menus": {
-      "get": {
-        "summary": "查询角色绑定的菜单 id 集合（编辑角色页回显用）",
-        "operationId": "MenuService_ListRoleMenus",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/v1ListRoleMenusResponse"
-            }
-          },
-          "default": {
-            "description": "An unexpected error response.",
-            "schema": {
-              "$ref": "#/definitions/rpcStatus"
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "roleId",
-            "in": "path",
-            "required": true,
-            "type": "string",
-            "format": "int64"
-          }
-        ],
-        "tags": [
-          "MenuService"
-        ]
-      },
-      "patch": {
-        "summary": "角色绑定菜单全量覆盖：以 menu_ids 为目标绑定集合做整体替换（事务）。\n绑定仅决定可见性，不授予权限（ADR 0002）。",
-        "operationId": "MenuService_UpdateRoleMenus",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "type": "object",
-              "properties": {}
-            }
-          },
-          "default": {
-            "description": "An unexpected error response.",
-            "schema": {
-              "$ref": "#/definitions/rpcStatus"
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "roleId",
-            "in": "path",
-            "required": true,
-            "type": "string",
-            "format": "int64"
-          },
-          {
-            "name": "body",
-            "in": "body",
-            "required": true,
-            "schema": {
-              "type": "object",
-              "properties": {
-                "menuIds": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  },
-                  "title": "目标菜单 id 集合（string 编码）：全量覆盖语义，空数组 = 清空绑定"
-                }
-              }
-            }
-          }
-        ],
         "tags": [
           "MenuService"
         ]
@@ -381,18 +301,6 @@
             "type": "object",
             "$ref": "#/definitions/v1MenuTreeNode"
           }
-        }
-      }
-    },
-    "v1ListRoleMenusResponse": {
-      "type": "object",
-      "properties": {
-        "menuIds": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "title": "角色绑定的菜单 id 集合（string 编码）"
         }
       }
     },

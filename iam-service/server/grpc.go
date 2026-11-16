@@ -65,7 +65,6 @@ func RunGrpcServer(ctx context.Context, cfg *conf.Config) error {
 	iam_v1.RegisterAccessCredentialServiceServer(s, service.NewAccessCredentialService(db, rdb, credentialAES, credentialMaxPerAccount))
 	iam_v1.RegisterMenuServiceServer(s, service.NewMenuService(db))
 	iam_v1.RegisterDictServiceServer(s, service.NewDictService(db))
-	iam_v1.RegisterFederationServiceServer(s, service.NewFederationService(db))
 
 	return srv.Run(ctx)
 }

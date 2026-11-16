@@ -52,27 +52,11 @@ service MenuService {
     };
   }
 
-  // 当前登录用户可见菜单树：按用户角色绑定（t_r_role_menu）过滤并回补祖先路径，
-  // 仅需登录态（self-scoped，无需菜单权限）
+  // 当前应用全量启用菜单树（纯码门槛裁决）：服务端不做角色过滤，
+  // 可见性由前端按菜单 permission_code 与用户快照码过滤。仅需登录态。
   rpc ListMyMenuTree(google.protobuf.Empty) returns (common.menu.v1.ListMenuTreeResponse) {
     option (google.api.http) = {
       get: "/iam/menu/my-menu-tree"
-    };
-  }
-
-  // 角色绑定菜单全量覆盖：以 menu_ids 为目标绑定集合做整体替换（事务）。
-  // 绑定仅决定可见性，不授予权限（ADR 0002）。
-  rpc UpdateRoleMenus(common.menu.v1.UpdateRoleMenusRequest) returns (google.protobuf.Empty) {
-    option (google.api.http) = {
-      patch: "/iam/menu/roles/{role_id}/menus"
-      body: "*"
-    };
-  }
-
-  // 查询角色绑定的菜单 id 集合（编辑角色页回显用）
-  rpc ListRoleMenus(common.menu.v1.ListRoleMenusRequest) returns (common.menu.v1.ListRoleMenusResponse) {
-    option (google.api.http) = {
-      get: "/iam/menu/roles/{role_id}/menus"
     };
   }
 }

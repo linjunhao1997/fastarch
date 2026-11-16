@@ -57,7 +57,7 @@ type MenuItem = NonNullable<MenuProps['items']>[number] & {
 /**
  * 路由表：叶子 handle.permission 声明访问所需的权限码（词汇 = 后端
  * permission_codes.go PERMISSION_CODES），直访守卫据此判定；
- * 菜单可见性另由服务端 my-menu-tree（角色菜单绑定）决定，路由表仅作兜底。
+ * 菜单可见性另由前端按 my-menu-tree + 权限码门槛决定，路由表仅作兜底。
  */
 export const routes: RouteObject[] = [
   { path: '/login', element: withSuspense(<LoginPage />) },

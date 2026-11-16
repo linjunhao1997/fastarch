@@ -30,9 +30,6 @@ const (
 
 var notAuthMethod = map[string]struct{}{
 	iam_v1.AuthenticationService_PasswordAuth_FullMethodName: {},
-	// 联邦内部契约：机器间调用，服务内自鉴权应用凭证（不走 JWT）
-	iam_v1.FederationService_GetAccountRoleIds_FullMethodName: {},
-	iam_v1.FederationService_RoleExists_FullMethodName:        {},
 }
 
 // authOnlyMethods 仅需认证（self-scoped）、不需要权限判定的方法：

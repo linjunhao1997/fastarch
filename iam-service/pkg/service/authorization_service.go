@@ -145,6 +145,17 @@ func roleToPb(r model.Role) *iam_v1.Role {
 
 // GetMyPermissions 返回当前认证账号持有的全部权限码（011 模型：纯权限码快照）。
 func (a *AuthorizationService) GetMyPermissions(ctx context.Context, request *emptypb.Empty) (*iam_v1.GetMyPermissionsResponse, error) {
+	// admin 旁路：返回全量启用权限码（与 CheckPermission/拦截器 admin 旁路一致）。
+	// 前端菜单/按钮码门槛对 admin 全放行，跨应用码（sender.* 等）亦覆盖。
+	if auth.IsAdminFromContext(ctx) {
+		var codes []string
+		if err := a.db.WithContext(ctx).Model(model.Permission{}).
+			Where(model.PermissionColumnStatus, model.StatusEnabled).
+			Pluck(model.PermissionColumnCode, &codes).Error; err != nil {
+			return nil, err
+		}
+		return &iam_v1.GetMyPermissionsResponse{PermissionCodeList: codes}, nil
+	}
 	permKeys, err := loadAccountPermissionSnapshot(ctx, a.rdb, a.db, auth.GetAccountId(ctx))
 	if err != nil {
 		return nil, err

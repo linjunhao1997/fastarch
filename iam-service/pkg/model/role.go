@@ -2,14 +2,13 @@ package model
 
 import (
 	"time"
-
-	contribmodel "github.com/linjunhao1997/contrib/model"
 )
 
 const RoleAdmin = "admin"
 
 // Role 角色模型（t_role，fastarch_dev 基线 Schema）：code 唯一业务码，
-// status 取值 enabled/disabled；与权限、菜单经关联表绑定。
+// status 取值 enabled/disabled；与权限经关联表绑定。
+// 菜单为纯展示配置（纯码门槛裁决），角色-菜单绑定已退役。
 // 删除策略: 基础架构型（物理删除 + 引用检查 + 审计日志）
 type Role struct {
 	Id             int64                `gorm:"column:id;primaryKey"`
@@ -22,8 +21,7 @@ type Role struct {
 	UpdatedBy      string               `gorm:"column:updated_by;size:64"`
 	CreateTime     time.Time            `gorm:"column:create_time"`
 	UpdateTime     time.Time            `gorm:"column:update_time"`
-	PermissionList []*Permission        `gorm:"many2many:t_r_role_permission;joinForeignKey:role_id;joinReferences:permission_id"`
-	MenuList       []*contribmodel.Menu `gorm:"many2many:t_r_role_menu;joinForeignKey:role_id;joinReferences:menu_id"`
+	PermissionList []*Permission `gorm:"many2many:t_r_role_permission;joinForeignKey:role_id;joinReferences:permission_id"`
 }
 
 type Roles []*Role
