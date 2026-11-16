@@ -8,6 +8,8 @@ import (
 	"iam-service/pkg/auth"
 	"iam-service/pkg/model"
 
+	contribmodel "github.com/linjunhao1997/contrib/model"
+
 	common_v1 "github.com/linjunhao1997/idl/pb/common"
 	iam_v1 "github.com/linjunhao1997/idl/pb/iam"
 	"github.com/spf13/cast"
@@ -43,7 +45,7 @@ func ctxWithApp(appId int64) context.Context {
 
 func createTestMenu(t *testing.T, db *gorm.DB, id int64, appId int64, name string, code string) {
 	t.Helper()
-	menu := model.Menu{
+	menu := contribmodel.Menu{
 		Id: id, ApplicationId: appId, Name: name, Path: "/" + name,
 		PermissionCode: code, Status: model.StatusEnabled, Version: 1,
 		CreateTime: time.Now(), UpdateTime: time.Now(),

@@ -4,11 +4,14 @@ go 1.23.12
 
 require (
 	github.com/dave/jennifer v1.7.1
+	github.com/go-dev-frame/sponge v1.16.1
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.1
 	github.com/redis/go-redis/v9 v9.7.3
+	github.com/spf13/cast v1.10.0
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/viper v1.21.0
 	google.golang.org/grpc v1.73.0
+	google.golang.org/protobuf v1.36.7
 	gorm.io/driver/mysql v1.6.0
 	gorm.io/gorm v1.30.0
 )
@@ -22,7 +25,6 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
-	github.com/go-dev-frame/sponge v1.16.1 // indirect
 	github.com/go-sql-driver/mysql v1.8.1 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/google/cel-go v0.25.0 // indirect
@@ -31,7 +33,6 @@ require (
 	github.com/sagikazarmark/locafero v0.11.0 // indirect
 	github.com/sourcegraph/conc v0.3.1-0.20240121214520-5f936abd7ae8 // indirect
 	github.com/spf13/afero v1.15.0 // indirect
-	github.com/spf13/cast v1.10.0 // indirect
 	github.com/stoewer/go-strcase v1.3.0 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
@@ -40,7 +41,6 @@ require (
 	golang.org/x/sys v0.34.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250811230008-5f3141c8851a // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250804133106-a7a43d27e69b // indirect
-	google.golang.org/protobuf v1.36.7 // indirect
 )
 
 require (

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/go-dev-frame/sponge/pkg/krand"
+	contribmodel "github.com/linjunhao1997/contrib/model"
 	"gorm.io/gorm"
 )
 
@@ -170,7 +171,7 @@ func seedVocabularyPermissions(tx *gorm.DB, adminRoleId int64) error {
 func seedMenus(tx *gorm.DB, adminRoleId int64) error {
 	now := time.Now()
 	for _, item := range MENU_SEEDS {
-		menu := Menu{
+		menu := contribmodel.Menu{
 			Id:             item.Id,
 			ParentId:       item.ParentId,
 			Name:           item.Name,
@@ -186,18 +187,18 @@ func seedMenus(tx *gorm.DB, adminRoleId int64) error {
 			UpdateTime:     now,
 		}
 		var count int64
-		if err := tx.Model(&Menu{}).Where(MenuColumnId, item.Id).Count(&count).Error; err != nil {
+		if err := tx.Model(&contribmodel.Menu{}).Where(contribmodel.MenuColumnId, item.Id).Count(&count).Error; err != nil {
 			return err
 		}
 		if count > 0 {
 			continue
 		}
-		if err := tx.Select(MenuFields).Create(&menu).Error; err != nil {
+		if err := tx.Select(contribmodel.MenuFields).Create(&menu).Error; err != nil {
 			return err
 		}
 	}
-	var menus []Menu
-	if err := tx.Select(MenuFields).Find(&menus).Error; err != nil {
+	var menus []contribmodel.Menu
+	if err := tx.Select(contribmodel.MenuFields).Find(&menus).Error; err != nil {
 		return err
 	}
 	grantedSet := make(map[int64]struct{})
@@ -210,12 +211,12 @@ func seedMenus(tx *gorm.DB, adminRoleId int64) error {
 	for _, id := range granted {
 		grantedSet[id] = struct{}{}
 	}
-	newGrants := make([]RRoleMenu, 0)
+	newGrants := make([]contribmodel.RRoleMenu, 0)
 	for _, menu := range menus {
 		if _, ok := grantedSet[menu.Id]; ok {
 			continue
 		}
-		newGrants = append(newGrants, RRoleMenu{RoleId: adminRoleId, MenuId: menu.Id})
+		newGrants = append(newGrants, contribmodel.RRoleMenu{RoleId: adminRoleId, MenuId: menu.Id})
 	}
 	if len(newGrants) > 0 {
 		if err := tx.Create(&newGrants).Error; err != nil {

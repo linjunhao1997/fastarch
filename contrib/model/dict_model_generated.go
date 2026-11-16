@@ -1,5 +1,4 @@
 // Do not Edit Generated File.
-// Generated at: 2026-11-15 08:49:49
 
 package model
 
@@ -29,7 +28,7 @@ const (
 	DictItemColumnUpdateTime = "update_time"
 )
 
-// 手工补回：contrib 生成器会丢失 string 类列与 uniqueIndex 列常量（项目已知问题）
+// 手工补回：contrib 生成器会丢失 string 类列常量（项目已知问题）
 const (
 	DictItemColumnLabel     = "label"
 	DictItemColumnValue     = "value"

@@ -1,6 +1,9 @@
 package model
 
-import "gorm.io/gorm"
+import (
+	contribmodel "github.com/linjunhao1997/contrib/model"
+	"gorm.io/gorm"
+)
 
 // Models 注册全部业务模型，仅供测试夹具（sqlite 内存库）搭建 Schema 使用。
 // 运行时的表创建、字段变更与数据录入由 pkg/migration 的 golang-migrate
@@ -21,15 +24,15 @@ func init() {
 		// 关联表先行
 		RUserRole{},
 		RRolePermission{},
-		RRoleMenu{},
+		contribmodel.RRoleMenu{},
 		RUserApplication{},
-		// 主表
+		// 主表（菜单/字典模型来自 contrib，ADR 0001）
 		User{},
 		Role{},
 		Permission{},
-		Menu{},
-		DictType{},
-		DictItem{},
+		contribmodel.Menu{},
+		contribmodel.DictType{},
+		contribmodel.DictItem{},
 		Application{},
 		AccessCredential{},
 	)

@@ -3,6 +3,8 @@ package service
 import (
 	"errors"
 
+	"github.com/linjunhao1997/contrib/pkg/dict"
+	"github.com/linjunhao1997/contrib/pkg/menu"
 	"google.golang.org/grpc/codes"
 )
 
@@ -71,16 +73,16 @@ var (
 	ErrAccessCredentialSkDecrypt      = NewErrorWithCode("1001043", codes.Internal, errors.New("凭证密钥解密失败，请检查加密密钥配置"))
 	ErrAccessCredentialUpdateBusy     = NewErrorWithCode("1001044", codes.FailedPrecondition, errors.New("凭证已被他人修改，请刷新后重试"))
 	ErrAccountReferencedByCredential  = NewErrorWithCode("1001045", codes.FailedPrecondition, errors.New("用户名下存在访问凭证，请先删除凭证"))
-	// 菜单域（011 模型迁移：组件资源模型废弃，菜单改由 t_menu 承担）
-	ErrMenuNotFound    = NewErrorWithCode("1001047", codes.NotFound, errors.New("菜单不存在"))
-	ErrMenuHasChildren = NewErrorWithCode("1001050", codes.FailedPrecondition, errors.New("菜单存在子菜单，请先删除子菜单"))
-	ErrMenuReferenced  = NewErrorWithCode("1001051", codes.FailedPrecondition, errors.New("菜单已被角色绑定，请先解除绑定"))
-	ErrUpdateMenuBusy  = NewErrorWithCode("1001052", codes.FailedPrecondition, errors.New("菜单已被他人修改，请刷新后重试"))
-	// 字典域
-	ErrDictTypeCodeDuplicated  = NewErrorWithCode("1001053", codes.AlreadyExists, errors.New("字典编码已被占用"))
-	ErrDictTypeReferenced      = NewErrorWithCode("1001054", codes.FailedPrecondition, errors.New("字典类型名下存在字典项，请先删除字典项"))
-	ErrUpdateDictTypeBusy      = NewErrorWithCode("1001055", codes.FailedPrecondition, errors.New("字典类型已被他人修改，请刷新后重试"))
-	ErrUpdateDictItemBusy      = NewErrorWithCode("1001056", codes.FailedPrecondition, errors.New("字典项已被他人修改，请刷新后重试"))
+	// 菜单/字典错误已随通用能力抽至 contrib（ADR 0001）；
+	// 此处保留别名以维持既有引用与业务码
+	ErrMenuNotFound           = menu.ErrMenuNotFound
+	ErrMenuHasChildren        = menu.ErrMenuHasChildren
+	ErrMenuReferenced         = menu.ErrMenuReferenced
+	ErrUpdateMenuBusy         = menu.ErrUpdateMenuBusy
+	ErrDictTypeCodeDuplicated = dict.ErrDictTypeCodeDuplicated
+	ErrDictTypeReferenced     = dict.ErrDictTypeReferenced
+	ErrUpdateDictTypeBusy     = dict.ErrUpdateDictTypeBusy
+	ErrUpdateDictItemBusy     = dict.ErrUpdateDictItemBusy
 	// 多应用域（#8 裁决：应用上下文由 token 承载，数据按应用隔离）
 	ErrApplicationContextRequired    = NewErrorWithCode("1001057", codes.FailedPrecondition, errors.New("请先选择应用"))
 	ErrPermissionCodeSegmentMismatch = NewErrorWithCode("1001058", codes.InvalidArgument, errors.New("权限码服务段与当前应用不一致"))

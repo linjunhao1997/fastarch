@@ -2,14 +2,14 @@ package model
 
 import "time"
 
-// Menu 菜单模型（t_menu，fastarch_dev 基线 Schema）：菜单树取代旧组件资源模型，
-// permission_code 绑定权限码（唯一授权词汇），前端按「菜单绑定码 ∩ 用户持有码」
-// 或角色-菜单绑定决定展示。
+// Menu 菜单模型（t_menu）：通用菜单树能力（ADR 0001，每服务嵌入自持）。
+// permission_code 单列绑定权限码（可空）；展示结构归管理员维护，授权判定归宿主。
+// 归属应用 application_id：多应用数据隔离（应用上下文由宿主 token 承载）。
 // 删除策略: 基础架构型（物理删除 + 引用检查 + 审计日志）
 type Menu struct {
-	Id       int64 `gorm:"column:id;primaryKey"`
+	Id int64 `gorm:"column:id;primaryKey"`
 	ParentId int64 `gorm:"column:parent_id;index;default:0"`
-	// ApplicationId 归属应用（多应用数据隔离，裁决 #7-#9）：菜单树按应用独立
+	// ApplicationId 归属应用：菜单树按应用独立
 	ApplicationId  int64     `gorm:"column:application_id;index"`
 	Name           string    `gorm:"column:name;size:64"`
 	Path           string    `gorm:"column:path;size:128"`
@@ -22,7 +22,6 @@ type Menu struct {
 	UpdatedBy      string    `gorm:"column:updated_by;size:64"`
 	CreateTime     time.Time `gorm:"column:create_time"`
 	UpdateTime     time.Time `gorm:"column:update_time"`
-	RoleList       []*Role   `gorm:"many2many:t_r_role_menu;joinForeignKey:menu_id;joinReferences:role_id"`
 }
 
 func (m *Menu) TableName() string {
@@ -33,4 +32,22 @@ var MenuFields = []string{
 	MenuColumnId, MenuColumnParentId, MenuColumnApplicationId, MenuColumnName, MenuColumnPath, MenuColumnIcon,
 	MenuColumnSort, MenuColumnPermissionCode, MenuColumnStatus, MenuColumnVersion,
 	MenuColumnCreatedBy, MenuColumnUpdatedBy, MenuColumnCreateTime, MenuColumnUpdateTime,
+}
+
+// RRoleMenu 角色-菜单关联表（t_r_role_menu）：无独立审计字段，
+// 绑定变更审计记录在角色操作日志中。角色概念属宿主，本表只存绑定关系；
+// 宿主经绑定关系做页面码授权推导（勾菜单=授码）。
+// 删除策略: 基础架构型关联表（物理删除 + 引用检查）
+type RRoleMenu struct {
+	Id     int64 `gorm:"column:id;primaryKey"`
+	RoleId int64 `gorm:"column:role_id;index"`
+	MenuId int64 `gorm:"column:menu_id"`
+}
+
+func (r *RRoleMenu) TableName() string {
+	return "t_r_role_menu"
+}
+
+var RRoleMenuFields = []string{
+	RRoleMenuColumnId, RRoleMenuColumnRoleId, RRoleMenuColumnMenuId,
 }

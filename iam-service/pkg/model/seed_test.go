@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/glebarez/sqlite"
+	contribmodel "github.com/linjunhao1997/contrib/model"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
@@ -43,7 +44,7 @@ func TestSeedIdempotent(t *testing.T) {
 		if err := db.Raw("SELECT COUNT(1) FROM t_r_role_permission").Scan(&grants).Error; err != nil {
 			t.Fatalf("count grants: %v", err)
 		}
-		if err := db.Model(&Menu{}).Count(&menus).Error; err != nil {
+		if err := db.Model(&contribmodel.Menu{}).Count(&menus).Error; err != nil {
 			t.Fatalf("count menu: %v", err)
 		}
 		return users, roles, permissions, grants, menus
@@ -150,8 +151,8 @@ func TestSeedMenus(t *testing.T) {
 	}
 
 	for _, seed := range MENU_SEEDS {
-		var menu Menu
-		if err := db.Where(MenuColumnId, seed.Id).First(&menu).Error; err != nil {
+		var menu contribmodel.Menu
+		if err := db.Where(contribmodel.MenuColumnId, seed.Id).First(&menu).Error; err != nil {
 			t.Fatalf("menu %s (id=%d) missing: %v", seed.Name, seed.Id, err)
 		}
 		if menu.Name != seed.Name || menu.Path != seed.Path {
@@ -174,13 +175,13 @@ func TestSeedMenus(t *testing.T) {
 
 	// 幂等：重复 Seed 菜单零新增
 	var before, after int64
-	if err := db.Model(Menu{}).Count(&before).Error; err != nil {
+	if err := db.Model(contribmodel.Menu{}).Count(&before).Error; err != nil {
 		t.Fatalf("count menus: %v", err)
 	}
 	if err := Seed(context.Background(), db); err != nil {
 		t.Fatalf("Seed() #2 error = %v", err)
 	}
-	if err := db.Model(Menu{}).Count(&after).Error; err != nil {
+	if err := db.Model(contribmodel.Menu{}).Count(&after).Error; err != nil {
 		t.Fatalf("count menus after re-seed: %v", err)
 	}
 	if before != after {

@@ -18,6 +18,8 @@ import (
 	"iam-service/pkg/auth"
 	"iam-service/pkg/constant"
 	"iam-service/pkg/model"
+
+	contribmodel "github.com/linjunhao1997/contrib/model"
 )
 
 func setupAccountTestDB(t *testing.T) *gorm.DB {
@@ -691,7 +693,7 @@ func TestPermissionSnapshotDerivesCodesFromMenus(t *testing.T) {
 	if err := db.Create(&model.RUserRole{UserId: user.Id, RoleId: role.Id}).Error; err != nil {
 		t.Fatalf("bind user role: %v", err)
 	}
-	menus := []model.Menu{
+	menus := []contribmodel.Menu{
 		{Id: 701, Name: "启用带码", PermissionCode: "iam.role.list", Status: model.StatusEnabled, Version: 1},
 		{Id: 702, Name: "停用带码", PermissionCode: "iam.menu.list", Status: model.StatusDisabled, Version: 1},
 		{Id: 703, Name: "分组空码", PermissionCode: "", Status: model.StatusEnabled, Version: 1},
@@ -700,7 +702,7 @@ func TestPermissionSnapshotDerivesCodesFromMenus(t *testing.T) {
 		if err := db.Create(&menus[i]).Error; err != nil {
 			t.Fatalf("create menu %d: %v", menus[i].Id, err)
 		}
-		if err := db.Create(&model.RRoleMenu{RoleId: role.Id, MenuId: menus[i].Id}).Error; err != nil {
+		if err := db.Create(&contribmodel.RRoleMenu{RoleId: role.Id, MenuId: menus[i].Id}).Error; err != nil {
 			t.Fatalf("bind role menu %d: %v", menus[i].Id, err)
 		}
 	}
