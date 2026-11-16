@@ -16,6 +16,7 @@ import (
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/utilities"
 	"github.com/linjunhao1997/idl/pb/common"
+	"github.com/linjunhao1997/idl/pb/common/menu"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/grpclog"
@@ -34,7 +35,7 @@ var _ = utilities.NewDoubleArray
 var _ = metadata.Join
 
 func request_MenuService_CreateMenu_0(ctx context.Context, marshaler runtime.Marshaler, client MenuServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq CreateMenuRequest
+	var protoReq common_menu_v1.CreateMenuRequest
 	var metadata runtime.ServerMetadata
 
 	newReader, berr := utilities.IOReaderFactory(req.Body)
@@ -51,7 +52,7 @@ func request_MenuService_CreateMenu_0(ctx context.Context, marshaler runtime.Mar
 }
 
 func local_request_MenuService_CreateMenu_0(ctx context.Context, marshaler runtime.Marshaler, server MenuServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq CreateMenuRequest
+	var protoReq common_menu_v1.CreateMenuRequest
 	var metadata runtime.ServerMetadata
 
 	newReader, berr := utilities.IOReaderFactory(req.Body)
@@ -120,7 +121,7 @@ func local_request_MenuService_GetMenu_0(ctx context.Context, marshaler runtime.
 }
 
 func request_MenuService_UpdateMenu_0(ctx context.Context, marshaler runtime.Marshaler, client MenuServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq UpdateMenuRequest
+	var protoReq common_menu_v1.UpdateMenuRequest
 	var metadata runtime.ServerMetadata
 
 	newReader, berr := utilities.IOReaderFactory(req.Body)
@@ -154,7 +155,7 @@ func request_MenuService_UpdateMenu_0(ctx context.Context, marshaler runtime.Mar
 }
 
 func local_request_MenuService_UpdateMenu_0(ctx context.Context, marshaler runtime.Marshaler, server MenuServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq UpdateMenuRequest
+	var protoReq common_menu_v1.UpdateMenuRequest
 	var metadata runtime.ServerMetadata
 
 	newReader, berr := utilities.IOReaderFactory(req.Body)
@@ -188,7 +189,7 @@ func local_request_MenuService_UpdateMenu_0(ctx context.Context, marshaler runti
 }
 
 func request_MenuService_DeleteMenu_0(ctx context.Context, marshaler runtime.Marshaler, client MenuServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq DeleteMenuRequest
+	var protoReq common_menu_v1.DeleteMenuRequest
 	var metadata runtime.ServerMetadata
 
 	var (
@@ -214,7 +215,7 @@ func request_MenuService_DeleteMenu_0(ctx context.Context, marshaler runtime.Mar
 }
 
 func local_request_MenuService_DeleteMenu_0(ctx context.Context, marshaler runtime.Marshaler, server MenuServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq DeleteMenuRequest
+	var protoReq common_menu_v1.DeleteMenuRequest
 	var metadata runtime.ServerMetadata
 
 	var (
@@ -276,7 +277,7 @@ func local_request_MenuService_ListMyMenuTree_0(ctx context.Context, marshaler r
 }
 
 func request_MenuService_UpdateRoleMenus_0(ctx context.Context, marshaler runtime.Marshaler, client MenuServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq UpdateRoleMenusRequest
+	var protoReq common_menu_v1.UpdateRoleMenusRequest
 	var metadata runtime.ServerMetadata
 
 	newReader, berr := utilities.IOReaderFactory(req.Body)
@@ -310,7 +311,7 @@ func request_MenuService_UpdateRoleMenus_0(ctx context.Context, marshaler runtim
 }
 
 func local_request_MenuService_UpdateRoleMenus_0(ctx context.Context, marshaler runtime.Marshaler, server MenuServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq UpdateRoleMenusRequest
+	var protoReq common_menu_v1.UpdateRoleMenusRequest
 	var metadata runtime.ServerMetadata
 
 	newReader, berr := utilities.IOReaderFactory(req.Body)
@@ -344,7 +345,7 @@ func local_request_MenuService_UpdateRoleMenus_0(ctx context.Context, marshaler 
 }
 
 func request_MenuService_ListRoleMenus_0(ctx context.Context, marshaler runtime.Marshaler, client MenuServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq ListRoleMenusRequest
+	var protoReq common_menu_v1.ListRoleMenusRequest
 	var metadata runtime.ServerMetadata
 
 	var (
@@ -370,7 +371,7 @@ func request_MenuService_ListRoleMenus_0(ctx context.Context, marshaler runtime.
 }
 
 func local_request_MenuService_ListRoleMenus_0(ctx context.Context, marshaler runtime.Marshaler, server MenuServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq ListRoleMenusRequest
+	var protoReq common_menu_v1.ListRoleMenusRequest
 	var metadata runtime.ServerMetadata
 
 	var (
@@ -409,7 +410,7 @@ func RegisterMenuServiceHandlerServer(ctx context.Context, mux *runtime.ServeMux
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		var err error
 		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/iam.v1.MenuService/CreateMenu", runtime.WithHTTPPathPattern("/menu/menus"))
+		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/iam.v1.MenuService/CreateMenu", runtime.WithHTTPPathPattern("/iam/menu/menus"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -434,7 +435,7 @@ func RegisterMenuServiceHandlerServer(ctx context.Context, mux *runtime.ServeMux
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		var err error
 		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/iam.v1.MenuService/GetMenu", runtime.WithHTTPPathPattern("/menu/menus/{id}"))
+		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/iam.v1.MenuService/GetMenu", runtime.WithHTTPPathPattern("/iam/menu/menus/{id}"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -459,7 +460,7 @@ func RegisterMenuServiceHandlerServer(ctx context.Context, mux *runtime.ServeMux
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		var err error
 		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/iam.v1.MenuService/UpdateMenu", runtime.WithHTTPPathPattern("/menu/menus/{id}"))
+		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/iam.v1.MenuService/UpdateMenu", runtime.WithHTTPPathPattern("/iam/menu/menus/{id}"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -484,7 +485,7 @@ func RegisterMenuServiceHandlerServer(ctx context.Context, mux *runtime.ServeMux
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		var err error
 		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/iam.v1.MenuService/DeleteMenu", runtime.WithHTTPPathPattern("/menu/menus/{id}"))
+		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/iam.v1.MenuService/DeleteMenu", runtime.WithHTTPPathPattern("/iam/menu/menus/{id}"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -509,7 +510,7 @@ func RegisterMenuServiceHandlerServer(ctx context.Context, mux *runtime.ServeMux
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		var err error
 		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/iam.v1.MenuService/ListMenuTree", runtime.WithHTTPPathPattern("/menu/menu-tree"))
+		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/iam.v1.MenuService/ListMenuTree", runtime.WithHTTPPathPattern("/iam/menu/menu-tree"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -534,7 +535,7 @@ func RegisterMenuServiceHandlerServer(ctx context.Context, mux *runtime.ServeMux
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		var err error
 		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/iam.v1.MenuService/ListMyMenuTree", runtime.WithHTTPPathPattern("/menu/my-menu-tree"))
+		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/iam.v1.MenuService/ListMyMenuTree", runtime.WithHTTPPathPattern("/iam/menu/my-menu-tree"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -559,7 +560,7 @@ func RegisterMenuServiceHandlerServer(ctx context.Context, mux *runtime.ServeMux
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		var err error
 		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/iam.v1.MenuService/UpdateRoleMenus", runtime.WithHTTPPathPattern("/menu/roles/{role_id}/menus"))
+		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/iam.v1.MenuService/UpdateRoleMenus", runtime.WithHTTPPathPattern("/iam/menu/roles/{role_id}/menus"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -584,7 +585,7 @@ func RegisterMenuServiceHandlerServer(ctx context.Context, mux *runtime.ServeMux
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		var err error
 		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/iam.v1.MenuService/ListRoleMenus", runtime.WithHTTPPathPattern("/menu/roles/{role_id}/menus"))
+		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/iam.v1.MenuService/ListRoleMenus", runtime.WithHTTPPathPattern("/iam/menu/roles/{role_id}/menus"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -648,7 +649,7 @@ func RegisterMenuServiceHandlerClient(ctx context.Context, mux *runtime.ServeMux
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		var err error
 		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/iam.v1.MenuService/CreateMenu", runtime.WithHTTPPathPattern("/menu/menus"))
+		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/iam.v1.MenuService/CreateMenu", runtime.WithHTTPPathPattern("/iam/menu/menus"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -670,7 +671,7 @@ func RegisterMenuServiceHandlerClient(ctx context.Context, mux *runtime.ServeMux
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		var err error
 		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/iam.v1.MenuService/GetMenu", runtime.WithHTTPPathPattern("/menu/menus/{id}"))
+		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/iam.v1.MenuService/GetMenu", runtime.WithHTTPPathPattern("/iam/menu/menus/{id}"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -692,7 +693,7 @@ func RegisterMenuServiceHandlerClient(ctx context.Context, mux *runtime.ServeMux
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		var err error
 		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/iam.v1.MenuService/UpdateMenu", runtime.WithHTTPPathPattern("/menu/menus/{id}"))
+		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/iam.v1.MenuService/UpdateMenu", runtime.WithHTTPPathPattern("/iam/menu/menus/{id}"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -714,7 +715,7 @@ func RegisterMenuServiceHandlerClient(ctx context.Context, mux *runtime.ServeMux
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		var err error
 		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/iam.v1.MenuService/DeleteMenu", runtime.WithHTTPPathPattern("/menu/menus/{id}"))
+		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/iam.v1.MenuService/DeleteMenu", runtime.WithHTTPPathPattern("/iam/menu/menus/{id}"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -736,7 +737,7 @@ func RegisterMenuServiceHandlerClient(ctx context.Context, mux *runtime.ServeMux
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		var err error
 		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/iam.v1.MenuService/ListMenuTree", runtime.WithHTTPPathPattern("/menu/menu-tree"))
+		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/iam.v1.MenuService/ListMenuTree", runtime.WithHTTPPathPattern("/iam/menu/menu-tree"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -758,7 +759,7 @@ func RegisterMenuServiceHandlerClient(ctx context.Context, mux *runtime.ServeMux
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		var err error
 		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/iam.v1.MenuService/ListMyMenuTree", runtime.WithHTTPPathPattern("/menu/my-menu-tree"))
+		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/iam.v1.MenuService/ListMyMenuTree", runtime.WithHTTPPathPattern("/iam/menu/my-menu-tree"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -780,7 +781,7 @@ func RegisterMenuServiceHandlerClient(ctx context.Context, mux *runtime.ServeMux
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		var err error
 		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/iam.v1.MenuService/UpdateRoleMenus", runtime.WithHTTPPathPattern("/menu/roles/{role_id}/menus"))
+		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/iam.v1.MenuService/UpdateRoleMenus", runtime.WithHTTPPathPattern("/iam/menu/roles/{role_id}/menus"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -802,7 +803,7 @@ func RegisterMenuServiceHandlerClient(ctx context.Context, mux *runtime.ServeMux
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		var err error
 		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/iam.v1.MenuService/ListRoleMenus", runtime.WithHTTPPathPattern("/menu/roles/{role_id}/menus"))
+		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/iam.v1.MenuService/ListRoleMenus", runtime.WithHTTPPathPattern("/iam/menu/roles/{role_id}/menus"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -822,21 +823,21 @@ func RegisterMenuServiceHandlerClient(ctx context.Context, mux *runtime.ServeMux
 }
 
 var (
-	pattern_MenuService_CreateMenu_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"menu", "menus"}, ""))
+	pattern_MenuService_CreateMenu_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"iam", "menu", "menus"}, ""))
 
-	pattern_MenuService_GetMenu_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"menu", "menus", "id"}, ""))
+	pattern_MenuService_GetMenu_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3}, []string{"iam", "menu", "menus", "id"}, ""))
 
-	pattern_MenuService_UpdateMenu_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"menu", "menus", "id"}, ""))
+	pattern_MenuService_UpdateMenu_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3}, []string{"iam", "menu", "menus", "id"}, ""))
 
-	pattern_MenuService_DeleteMenu_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"menu", "menus", "id"}, ""))
+	pattern_MenuService_DeleteMenu_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3}, []string{"iam", "menu", "menus", "id"}, ""))
 
-	pattern_MenuService_ListMenuTree_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"menu", "menu-tree"}, ""))
+	pattern_MenuService_ListMenuTree_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"iam", "menu", "menu-tree"}, ""))
 
-	pattern_MenuService_ListMyMenuTree_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"menu", "my-menu-tree"}, ""))
+	pattern_MenuService_ListMyMenuTree_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"iam", "menu", "my-menu-tree"}, ""))
 
-	pattern_MenuService_UpdateRoleMenus_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3}, []string{"menu", "roles", "role_id", "menus"}, ""))
+	pattern_MenuService_UpdateRoleMenus_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3, 2, 4}, []string{"iam", "menu", "roles", "role_id", "menus"}, ""))
 
-	pattern_MenuService_ListRoleMenus_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3}, []string{"menu", "roles", "role_id", "menus"}, ""))
+	pattern_MenuService_ListRoleMenus_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3, 2, 4}, []string{"iam", "menu", "roles", "role_id", "menus"}, ""))
 )
 
 var (

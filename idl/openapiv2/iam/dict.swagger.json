@@ -16,7 +16,7 @@
     "application/json"
   ],
   "paths": {
-    "/dict/items": {
+    "/iam/dict/items": {
       "get": {
         "summary": "字典项列表：按字典类型筛选，keyword 模糊匹配 label/value",
         "operationId": "DictService_ListDictItems",
@@ -101,7 +101,7 @@
         ]
       }
     },
-    "/dict/items/{id}": {
+    "/iam/dict/items/{id}": {
       "delete": {
         "summary": "删除字典项",
         "operationId": "DictService_DeleteDictItem",
@@ -194,7 +194,7 @@
         ]
       }
     },
-    "/dict/types": {
+    "/iam/dict/types": {
       "get": {
         "summary": "字典类型分页列表：keyword 模糊匹配 code/name",
         "operationId": "DictService_ListDictTypes",
@@ -271,7 +271,7 @@
         ]
       }
     },
-    "/dict/types/{id}": {
+    "/iam/dict/types/{id}": {
       "delete": {
         "summary": "删除字典类型（仅当名下无字典项时可删除）",
         "operationId": "DictService_DeleteDictType",
@@ -525,7 +525,7 @@
           "title": "修改时间"
         }
       },
-      "title": "字典类型（t_dict_type：code 唯一业务码）"
+      "title": "字典类型（t_dict_type：code 应用内唯一业务码）"
     },
     "v1ListDictItemsResponse": {
       "type": "object",

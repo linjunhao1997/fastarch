@@ -9,7 +9,7 @@ import (
 
 	"github.com/glebarez/sqlite"
 	"github.com/linjunhao1997/contrib/model"
-	iam_v1 "github.com/linjunhao1997/idl/pb/iam"
+	common_menu_v1 "github.com/linjunhao1997/idl/pb/common/menu"
 	"gorm.io/gorm"
 )
 
@@ -122,7 +122,7 @@ func TestUpdateRoleMenusRejectsCrossAppMenus(t *testing.T) {
 	createTestMenu(t, db, 10, 1)
 	createTestMenu(t, db, 20, 2)
 
-	_, err := svc.UpdateRoleMenus(menuCtx(1), &iam_v1.UpdateRoleMenusRequest{
+	_, err := svc.UpdateRoleMenus(menuCtx(1), &common_menu_v1.UpdateRoleMenusRequest{
 		RoleId:  1,
 		MenuIds: []string{"10", "20"},
 	})
@@ -142,7 +142,7 @@ func TestUpdateRoleMenusPreservesOtherAppBindings(t *testing.T) {
 	createTestMenu(t, db, 20, 2)
 	bindRoleMenu(t, db, 1, 20) // 其他应用的既有绑定
 
-	_, err := svc.UpdateRoleMenus(menuCtx(1), &iam_v1.UpdateRoleMenusRequest{
+	_, err := svc.UpdateRoleMenus(menuCtx(1), &common_menu_v1.UpdateRoleMenusRequest{
 		RoleId:  1,
 		MenuIds: []string{"10"},
 	})
@@ -164,7 +164,7 @@ func TestUpdateRoleMenusReplacesWithinApp(t *testing.T) {
 	bindRoleMenu(t, db, 1, 10)
 	bindRoleMenu(t, db, 1, 20)
 
-	_, err := svc.UpdateRoleMenus(menuCtx(1), &iam_v1.UpdateRoleMenusRequest{
+	_, err := svc.UpdateRoleMenus(menuCtx(1), &common_menu_v1.UpdateRoleMenusRequest{
 		RoleId:  1,
 		MenuIds: []string{"11"},
 	})
@@ -185,7 +185,7 @@ func TestListRoleMenusScopedToApplication(t *testing.T) {
 	bindRoleMenu(t, db, 1, 10)
 	bindRoleMenu(t, db, 1, 20)
 
-	resp, err := svc.ListRoleMenus(menuCtx(1), &iam_v1.ListRoleMenusRequest{RoleId: 1})
+	resp, err := svc.ListRoleMenus(menuCtx(1), &common_menu_v1.ListRoleMenusRequest{RoleId: 1})
 	if err != nil {
 		t.Fatalf("ListRoleMenus() error = %v", err)
 	}
@@ -200,13 +200,13 @@ func TestRoleMenuMethodsRequireApplicationContext(t *testing.T) {
 	svc := newTestMenuService(t, db)
 	createTestMenu(t, db, 10, 1)
 
-	if _, err := svc.UpdateRoleMenus(context.Background(), &iam_v1.UpdateRoleMenusRequest{
+	if _, err := svc.UpdateRoleMenus(context.Background(), &common_menu_v1.UpdateRoleMenusRequest{
 		RoleId:  1,
 		MenuIds: []string{"10"},
 	}); err == nil {
 		t.Fatal("UpdateRoleMenus() without application context: want error, got nil")
 	}
-	if _, err := svc.ListRoleMenus(context.Background(), &iam_v1.ListRoleMenusRequest{RoleId: 1}); err == nil {
+	if _, err := svc.ListRoleMenus(context.Background(), &common_menu_v1.ListRoleMenusRequest{RoleId: 1}); err == nil {
 		t.Fatal("ListRoleMenus() without application context: want error, got nil")
 	}
 }

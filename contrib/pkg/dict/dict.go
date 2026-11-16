@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-dev-frame/sponge/pkg/krand"
 	common_v1 "github.com/linjunhao1997/idl/pb/common"
+	common_dict_v1 "github.com/linjunhao1997/idl/pb/common/dict"
 	iam_v1 "github.com/linjunhao1997/idl/pb/iam"
 	"github.com/linjunhao1997/contrib/model"
 	"github.com/linjunhao1997/contrib/pkg/bizerr"
@@ -57,8 +58,8 @@ func NewDictService(cfg Config) (*DictService, error) {
 	return &DictService{cfg: cfg}, nil
 }
 
-func dictTypeToPb(d model.DictType) *iam_v1.DictType {
-	return &iam_v1.DictType{
+func dictTypeToPb(d model.DictType) *common_dict_v1.DictType {
+	return &common_dict_v1.DictType{
 		Id:         cast.ToString(d.Id),
 		Code:       d.Code,
 		Name:       d.Name,
@@ -72,8 +73,8 @@ func dictTypeToPb(d model.DictType) *iam_v1.DictType {
 	}
 }
 
-func dictItemToPb(d model.DictItem) *iam_v1.DictItem {
-	return &iam_v1.DictItem{
+func dictItemToPb(d model.DictItem) *common_dict_v1.DictItem {
+	return &common_dict_v1.DictItem{
 		Id:         cast.ToString(d.Id),
 		TypeId:     cast.ToString(d.TypeId),
 		Label:      d.Label,
@@ -176,7 +177,7 @@ func (s *DictService) requireDictTypeInApp(ctx context.Context, typeId int64, ap
 }
 
 // CreateDictType 创建字典类型：code 应用内唯一。
-func (s *DictService) CreateDictType(ctx context.Context, request *iam_v1.CreateDictTypeRequest) (*iam_v1.DictType, error) {
+func (s *DictService) CreateDictType(ctx context.Context, request *common_dict_v1.CreateDictTypeRequest) (*common_dict_v1.DictType, error) {
 	appId, err := s.cfg.ApplicationIdFromContext(ctx)
 	if err != nil {
 		return nil, err
@@ -223,7 +224,7 @@ func (s *DictService) CreateDictType(ctx context.Context, request *iam_v1.Create
 
 // UpdateDictType 修改字典类型：name/remark/status 可选更新（空串 = 不修改）。
 // 限当前应用上下文，跨应用按不存在处理。
-func (s *DictService) UpdateDictType(ctx context.Context, request *iam_v1.UpdateDictTypeRequest) (*emptypb.Empty, error) {
+func (s *DictService) UpdateDictType(ctx context.Context, request *common_dict_v1.UpdateDictTypeRequest) (*emptypb.Empty, error) {
 	appId, err := s.cfg.ApplicationIdFromContext(ctx)
 	if err != nil {
 		return nil, err
@@ -270,7 +271,7 @@ func (s *DictService) UpdateDictType(ctx context.Context, request *iam_v1.Update
 }
 
 // DeleteDictType 删除字典类型：限当前应用上下文；名下字典项引用检查，物理删除。
-func (s *DictService) DeleteDictType(ctx context.Context, request *iam_v1.DeleteDictTypeRequest) (*emptypb.Empty, error) {
+func (s *DictService) DeleteDictType(ctx context.Context, request *common_dict_v1.DeleteDictTypeRequest) (*emptypb.Empty, error) {
 	appId, err := s.cfg.ApplicationIdFromContext(ctx)
 	if err != nil {
 		return nil, err
@@ -306,7 +307,7 @@ func (s *DictService) DeleteDictType(ctx context.Context, request *iam_v1.Delete
 }
 
 // ListDictTypes 字典类型分页列表：限当前应用上下文；keyword 模糊匹配 code/name。
-func (s *DictService) ListDictTypes(ctx context.Context, request *iam_v1.ListDictTypesRequest) (*iam_v1.ListDictTypesResponse, error) {
+func (s *DictService) ListDictTypes(ctx context.Context, request *common_dict_v1.ListDictTypesRequest) (*common_dict_v1.ListDictTypesResponse, error) {
 	appId, err := s.cfg.ApplicationIdFromContext(ctx)
 	if err != nil {
 		return nil, err
@@ -335,18 +336,18 @@ func (s *DictService) ListDictTypes(ctx context.Context, request *iam_v1.ListDic
 	if err != nil {
 		return nil, err
 	}
-	list := make([]*iam_v1.DictType, 0, len(types))
+	list := make([]*common_dict_v1.DictType, 0, len(types))
 	for _, d := range types {
 		list = append(list, dictTypeToPb(d))
 	}
-	return &iam_v1.ListDictTypesResponse{
+	return &common_dict_v1.ListDictTypesResponse{
 		DictTypes: list,
 		Page:      getPage(request.CurrentPage, request.PageSize, count),
 	}, nil
 }
 
 // CreateDictItem 创建字典项：type_id 必须指向存在的字典类型。
-func (s *DictService) CreateDictItem(ctx context.Context, request *iam_v1.CreateDictItemRequest) (*iam_v1.DictItem, error) {
+func (s *DictService) CreateDictItem(ctx context.Context, request *common_dict_v1.CreateDictItemRequest) (*common_dict_v1.DictItem, error) {
 	appId, err := s.cfg.ApplicationIdFromContext(ctx)
 	if err != nil {
 		return nil, err
@@ -384,7 +385,7 @@ func (s *DictService) CreateDictItem(ctx context.Context, request *iam_v1.Create
 
 // UpdateDictItem 修改字典项：label/value/sort/status 可选更新。
 // 字典项归属经其类型的应用上下文校验。
-func (s *DictService) UpdateDictItem(ctx context.Context, request *iam_v1.UpdateDictItemRequest) (*emptypb.Empty, error) {
+func (s *DictService) UpdateDictItem(ctx context.Context, request *common_dict_v1.UpdateDictItemRequest) (*emptypb.Empty, error) {
 	appId, err := s.cfg.ApplicationIdFromContext(ctx)
 	if err != nil {
 		return nil, err
@@ -436,7 +437,7 @@ func (s *DictService) UpdateDictItem(ctx context.Context, request *iam_v1.Update
 }
 
 // DeleteDictItem 删除字典项：归属经其类型的应用上下文校验，物理删除。
-func (s *DictService) DeleteDictItem(ctx context.Context, request *iam_v1.DeleteDictItemRequest) (*emptypb.Empty, error) {
+func (s *DictService) DeleteDictItem(ctx context.Context, request *common_dict_v1.DeleteDictItemRequest) (*emptypb.Empty, error) {
 	appId, err := s.cfg.ApplicationIdFromContext(ctx)
 	if err != nil {
 		return nil, err
@@ -467,7 +468,7 @@ func (s *DictService) DeleteDictItem(ctx context.Context, request *iam_v1.Delete
 }
 
 // ListDictItems 字典项列表：按 type_id 筛选（类型须归属当前应用），keyword 模糊匹配 label/value。
-func (s *DictService) ListDictItems(ctx context.Context, request *iam_v1.ListDictItemsRequest) (*iam_v1.ListDictItemsResponse, error) {
+func (s *DictService) ListDictItems(ctx context.Context, request *common_dict_v1.ListDictItemsRequest) (*common_dict_v1.ListDictItemsResponse, error) {
 	appId, err := s.cfg.ApplicationIdFromContext(ctx)
 	if err != nil {
 		return nil, err
@@ -500,11 +501,11 @@ func (s *DictService) ListDictItems(ctx context.Context, request *iam_v1.ListDic
 	if err != nil {
 		return nil, err
 	}
-	list := make([]*iam_v1.DictItem, 0, len(items))
+	list := make([]*common_dict_v1.DictItem, 0, len(items))
 	for _, d := range items {
 		list = append(list, dictItemToPb(d))
 	}
-	return &iam_v1.ListDictItemsResponse{
+	return &common_dict_v1.ListDictItemsResponse{
 		DictItems: list,
 		Page:      getPage(request.CurrentPage, request.PageSize, count),
 	}, nil

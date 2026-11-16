@@ -11,6 +11,8 @@ import (
 	contribmodel "github.com/linjunhao1997/contrib/model"
 
 	common_v1 "github.com/linjunhao1997/idl/pb/common"
+	common_dict_v1 "github.com/linjunhao1997/idl/pb/common/dict"
+	common_menu_v1 "github.com/linjunhao1997/idl/pb/common/menu"
 	iam_v1 "github.com/linjunhao1997/idl/pb/iam"
 	"github.com/spf13/cast"
 	"google.golang.org/grpc/codes"
@@ -70,7 +72,7 @@ func TestAppScopedRpcRequiresApplicationContext(t *testing.T) {
 	if _, err := menuSvc.ListMyMenuTree(bare, &emptypb.Empty{}); err != ErrApplicationContextRequired {
 		t.Fatalf("ListMyMenuTree() error = %v, want %v", err, ErrApplicationContextRequired)
 	}
-	if _, err := dictSvc.ListDictTypes(bare, &iam_v1.ListDictTypesRequest{}); err != ErrApplicationContextRequired {
+	if _, err := dictSvc.ListDictTypes(bare, &common_dict_v1.ListDictTypesRequest{}); err != ErrApplicationContextRequired {
 		t.Fatalf("ListDictTypes() error = %v, want %v", err, ErrApplicationContextRequired)
 	}
 	if _, err := authzSvc.ListPermissions(bare, &iam_v1.ListPermissionsRequest{}); err != ErrApplicationContextRequired {
@@ -112,14 +114,14 @@ func TestCreateMenuRejectsForeignSegmentCode(t *testing.T) {
 	createTestApp(t, db, testAppIdIam, "iam", model.StatusEnabled)
 	svc := NewMenuService(db)
 
-	_, err := svc.CreateMenu(ctxWithApp(testAppIdIam), &iam_v1.CreateMenuRequest{
+	_, err := svc.CreateMenu(ctxWithApp(testAppIdIam), &common_menu_v1.CreateMenuRequest{
 		Name: "越权菜单", PermissionCode: "order.menu.list",
 	})
 	if err != ErrPermissionCodeSegmentMismatch {
 		t.Fatalf("CreateMenu() error = %v, want %v", err, ErrPermissionCodeSegmentMismatch)
 	}
 	// 本应用服务段的码放行
-	if _, err := svc.CreateMenu(ctxWithApp(testAppIdIam), &iam_v1.CreateMenuRequest{
+	if _, err := svc.CreateMenu(ctxWithApp(testAppIdIam), &common_menu_v1.CreateMenuRequest{
 		Name: "用户管理", PermissionCode: "iam.user.list",
 	}); err != nil {
 		t.Fatalf("CreateMenu() with own-segment code error = %v", err)
@@ -134,19 +136,19 @@ func TestDictTypeCodeUniquePerApp(t *testing.T) {
 	createTestApp(t, db, testAppIdOrder, "order", model.StatusEnabled)
 	svc := NewDictService(db)
 
-	if _, err := svc.CreateDictType(ctxWithApp(testAppIdIam), &iam_v1.CreateDictTypeRequest{Code: "gender", Name: "性别"}); err != nil {
+	if _, err := svc.CreateDictType(ctxWithApp(testAppIdIam), &common_dict_v1.CreateDictTypeRequest{Code: "gender", Name: "性别"}); err != nil {
 		t.Fatalf("CreateDictType(iam) error = %v", err)
 	}
 	// 另一应用可建同名 code（应用内唯一）
-	if _, err := svc.CreateDictType(ctxWithApp(testAppIdOrder), &iam_v1.CreateDictTypeRequest{Code: "gender", Name: "性别"}); err != nil {
+	if _, err := svc.CreateDictType(ctxWithApp(testAppIdOrder), &common_dict_v1.CreateDictTypeRequest{Code: "gender", Name: "性别"}); err != nil {
 		t.Fatalf("CreateDictType(order) error = %v", err)
 	}
 	// 同应用重复 code 拒绝
-	if _, err := svc.CreateDictType(ctxWithApp(testAppIdIam), &iam_v1.CreateDictTypeRequest{Code: "gender", Name: "性别2"}); err != ErrDictTypeCodeDuplicated {
+	if _, err := svc.CreateDictType(ctxWithApp(testAppIdIam), &common_dict_v1.CreateDictTypeRequest{Code: "gender", Name: "性别2"}); err != ErrDictTypeCodeDuplicated {
 		t.Fatalf("CreateDictType(iam dup) error = %v, want %v", err, ErrDictTypeCodeDuplicated)
 	}
 	// 列表只见本应用
-	resp, err := svc.ListDictTypes(ctxWithApp(testAppIdIam), &iam_v1.ListDictTypesRequest{CurrentPage: 1, PageSize: 10})
+	resp, err := svc.ListDictTypes(ctxWithApp(testAppIdIam), &common_dict_v1.ListDictTypesRequest{CurrentPage: 1, PageSize: 10})
 	if err != nil {
 		t.Fatalf("ListDictTypes() error = %v", err)
 	}
@@ -160,19 +162,19 @@ func TestDictItemScopedByTypeApplication(t *testing.T) {
 	createTestApp(t, db, testAppIdIam, "iam", model.StatusEnabled)
 	createTestApp(t, db, testAppIdOrder, "order", model.StatusEnabled)
 	svc := NewDictService(db)
-	created, err := svc.CreateDictType(ctxWithApp(testAppIdOrder), &iam_v1.CreateDictTypeRequest{Code: "gender", Name: "性别"})
+	created, err := svc.CreateDictType(ctxWithApp(testAppIdOrder), &common_dict_v1.CreateDictTypeRequest{Code: "gender", Name: "性别"})
 	if err != nil {
 		t.Fatalf("CreateDictType(order) error = %v", err)
 	}
 	// 在 iam 应用上下文里给 order 的字典类型建条目 → 拒绝（跨应用）
-	_, err = svc.CreateDictItem(ctxWithApp(testAppIdIam), &iam_v1.CreateDictItemRequest{
+	_, err = svc.CreateDictItem(ctxWithApp(testAppIdIam), &common_dict_v1.CreateDictItemRequest{
 		TypeId: cast.ToInt64(created.Id), Label: "男", Value: "male",
 	})
 	if err == nil {
 		t.Fatal("CreateDictItem() cross-app should fail")
 	}
 	// 本应用上下文放行
-	if _, err := svc.CreateDictItem(ctxWithApp(testAppIdOrder), &iam_v1.CreateDictItemRequest{
+	if _, err := svc.CreateDictItem(ctxWithApp(testAppIdOrder), &common_dict_v1.CreateDictItemRequest{
 		TypeId: cast.ToInt64(created.Id), Label: "男", Value: "male",
 	}); err != nil {
 		t.Fatalf("CreateDictItem() own-app error = %v", err)

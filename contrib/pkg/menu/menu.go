@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-dev-frame/sponge/pkg/krand"
 	common_v1 "github.com/linjunhao1997/idl/pb/common"
+	common_menu_v1 "github.com/linjunhao1997/idl/pb/common/menu"
 	iam_v1 "github.com/linjunhao1997/idl/pb/iam"
 	"github.com/linjunhao1997/contrib/model"
 	"github.com/linjunhao1997/contrib/pkg/bizerr"
@@ -78,8 +79,8 @@ func NewMenuService(cfg Config) (*MenuService, error) {
 }
 
 // menuToPb 模型转 pb（t_menu 全列映射）。
-func menuToPb(m model.Menu) *iam_v1.Menu {
-	return &iam_v1.Menu{
+func menuToPb(m model.Menu) *common_menu_v1.Menu {
+	return &common_menu_v1.Menu{
 		Id:             cast.ToString(m.Id),
 		ParentId:       m.ParentId,
 		Name:           m.Name,
@@ -97,14 +98,14 @@ func menuToPb(m model.Menu) *iam_v1.Menu {
 }
 
 // menuTreeNodes 按 parent_id 组装菜单树（纯内存回溯，禁止循环内 DB 调用）。
-func menuTreeNodes(menus []model.Menu) []*iam_v1.MenuTreeNode {
-	nodesById := make(map[int64]*iam_v1.MenuTreeNode, len(menus))
+func menuTreeNodes(menus []model.Menu) []*common_menu_v1.MenuTreeNode {
+	nodesById := make(map[int64]*common_menu_v1.MenuTreeNode, len(menus))
 	for _, menu := range menus {
-		nodesById[menu.Id] = &iam_v1.MenuTreeNode{
+		nodesById[menu.Id] = &common_menu_v1.MenuTreeNode{
 			Menu: menuToPb(menu),
 		}
 	}
-	roots := make([]*iam_v1.MenuTreeNode, 0)
+	roots := make([]*common_menu_v1.MenuTreeNode, 0)
 	for _, menu := range menus {
 		node := nodesById[menu.Id]
 		parent, hasParent := nodesById[menu.ParentId]
@@ -202,7 +203,7 @@ func fillMenuAncestors(ctx context.Context, db *gorm.DB, menus []model.Menu, app
 
 // ListMenuTree 管理员视角全量菜单树（含停用菜单，前端置灰）。
 // 数据范围 = 当前应用上下文（宿主 token 承载）。
-func (s *MenuService) ListMenuTree(ctx context.Context, empty *emptypb.Empty) (*iam_v1.ListMenuTreeResponse, error) {
+func (s *MenuService) ListMenuTree(ctx context.Context, empty *emptypb.Empty) (*common_menu_v1.ListMenuTreeResponse, error) {
 	appId, err := s.cfg.ApplicationIdFromContext(ctx)
 	if err != nil {
 		return nil, err
@@ -217,14 +218,14 @@ func (s *MenuService) ListMenuTree(ctx context.Context, empty *emptypb.Empty) (*
 		slog.Warn("list menu tree failed", "error", err)
 		return nil, err
 	}
-	return &iam_v1.ListMenuTreeResponse{
+	return &common_menu_v1.ListMenuTreeResponse{
 		Roots: menuTreeNodes(menus),
 	}, nil
 }
 
 // ListMyMenuTree 当前登录用户可见菜单树：管理员取当前应用全量启用菜单，
 // 普通用户按角色绑定过滤并回补祖先路径（应用上下文由宿主 token 承载）。
-func (s *MenuService) ListMyMenuTree(ctx context.Context, empty *emptypb.Empty) (*iam_v1.ListMenuTreeResponse, error) {
+func (s *MenuService) ListMyMenuTree(ctx context.Context, empty *emptypb.Empty) (*common_menu_v1.ListMenuTreeResponse, error) {
 	appId, err := s.cfg.ApplicationIdFromContext(ctx)
 	if err != nil {
 		return nil, err
@@ -232,7 +233,7 @@ func (s *MenuService) ListMyMenuTree(ctx context.Context, empty *emptypb.Empty) 
 	isAdmin := s.cfg.IsAdminFromContext(ctx)
 	accountId := s.cfg.AccountIdFromContext(ctx)
 	menus := loadVisibleMenus(ctx, s.cfg.DB, s.cfg, accountId, isAdmin, appId)
-	return &iam_v1.ListMenuTreeResponse{
+	return &common_menu_v1.ListMenuTreeResponse{
 		Roots: menuTreeNodes(menus),
 	}, nil
 }
@@ -247,7 +248,7 @@ func (s *MenuService) validateMenuPermissionCode(ctx context.Context, appId int6
 
 // CreateMenu 创建菜单，返回创建出的菜单（含 id）。归属应用取当前上下文；
 // 绑定权限码时经宿主规则校验。
-func (s *MenuService) CreateMenu(ctx context.Context, request *iam_v1.CreateMenuRequest) (*iam_v1.Menu, error) {
+func (s *MenuService) CreateMenu(ctx context.Context, request *common_menu_v1.CreateMenuRequest) (*common_menu_v1.Menu, error) {
 	appId, err := s.cfg.ApplicationIdFromContext(ctx)
 	if err != nil {
 		return nil, err
@@ -288,7 +289,7 @@ func (s *MenuService) CreateMenu(ctx context.Context, request *iam_v1.CreateMenu
 }
 
 // GetMenu 获取菜单信息（限当前应用上下文，跨应用按不存在处理）。
-func (s *MenuService) GetMenu(ctx context.Context, request *common_v1.GetRequest) (*iam_v1.Menu, error) {
+func (s *MenuService) GetMenu(ctx context.Context, request *common_v1.GetRequest) (*common_menu_v1.Menu, error) {
 	appId, err := s.cfg.ApplicationIdFromContext(ctx)
 	if err != nil {
 		return nil, err
@@ -310,7 +311,7 @@ func (s *MenuService) GetMenu(ctx context.Context, request *common_v1.GetRequest
 
 // UpdateMenu 修改菜单：字段缺省 = 不修改；parent_id 默认不改，
 // 仅在 parent_cleared = true 时按传入值整体移动（含挂到顶级）。
-func (s *MenuService) UpdateMenu(ctx context.Context, request *iam_v1.UpdateMenuRequest) (*emptypb.Empty, error) {
+func (s *MenuService) UpdateMenu(ctx context.Context, request *common_menu_v1.UpdateMenuRequest) (*emptypb.Empty, error) {
 	appId, err := s.cfg.ApplicationIdFromContext(ctx)
 	if err != nil {
 		return nil, err
@@ -377,7 +378,7 @@ func (s *MenuService) UpdateMenu(ctx context.Context, request *iam_v1.UpdateMenu
 
 // DeleteMenu 删除菜单：限当前应用上下文；子菜单与角色绑定引用检查，
 // 物理删除（基础架构型）。
-func (s *MenuService) DeleteMenu(ctx context.Context, request *iam_v1.DeleteMenuRequest) (*emptypb.Empty, error) {
+func (s *MenuService) DeleteMenu(ctx context.Context, request *common_menu_v1.DeleteMenuRequest) (*emptypb.Empty, error) {
 	appId, err := s.cfg.ApplicationIdFromContext(ctx)
 	if err != nil {
 		return nil, err
@@ -428,7 +429,7 @@ func (s *MenuService) DeleteMenu(ctx context.Context, request *iam_v1.DeleteMenu
 // 必须全部归属当前应用（跨应用按不存在处理），差集只增删当前应用内的绑定，
 // 其他应用的绑定不受影响。角色存在性经宿主钩子校验。
 // 绑定仅决定菜单可见性，不授予权限（ADR 0002）。
-func (s *MenuService) UpdateRoleMenus(ctx context.Context, request *iam_v1.UpdateRoleMenusRequest) (*emptypb.Empty, error) {
+func (s *MenuService) UpdateRoleMenus(ctx context.Context, request *common_menu_v1.UpdateRoleMenusRequest) (*emptypb.Empty, error) {
 	appId, err := s.cfg.ApplicationIdFromContext(ctx)
 	if err != nil {
 		return nil, err
@@ -563,7 +564,7 @@ func (s *MenuService) listRoleMenuIds(ctx context.Context, roleId int64, appId i
 }
 
 // ListRoleMenus 查询角色绑定的菜单 id 集合（编辑角色页回显用，限当前应用上下文）。
-func (s *MenuService) ListRoleMenus(ctx context.Context, request *iam_v1.ListRoleMenusRequest) (*iam_v1.ListRoleMenusResponse, error) {
+func (s *MenuService) ListRoleMenus(ctx context.Context, request *common_menu_v1.ListRoleMenusRequest) (*common_menu_v1.ListRoleMenusResponse, error) {
 	appId, err := s.cfg.ApplicationIdFromContext(ctx)
 	if err != nil {
 		return nil, err
@@ -576,5 +577,5 @@ func (s *MenuService) ListRoleMenus(ctx context.Context, request *iam_v1.ListRol
 	for id := range bound {
 		menuIds = append(menuIds, cast.ToString(id))
 	}
-	return &iam_v1.ListRoleMenusResponse{MenuIds: menuIds}, nil
+	return &common_menu_v1.ListRoleMenusResponse{MenuIds: menuIds}, nil
 }

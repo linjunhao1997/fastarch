@@ -8,6 +8,7 @@ package iam_v1
 
 import (
 	context "context"
+	dict "github.com/linjunhao1997/idl/pb/common/dict"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -35,21 +36,21 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type DictServiceClient interface {
 	// 创建字典类型，返回创建出的字典类型（含 id）
-	CreateDictType(ctx context.Context, in *CreateDictTypeRequest, opts ...grpc.CallOption) (*DictType, error)
+	CreateDictType(ctx context.Context, in *dict.CreateDictTypeRequest, opts ...grpc.CallOption) (*dict.DictType, error)
 	// 修改字典类型
-	UpdateDictType(ctx context.Context, in *UpdateDictTypeRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	UpdateDictType(ctx context.Context, in *dict.UpdateDictTypeRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// 删除字典类型（仅当名下无字典项时可删除）
-	DeleteDictType(ctx context.Context, in *DeleteDictTypeRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	DeleteDictType(ctx context.Context, in *dict.DeleteDictTypeRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// 字典类型分页列表：keyword 模糊匹配 code/name
-	ListDictTypes(ctx context.Context, in *ListDictTypesRequest, opts ...grpc.CallOption) (*ListDictTypesResponse, error)
+	ListDictTypes(ctx context.Context, in *dict.ListDictTypesRequest, opts ...grpc.CallOption) (*dict.ListDictTypesResponse, error)
 	// 创建字典项，返回创建出的字典项（含 id）
-	CreateDictItem(ctx context.Context, in *CreateDictItemRequest, opts ...grpc.CallOption) (*DictItem, error)
+	CreateDictItem(ctx context.Context, in *dict.CreateDictItemRequest, opts ...grpc.CallOption) (*dict.DictItem, error)
 	// 修改字典项
-	UpdateDictItem(ctx context.Context, in *UpdateDictItemRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	UpdateDictItem(ctx context.Context, in *dict.UpdateDictItemRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// 删除字典项
-	DeleteDictItem(ctx context.Context, in *DeleteDictItemRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	DeleteDictItem(ctx context.Context, in *dict.DeleteDictItemRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// 字典项列表：按字典类型筛选，keyword 模糊匹配 label/value
-	ListDictItems(ctx context.Context, in *ListDictItemsRequest, opts ...grpc.CallOption) (*ListDictItemsResponse, error)
+	ListDictItems(ctx context.Context, in *dict.ListDictItemsRequest, opts ...grpc.CallOption) (*dict.ListDictItemsResponse, error)
 }
 
 type dictServiceClient struct {
@@ -60,8 +61,8 @@ func NewDictServiceClient(cc grpc.ClientConnInterface) DictServiceClient {
 	return &dictServiceClient{cc}
 }
 
-func (c *dictServiceClient) CreateDictType(ctx context.Context, in *CreateDictTypeRequest, opts ...grpc.CallOption) (*DictType, error) {
-	out := new(DictType)
+func (c *dictServiceClient) CreateDictType(ctx context.Context, in *dict.CreateDictTypeRequest, opts ...grpc.CallOption) (*dict.DictType, error) {
+	out := new(dict.DictType)
 	err := c.cc.Invoke(ctx, DictService_CreateDictType_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -69,7 +70,7 @@ func (c *dictServiceClient) CreateDictType(ctx context.Context, in *CreateDictTy
 	return out, nil
 }
 
-func (c *dictServiceClient) UpdateDictType(ctx context.Context, in *UpdateDictTypeRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+func (c *dictServiceClient) UpdateDictType(ctx context.Context, in *dict.UpdateDictTypeRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, DictService_UpdateDictType_FullMethodName, in, out, opts...)
 	if err != nil {
@@ -78,7 +79,7 @@ func (c *dictServiceClient) UpdateDictType(ctx context.Context, in *UpdateDictTy
 	return out, nil
 }
 
-func (c *dictServiceClient) DeleteDictType(ctx context.Context, in *DeleteDictTypeRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+func (c *dictServiceClient) DeleteDictType(ctx context.Context, in *dict.DeleteDictTypeRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, DictService_DeleteDictType_FullMethodName, in, out, opts...)
 	if err != nil {
@@ -87,8 +88,8 @@ func (c *dictServiceClient) DeleteDictType(ctx context.Context, in *DeleteDictTy
 	return out, nil
 }
 
-func (c *dictServiceClient) ListDictTypes(ctx context.Context, in *ListDictTypesRequest, opts ...grpc.CallOption) (*ListDictTypesResponse, error) {
-	out := new(ListDictTypesResponse)
+func (c *dictServiceClient) ListDictTypes(ctx context.Context, in *dict.ListDictTypesRequest, opts ...grpc.CallOption) (*dict.ListDictTypesResponse, error) {
+	out := new(dict.ListDictTypesResponse)
 	err := c.cc.Invoke(ctx, DictService_ListDictTypes_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -96,8 +97,8 @@ func (c *dictServiceClient) ListDictTypes(ctx context.Context, in *ListDictTypes
 	return out, nil
 }
 
-func (c *dictServiceClient) CreateDictItem(ctx context.Context, in *CreateDictItemRequest, opts ...grpc.CallOption) (*DictItem, error) {
-	out := new(DictItem)
+func (c *dictServiceClient) CreateDictItem(ctx context.Context, in *dict.CreateDictItemRequest, opts ...grpc.CallOption) (*dict.DictItem, error) {
+	out := new(dict.DictItem)
 	err := c.cc.Invoke(ctx, DictService_CreateDictItem_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -105,7 +106,7 @@ func (c *dictServiceClient) CreateDictItem(ctx context.Context, in *CreateDictIt
 	return out, nil
 }
 
-func (c *dictServiceClient) UpdateDictItem(ctx context.Context, in *UpdateDictItemRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+func (c *dictServiceClient) UpdateDictItem(ctx context.Context, in *dict.UpdateDictItemRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, DictService_UpdateDictItem_FullMethodName, in, out, opts...)
 	if err != nil {
@@ -114,7 +115,7 @@ func (c *dictServiceClient) UpdateDictItem(ctx context.Context, in *UpdateDictIt
 	return out, nil
 }
 
-func (c *dictServiceClient) DeleteDictItem(ctx context.Context, in *DeleteDictItemRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+func (c *dictServiceClient) DeleteDictItem(ctx context.Context, in *dict.DeleteDictItemRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, DictService_DeleteDictItem_FullMethodName, in, out, opts...)
 	if err != nil {
@@ -123,8 +124,8 @@ func (c *dictServiceClient) DeleteDictItem(ctx context.Context, in *DeleteDictIt
 	return out, nil
 }
 
-func (c *dictServiceClient) ListDictItems(ctx context.Context, in *ListDictItemsRequest, opts ...grpc.CallOption) (*ListDictItemsResponse, error) {
-	out := new(ListDictItemsResponse)
+func (c *dictServiceClient) ListDictItems(ctx context.Context, in *dict.ListDictItemsRequest, opts ...grpc.CallOption) (*dict.ListDictItemsResponse, error) {
+	out := new(dict.ListDictItemsResponse)
 	err := c.cc.Invoke(ctx, DictService_ListDictItems_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -137,49 +138,49 @@ func (c *dictServiceClient) ListDictItems(ctx context.Context, in *ListDictItems
 // for forward compatibility
 type DictServiceServer interface {
 	// 创建字典类型，返回创建出的字典类型（含 id）
-	CreateDictType(context.Context, *CreateDictTypeRequest) (*DictType, error)
+	CreateDictType(context.Context, *dict.CreateDictTypeRequest) (*dict.DictType, error)
 	// 修改字典类型
-	UpdateDictType(context.Context, *UpdateDictTypeRequest) (*emptypb.Empty, error)
+	UpdateDictType(context.Context, *dict.UpdateDictTypeRequest) (*emptypb.Empty, error)
 	// 删除字典类型（仅当名下无字典项时可删除）
-	DeleteDictType(context.Context, *DeleteDictTypeRequest) (*emptypb.Empty, error)
+	DeleteDictType(context.Context, *dict.DeleteDictTypeRequest) (*emptypb.Empty, error)
 	// 字典类型分页列表：keyword 模糊匹配 code/name
-	ListDictTypes(context.Context, *ListDictTypesRequest) (*ListDictTypesResponse, error)
+	ListDictTypes(context.Context, *dict.ListDictTypesRequest) (*dict.ListDictTypesResponse, error)
 	// 创建字典项，返回创建出的字典项（含 id）
-	CreateDictItem(context.Context, *CreateDictItemRequest) (*DictItem, error)
+	CreateDictItem(context.Context, *dict.CreateDictItemRequest) (*dict.DictItem, error)
 	// 修改字典项
-	UpdateDictItem(context.Context, *UpdateDictItemRequest) (*emptypb.Empty, error)
+	UpdateDictItem(context.Context, *dict.UpdateDictItemRequest) (*emptypb.Empty, error)
 	// 删除字典项
-	DeleteDictItem(context.Context, *DeleteDictItemRequest) (*emptypb.Empty, error)
+	DeleteDictItem(context.Context, *dict.DeleteDictItemRequest) (*emptypb.Empty, error)
 	// 字典项列表：按字典类型筛选，keyword 模糊匹配 label/value
-	ListDictItems(context.Context, *ListDictItemsRequest) (*ListDictItemsResponse, error)
+	ListDictItems(context.Context, *dict.ListDictItemsRequest) (*dict.ListDictItemsResponse, error)
 }
 
 // UnimplementedDictServiceServer should be embedded to have forward compatible implementations.
 type UnimplementedDictServiceServer struct {
 }
 
-func (UnimplementedDictServiceServer) CreateDictType(context.Context, *CreateDictTypeRequest) (*DictType, error) {
+func (UnimplementedDictServiceServer) CreateDictType(context.Context, *dict.CreateDictTypeRequest) (*dict.DictType, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateDictType not implemented")
 }
-func (UnimplementedDictServiceServer) UpdateDictType(context.Context, *UpdateDictTypeRequest) (*emptypb.Empty, error) {
+func (UnimplementedDictServiceServer) UpdateDictType(context.Context, *dict.UpdateDictTypeRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateDictType not implemented")
 }
-func (UnimplementedDictServiceServer) DeleteDictType(context.Context, *DeleteDictTypeRequest) (*emptypb.Empty, error) {
+func (UnimplementedDictServiceServer) DeleteDictType(context.Context, *dict.DeleteDictTypeRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteDictType not implemented")
 }
-func (UnimplementedDictServiceServer) ListDictTypes(context.Context, *ListDictTypesRequest) (*ListDictTypesResponse, error) {
+func (UnimplementedDictServiceServer) ListDictTypes(context.Context, *dict.ListDictTypesRequest) (*dict.ListDictTypesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListDictTypes not implemented")
 }
-func (UnimplementedDictServiceServer) CreateDictItem(context.Context, *CreateDictItemRequest) (*DictItem, error) {
+func (UnimplementedDictServiceServer) CreateDictItem(context.Context, *dict.CreateDictItemRequest) (*dict.DictItem, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateDictItem not implemented")
 }
-func (UnimplementedDictServiceServer) UpdateDictItem(context.Context, *UpdateDictItemRequest) (*emptypb.Empty, error) {
+func (UnimplementedDictServiceServer) UpdateDictItem(context.Context, *dict.UpdateDictItemRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateDictItem not implemented")
 }
-func (UnimplementedDictServiceServer) DeleteDictItem(context.Context, *DeleteDictItemRequest) (*emptypb.Empty, error) {
+func (UnimplementedDictServiceServer) DeleteDictItem(context.Context, *dict.DeleteDictItemRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteDictItem not implemented")
 }
-func (UnimplementedDictServiceServer) ListDictItems(context.Context, *ListDictItemsRequest) (*ListDictItemsResponse, error) {
+func (UnimplementedDictServiceServer) ListDictItems(context.Context, *dict.ListDictItemsRequest) (*dict.ListDictItemsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListDictItems not implemented")
 }
 
@@ -195,7 +196,7 @@ func RegisterDictServiceServer(s grpc.ServiceRegistrar, srv DictServiceServer) {
 }
 
 func _DictService_CreateDictType_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CreateDictTypeRequest)
+	in := new(dict.CreateDictTypeRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -207,13 +208,13 @@ func _DictService_CreateDictType_Handler(srv interface{}, ctx context.Context, d
 		FullMethod: DictService_CreateDictType_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DictServiceServer).CreateDictType(ctx, req.(*CreateDictTypeRequest))
+		return srv.(DictServiceServer).CreateDictType(ctx, req.(*dict.CreateDictTypeRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _DictService_UpdateDictType_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UpdateDictTypeRequest)
+	in := new(dict.UpdateDictTypeRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -225,13 +226,13 @@ func _DictService_UpdateDictType_Handler(srv interface{}, ctx context.Context, d
 		FullMethod: DictService_UpdateDictType_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DictServiceServer).UpdateDictType(ctx, req.(*UpdateDictTypeRequest))
+		return srv.(DictServiceServer).UpdateDictType(ctx, req.(*dict.UpdateDictTypeRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _DictService_DeleteDictType_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(DeleteDictTypeRequest)
+	in := new(dict.DeleteDictTypeRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -243,13 +244,13 @@ func _DictService_DeleteDictType_Handler(srv interface{}, ctx context.Context, d
 		FullMethod: DictService_DeleteDictType_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DictServiceServer).DeleteDictType(ctx, req.(*DeleteDictTypeRequest))
+		return srv.(DictServiceServer).DeleteDictType(ctx, req.(*dict.DeleteDictTypeRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _DictService_ListDictTypes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListDictTypesRequest)
+	in := new(dict.ListDictTypesRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -261,13 +262,13 @@ func _DictService_ListDictTypes_Handler(srv interface{}, ctx context.Context, de
 		FullMethod: DictService_ListDictTypes_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DictServiceServer).ListDictTypes(ctx, req.(*ListDictTypesRequest))
+		return srv.(DictServiceServer).ListDictTypes(ctx, req.(*dict.ListDictTypesRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _DictService_CreateDictItem_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CreateDictItemRequest)
+	in := new(dict.CreateDictItemRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -279,13 +280,13 @@ func _DictService_CreateDictItem_Handler(srv interface{}, ctx context.Context, d
 		FullMethod: DictService_CreateDictItem_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DictServiceServer).CreateDictItem(ctx, req.(*CreateDictItemRequest))
+		return srv.(DictServiceServer).CreateDictItem(ctx, req.(*dict.CreateDictItemRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _DictService_UpdateDictItem_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UpdateDictItemRequest)
+	in := new(dict.UpdateDictItemRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -297,13 +298,13 @@ func _DictService_UpdateDictItem_Handler(srv interface{}, ctx context.Context, d
 		FullMethod: DictService_UpdateDictItem_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DictServiceServer).UpdateDictItem(ctx, req.(*UpdateDictItemRequest))
+		return srv.(DictServiceServer).UpdateDictItem(ctx, req.(*dict.UpdateDictItemRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _DictService_DeleteDictItem_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(DeleteDictItemRequest)
+	in := new(dict.DeleteDictItemRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -315,13 +316,13 @@ func _DictService_DeleteDictItem_Handler(srv interface{}, ctx context.Context, d
 		FullMethod: DictService_DeleteDictItem_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DictServiceServer).DeleteDictItem(ctx, req.(*DeleteDictItemRequest))
+		return srv.(DictServiceServer).DeleteDictItem(ctx, req.(*dict.DeleteDictItemRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _DictService_ListDictItems_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListDictItemsRequest)
+	in := new(dict.ListDictItemsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -333,7 +334,7 @@ func _DictService_ListDictItems_Handler(srv interface{}, ctx context.Context, de
 		FullMethod: DictService_ListDictItems_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DictServiceServer).ListDictItems(ctx, req.(*ListDictItemsRequest))
+		return srv.(DictServiceServer).ListDictItems(ctx, req.(*dict.ListDictItemsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }

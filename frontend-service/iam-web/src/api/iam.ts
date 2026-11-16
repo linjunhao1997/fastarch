@@ -242,24 +242,24 @@ export const profileApi = {
  * 管理员返回全量启用菜单）。id/parentId 一律 string。
  */
 export const menuApi = {
-  listMyTree: () => request<ListMenuTreeResponse>('/menu/my-menu-tree'),
+  listMyTree: () => request<ListMenuTreeResponse>('/iam/menu/my-menu-tree'),
   /** 全量菜单树（管理员视角，含停用） */
-  listTree: () => request<ListMenuTreeResponse>('/menu/menu-tree'),
+  listTree: () => request<ListMenuTreeResponse>('/iam/menu/menu-tree'),
   create: (data: CreateMenuRequest) =>
-    request<Menu>('/menu/menus', { method: 'POST', body: data }),
-  get: (id: string) => request<Menu>(`/menu/menus/${id}`),
+    request<Menu>('/iam/menu/menus', { method: 'POST', body: data }),
+  get: (id: string) => request<Menu>(`/iam/menu/menus/${id}`),
   update: (id: string, data: UpdateMenuRequest) =>
-    request<void>(`/menu/menus/${id}`, { method: 'PATCH', body: data }),
-  delete: (id: string) => request<void>(`/menu/menus/${id}`, { method: 'DELETE' }),
+    request<void>(`/iam/menu/menus/${id}`, { method: 'PATCH', body: data }),
+  delete: (id: string) => request<void>(`/iam/menu/menus/${id}`, { method: 'DELETE' }),
   /** 角色菜单绑定：全量覆盖语义（空数组 = 清空绑定） */
   updateRoleMenus: (roleId: string, menuIds: string[]) =>
-    request<void>(`/menu/roles/${roleId}/menus`, {
+    request<void>(`/iam/menu/roles/${roleId}/menus`, {
       method: 'PATCH',
       body: { roleId, menuIds },
     }),
   /** 角色已绑定菜单 id 集合（编辑角色页回显） */
   listRoleMenus: (roleId: string) =>
-    request<{ menuIds: string[] }>(`/menu/roles/${roleId}/menus`),
+    request<{ menuIds: string[] }>(`/iam/menu/roles/${roleId}/menus`),
 };
 
 /**
@@ -268,23 +268,23 @@ export const menuApi = {
  */
 export const dictApi = {
   createType: (data: CreateDictTypeRequest) =>
-    request<DictType>('/dict/types', { method: 'POST', body: data }),
-  getType: (id: string) => request<DictType>(`/dict/types/${id}`),
+    request<DictType>('/iam/dict/types', { method: 'POST', body: data }),
+  getType: (id: string) => request<DictType>(`/iam/dict/types/${id}`),
   updateType: (id: string, data: UpdateDictTypeRequest) =>
-    request<void>(`/dict/types/${id}`, { method: 'PATCH', body: data }),
-  deleteType: (id: string) => request<void>(`/dict/types/${id}`, { method: 'DELETE' }),
+    request<void>(`/iam/dict/types/${id}`, { method: 'PATCH', body: data }),
+  deleteType: (id: string) => request<void>(`/iam/dict/types/${id}`, { method: 'DELETE' }),
   listTypes: (currentPage = 1, pageSize = 10, keyword = '') =>
     request<ListDictTypesResponse>(
-      buildListUrl('/dict/types', currentPage, pageSize, keyword),
+      buildListUrl('/iam/dict/types', currentPage, pageSize, keyword),
     ),
   createItem: (data: CreateDictItemRequest) =>
-    request<DictItem>('/dict/items', { method: 'POST', body: data }),
-  getItem: (id: string) => request<DictItem>(`/dict/items/${id}`),
+    request<DictItem>('/iam/dict/items', { method: 'POST', body: data }),
+  getItem: (id: string) => request<DictItem>(`/iam/dict/items/${id}`),
   updateItem: (id: string, data: UpdateDictItemRequest) =>
-    request<void>(`/dict/items/${id}`, { method: 'PATCH', body: data }),
-  deleteItem: (id: string) => request<void>(`/dict/items/${id}`, { method: 'DELETE' }),
+    request<void>(`/iam/dict/items/${id}`, { method: 'PATCH', body: data }),
+  deleteItem: (id: string) => request<void>(`/iam/dict/items/${id}`, { method: 'DELETE' }),
   listItems: (typeId: string, currentPage = 1, pageSize = 50, keyword = '') =>
     request<ListDictItemsResponse>(
-      `${buildListUrl('/dict/items', currentPage, pageSize, keyword)}&type_id=${typeId}`,
+      `${buildListUrl('/iam/dict/items', currentPage, pageSize, keyword)}&type_id=${typeId}`,
     ),
 };

@@ -15,6 +15,7 @@ import (
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/utilities"
+	"github.com/linjunhao1997/idl/pb/common/dict"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/grpclog"
@@ -32,7 +33,7 @@ var _ = utilities.NewDoubleArray
 var _ = metadata.Join
 
 func request_DictService_CreateDictType_0(ctx context.Context, marshaler runtime.Marshaler, client DictServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq CreateDictTypeRequest
+	var protoReq common_dict_v1.CreateDictTypeRequest
 	var metadata runtime.ServerMetadata
 
 	newReader, berr := utilities.IOReaderFactory(req.Body)
@@ -49,7 +50,7 @@ func request_DictService_CreateDictType_0(ctx context.Context, marshaler runtime
 }
 
 func local_request_DictService_CreateDictType_0(ctx context.Context, marshaler runtime.Marshaler, server DictServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq CreateDictTypeRequest
+	var protoReq common_dict_v1.CreateDictTypeRequest
 	var metadata runtime.ServerMetadata
 
 	newReader, berr := utilities.IOReaderFactory(req.Body)
@@ -66,7 +67,7 @@ func local_request_DictService_CreateDictType_0(ctx context.Context, marshaler r
 }
 
 func request_DictService_UpdateDictType_0(ctx context.Context, marshaler runtime.Marshaler, client DictServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq UpdateDictTypeRequest
+	var protoReq common_dict_v1.UpdateDictTypeRequest
 	var metadata runtime.ServerMetadata
 
 	newReader, berr := utilities.IOReaderFactory(req.Body)
@@ -100,7 +101,7 @@ func request_DictService_UpdateDictType_0(ctx context.Context, marshaler runtime
 }
 
 func local_request_DictService_UpdateDictType_0(ctx context.Context, marshaler runtime.Marshaler, server DictServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq UpdateDictTypeRequest
+	var protoReq common_dict_v1.UpdateDictTypeRequest
 	var metadata runtime.ServerMetadata
 
 	newReader, berr := utilities.IOReaderFactory(req.Body)
@@ -134,7 +135,7 @@ func local_request_DictService_UpdateDictType_0(ctx context.Context, marshaler r
 }
 
 func request_DictService_DeleteDictType_0(ctx context.Context, marshaler runtime.Marshaler, client DictServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq DeleteDictTypeRequest
+	var protoReq common_dict_v1.DeleteDictTypeRequest
 	var metadata runtime.ServerMetadata
 
 	var (
@@ -160,7 +161,7 @@ func request_DictService_DeleteDictType_0(ctx context.Context, marshaler runtime
 }
 
 func local_request_DictService_DeleteDictType_0(ctx context.Context, marshaler runtime.Marshaler, server DictServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq DeleteDictTypeRequest
+	var protoReq common_dict_v1.DeleteDictTypeRequest
 	var metadata runtime.ServerMetadata
 
 	var (
@@ -190,7 +191,7 @@ var (
 )
 
 func request_DictService_ListDictTypes_0(ctx context.Context, marshaler runtime.Marshaler, client DictServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq ListDictTypesRequest
+	var protoReq common_dict_v1.ListDictTypesRequest
 	var metadata runtime.ServerMetadata
 
 	if err := req.ParseForm(); err != nil {
@@ -206,7 +207,7 @@ func request_DictService_ListDictTypes_0(ctx context.Context, marshaler runtime.
 }
 
 func local_request_DictService_ListDictTypes_0(ctx context.Context, marshaler runtime.Marshaler, server DictServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq ListDictTypesRequest
+	var protoReq common_dict_v1.ListDictTypesRequest
 	var metadata runtime.ServerMetadata
 
 	if err := req.ParseForm(); err != nil {
@@ -222,7 +223,7 @@ func local_request_DictService_ListDictTypes_0(ctx context.Context, marshaler ru
 }
 
 func request_DictService_CreateDictItem_0(ctx context.Context, marshaler runtime.Marshaler, client DictServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq CreateDictItemRequest
+	var protoReq common_dict_v1.CreateDictItemRequest
 	var metadata runtime.ServerMetadata
 
 	newReader, berr := utilities.IOReaderFactory(req.Body)
@@ -239,7 +240,7 @@ func request_DictService_CreateDictItem_0(ctx context.Context, marshaler runtime
 }
 
 func local_request_DictService_CreateDictItem_0(ctx context.Context, marshaler runtime.Marshaler, server DictServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq CreateDictItemRequest
+	var protoReq common_dict_v1.CreateDictItemRequest
 	var metadata runtime.ServerMetadata
 
 	newReader, berr := utilities.IOReaderFactory(req.Body)
@@ -256,7 +257,7 @@ func local_request_DictService_CreateDictItem_0(ctx context.Context, marshaler r
 }
 
 func request_DictService_UpdateDictItem_0(ctx context.Context, marshaler runtime.Marshaler, client DictServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq UpdateDictItemRequest
+	var protoReq common_dict_v1.UpdateDictItemRequest
 	var metadata runtime.ServerMetadata
 
 	newReader, berr := utilities.IOReaderFactory(req.Body)
@@ -290,7 +291,7 @@ func request_DictService_UpdateDictItem_0(ctx context.Context, marshaler runtime
 }
 
 func local_request_DictService_UpdateDictItem_0(ctx context.Context, marshaler runtime.Marshaler, server DictServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq UpdateDictItemRequest
+	var protoReq common_dict_v1.UpdateDictItemRequest
 	var metadata runtime.ServerMetadata
 
 	newReader, berr := utilities.IOReaderFactory(req.Body)
@@ -324,7 +325,7 @@ func local_request_DictService_UpdateDictItem_0(ctx context.Context, marshaler r
 }
 
 func request_DictService_DeleteDictItem_0(ctx context.Context, marshaler runtime.Marshaler, client DictServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq DeleteDictItemRequest
+	var protoReq common_dict_v1.DeleteDictItemRequest
 	var metadata runtime.ServerMetadata
 
 	var (
@@ -350,7 +351,7 @@ func request_DictService_DeleteDictItem_0(ctx context.Context, marshaler runtime
 }
 
 func local_request_DictService_DeleteDictItem_0(ctx context.Context, marshaler runtime.Marshaler, server DictServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq DeleteDictItemRequest
+	var protoReq common_dict_v1.DeleteDictItemRequest
 	var metadata runtime.ServerMetadata
 
 	var (
@@ -380,7 +381,7 @@ var (
 )
 
 func request_DictService_ListDictItems_0(ctx context.Context, marshaler runtime.Marshaler, client DictServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq ListDictItemsRequest
+	var protoReq common_dict_v1.ListDictItemsRequest
 	var metadata runtime.ServerMetadata
 
 	if err := req.ParseForm(); err != nil {
@@ -396,7 +397,7 @@ func request_DictService_ListDictItems_0(ctx context.Context, marshaler runtime.
 }
 
 func local_request_DictService_ListDictItems_0(ctx context.Context, marshaler runtime.Marshaler, server DictServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq ListDictItemsRequest
+	var protoReq common_dict_v1.ListDictItemsRequest
 	var metadata runtime.ServerMetadata
 
 	if err := req.ParseForm(); err != nil {
@@ -425,7 +426,7 @@ func RegisterDictServiceHandlerServer(ctx context.Context, mux *runtime.ServeMux
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		var err error
 		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/iam.v1.DictService/CreateDictType", runtime.WithHTTPPathPattern("/dict/types"))
+		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/iam.v1.DictService/CreateDictType", runtime.WithHTTPPathPattern("/iam/dict/types"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -450,7 +451,7 @@ func RegisterDictServiceHandlerServer(ctx context.Context, mux *runtime.ServeMux
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		var err error
 		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/iam.v1.DictService/UpdateDictType", runtime.WithHTTPPathPattern("/dict/types/{id}"))
+		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/iam.v1.DictService/UpdateDictType", runtime.WithHTTPPathPattern("/iam/dict/types/{id}"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -475,7 +476,7 @@ func RegisterDictServiceHandlerServer(ctx context.Context, mux *runtime.ServeMux
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		var err error
 		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/iam.v1.DictService/DeleteDictType", runtime.WithHTTPPathPattern("/dict/types/{id}"))
+		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/iam.v1.DictService/DeleteDictType", runtime.WithHTTPPathPattern("/iam/dict/types/{id}"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -500,7 +501,7 @@ func RegisterDictServiceHandlerServer(ctx context.Context, mux *runtime.ServeMux
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		var err error
 		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/iam.v1.DictService/ListDictTypes", runtime.WithHTTPPathPattern("/dict/types"))
+		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/iam.v1.DictService/ListDictTypes", runtime.WithHTTPPathPattern("/iam/dict/types"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -525,7 +526,7 @@ func RegisterDictServiceHandlerServer(ctx context.Context, mux *runtime.ServeMux
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		var err error
 		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/iam.v1.DictService/CreateDictItem", runtime.WithHTTPPathPattern("/dict/items"))
+		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/iam.v1.DictService/CreateDictItem", runtime.WithHTTPPathPattern("/iam/dict/items"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -550,7 +551,7 @@ func RegisterDictServiceHandlerServer(ctx context.Context, mux *runtime.ServeMux
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		var err error
 		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/iam.v1.DictService/UpdateDictItem", runtime.WithHTTPPathPattern("/dict/items/{id}"))
+		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/iam.v1.DictService/UpdateDictItem", runtime.WithHTTPPathPattern("/iam/dict/items/{id}"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -575,7 +576,7 @@ func RegisterDictServiceHandlerServer(ctx context.Context, mux *runtime.ServeMux
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		var err error
 		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/iam.v1.DictService/DeleteDictItem", runtime.WithHTTPPathPattern("/dict/items/{id}"))
+		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/iam.v1.DictService/DeleteDictItem", runtime.WithHTTPPathPattern("/iam/dict/items/{id}"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -600,7 +601,7 @@ func RegisterDictServiceHandlerServer(ctx context.Context, mux *runtime.ServeMux
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		var err error
 		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/iam.v1.DictService/ListDictItems", runtime.WithHTTPPathPattern("/dict/items"))
+		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/iam.v1.DictService/ListDictItems", runtime.WithHTTPPathPattern("/iam/dict/items"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -664,7 +665,7 @@ func RegisterDictServiceHandlerClient(ctx context.Context, mux *runtime.ServeMux
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		var err error
 		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/iam.v1.DictService/CreateDictType", runtime.WithHTTPPathPattern("/dict/types"))
+		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/iam.v1.DictService/CreateDictType", runtime.WithHTTPPathPattern("/iam/dict/types"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -686,7 +687,7 @@ func RegisterDictServiceHandlerClient(ctx context.Context, mux *runtime.ServeMux
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		var err error
 		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/iam.v1.DictService/UpdateDictType", runtime.WithHTTPPathPattern("/dict/types/{id}"))
+		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/iam.v1.DictService/UpdateDictType", runtime.WithHTTPPathPattern("/iam/dict/types/{id}"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -708,7 +709,7 @@ func RegisterDictServiceHandlerClient(ctx context.Context, mux *runtime.ServeMux
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		var err error
 		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/iam.v1.DictService/DeleteDictType", runtime.WithHTTPPathPattern("/dict/types/{id}"))
+		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/iam.v1.DictService/DeleteDictType", runtime.WithHTTPPathPattern("/iam/dict/types/{id}"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -730,7 +731,7 @@ func RegisterDictServiceHandlerClient(ctx context.Context, mux *runtime.ServeMux
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		var err error
 		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/iam.v1.DictService/ListDictTypes", runtime.WithHTTPPathPattern("/dict/types"))
+		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/iam.v1.DictService/ListDictTypes", runtime.WithHTTPPathPattern("/iam/dict/types"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -752,7 +753,7 @@ func RegisterDictServiceHandlerClient(ctx context.Context, mux *runtime.ServeMux
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		var err error
 		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/iam.v1.DictService/CreateDictItem", runtime.WithHTTPPathPattern("/dict/items"))
+		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/iam.v1.DictService/CreateDictItem", runtime.WithHTTPPathPattern("/iam/dict/items"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -774,7 +775,7 @@ func RegisterDictServiceHandlerClient(ctx context.Context, mux *runtime.ServeMux
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		var err error
 		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/iam.v1.DictService/UpdateDictItem", runtime.WithHTTPPathPattern("/dict/items/{id}"))
+		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/iam.v1.DictService/UpdateDictItem", runtime.WithHTTPPathPattern("/iam/dict/items/{id}"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -796,7 +797,7 @@ func RegisterDictServiceHandlerClient(ctx context.Context, mux *runtime.ServeMux
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		var err error
 		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/iam.v1.DictService/DeleteDictItem", runtime.WithHTTPPathPattern("/dict/items/{id}"))
+		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/iam.v1.DictService/DeleteDictItem", runtime.WithHTTPPathPattern("/iam/dict/items/{id}"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -818,7 +819,7 @@ func RegisterDictServiceHandlerClient(ctx context.Context, mux *runtime.ServeMux
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		var err error
 		var annotatedContext context.Context
-		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/iam.v1.DictService/ListDictItems", runtime.WithHTTPPathPattern("/dict/items"))
+		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/iam.v1.DictService/ListDictItems", runtime.WithHTTPPathPattern("/iam/dict/items"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
@@ -838,21 +839,21 @@ func RegisterDictServiceHandlerClient(ctx context.Context, mux *runtime.ServeMux
 }
 
 var (
-	pattern_DictService_CreateDictType_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"dict", "types"}, ""))
+	pattern_DictService_CreateDictType_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"iam", "dict", "types"}, ""))
 
-	pattern_DictService_UpdateDictType_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"dict", "types", "id"}, ""))
+	pattern_DictService_UpdateDictType_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3}, []string{"iam", "dict", "types", "id"}, ""))
 
-	pattern_DictService_DeleteDictType_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"dict", "types", "id"}, ""))
+	pattern_DictService_DeleteDictType_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3}, []string{"iam", "dict", "types", "id"}, ""))
 
-	pattern_DictService_ListDictTypes_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"dict", "types"}, ""))
+	pattern_DictService_ListDictTypes_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"iam", "dict", "types"}, ""))
 
-	pattern_DictService_CreateDictItem_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"dict", "items"}, ""))
+	pattern_DictService_CreateDictItem_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"iam", "dict", "items"}, ""))
 
-	pattern_DictService_UpdateDictItem_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"dict", "items", "id"}, ""))
+	pattern_DictService_UpdateDictItem_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3}, []string{"iam", "dict", "items", "id"}, ""))
 
-	pattern_DictService_DeleteDictItem_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"dict", "items", "id"}, ""))
+	pattern_DictService_DeleteDictItem_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3}, []string{"iam", "dict", "items", "id"}, ""))
 
-	pattern_DictService_ListDictItems_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"dict", "items"}, ""))
+	pattern_DictService_ListDictItems_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"iam", "dict", "items"}, ""))
 )
 
 var (

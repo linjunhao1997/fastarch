@@ -1,0 +1,90 @@
+syntax = "proto3";
+
+package common.menu.v1;
+
+option go_package = "github.com/linjunhao1997/idl/pb/common/menu;common_menu_v1";
+option java_multiple_files = true;
+option java_package = "com.common.menu.v1";
+
+import "google/protobuf/timestamp.proto";
+import "buf/validate/validate.proto";
+
+// 通用菜单消息（ADR 0001）：各宿主 service（iam.v1 / order.v1 MenuService）共享本包消息，
+// contrib 统一实现，靠 Go 结构化类型同时满足各宿主接口。
+// permission_code 为前端展示所需码（用户持有才显示该菜单，不授予权限，ADR 0002）。
+
+// 菜单信息（t_menu 全列）
+message Menu {
+  string id = 1;
+  int64 parent_id = 2;                         // 父菜单 id，顶级为 0
+  string name = 3;                             // 菜单名
+  string path = 4;                             // 前端路由路径
+  string icon = 5;                             // 图标
+  int32 sort = 6;                              // 排序
+  string permission_code = 7;                  // 展示所需权限码（可空，前端展示门槛，不授权）
+  // 菜单状态："enabled" 启用，"disabled" 禁用
+  string status = 8;
+  int64 version = 9;
+  // 审计字段（只读回传，由服务端注入；请求消息不含此类字段，宪法 XII）
+  string created_by = 10;                      // 创建人（用户 id）
+  string updated_by = 11;                      // 修改人（用户 id）
+  google.protobuf.Timestamp create_time = 12;  // 创建时间
+  google.protobuf.Timestamp update_time = 13;  // 修改时间
+}
+
+message CreateMenuRequest {
+  int64 parent_id = 1;  // 父菜单 id，顶级传 0
+  string name = 2 [(buf.validate.field).string.min_len = 1];
+  string path = 3;
+  string icon = 4;
+  int32 sort = 5;
+  // 展示所需权限码（可空；传了必须已存在于权限词汇）
+  string permission_code = 6;
+  // 菜单状态："enabled" 启用，"disabled" 禁用；缺省为 enabled
+  string status = 7 [(buf.validate.field).string = { in: ["", "enabled", "disabled"] }];
+}
+
+message UpdateMenuRequest {
+  int64 id = 1 [(buf.validate.field).required = true];
+  int64 parent_id = 2;
+  // parent_cleared = true 时以 parent_id 字段为准整体移动（含挂到顶级）；
+  // false 时 parent_id 缺省（0）不修改父节点
+  bool parent_cleared = 3;
+  string name = 4;
+  string path = 5;
+  string icon = 6;
+  int32 sort = 7;
+  string permission_code = 8;
+  string status = 9 [(buf.validate.field).string = { in: ["", "enabled", "disabled"] }];
+  // 乐观锁版本号
+  int64 version = 10 [(buf.validate.field).required = true];
+}
+
+message DeleteMenuRequest {
+  int64 id = 1 [(buf.validate.field).required = true];
+}
+
+message UpdateRoleMenusRequest {
+  int64 role_id = 1 [(buf.validate.field).required = true];
+  // 目标菜单 id 集合（string 编码）：全量覆盖语义，空数组 = 清空绑定
+  repeated string menu_ids = 2;
+}
+
+// 菜单树节点
+message MenuTreeNode {
+  Menu menu = 1;
+  repeated MenuTreeNode children = 2;
+}
+
+message ListMenuTreeResponse {
+  repeated MenuTreeNode roots = 1;
+}
+
+message ListRoleMenusRequest {
+  int64 role_id = 1 [(buf.validate.field).required = true];
+}
+
+message ListRoleMenusResponse {
+  // 角色绑定的菜单 id 集合（string 编码）
+  repeated string menu_ids = 1;
+}

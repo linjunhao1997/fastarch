@@ -9,6 +9,7 @@ package iam_v1
 import (
 	context "context"
 	common "github.com/linjunhao1997/idl/pb/common"
+	menu "github.com/linjunhao1997/idl/pb/common/menu"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -36,22 +37,23 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type MenuServiceClient interface {
 	// 创建菜单，返回创建出的菜单（含 id）
-	CreateMenu(ctx context.Context, in *CreateMenuRequest, opts ...grpc.CallOption) (*Menu, error)
+	CreateMenu(ctx context.Context, in *menu.CreateMenuRequest, opts ...grpc.CallOption) (*menu.Menu, error)
 	// 获取菜单信息
-	GetMenu(ctx context.Context, in *common.GetRequest, opts ...grpc.CallOption) (*Menu, error)
+	GetMenu(ctx context.Context, in *common.GetRequest, opts ...grpc.CallOption) (*menu.Menu, error)
 	// 修改菜单信息
-	UpdateMenu(ctx context.Context, in *UpdateMenuRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	UpdateMenu(ctx context.Context, in *menu.UpdateMenuRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// 删除菜单（仅当未被角色绑定引用时可删除）
-	DeleteMenu(ctx context.Context, in *DeleteMenuRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	DeleteMenu(ctx context.Context, in *menu.DeleteMenuRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// 管理员视角全量菜单树（含停用菜单，前端置灰）
-	ListMenuTree(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListMenuTreeResponse, error)
+	ListMenuTree(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*menu.ListMenuTreeResponse, error)
 	// 当前登录用户可见菜单树：按用户角色绑定（t_r_role_menu）过滤并回补祖先路径，
 	// 仅需登录态（self-scoped，无需菜单权限）
-	ListMyMenuTree(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListMenuTreeResponse, error)
-	// 角色绑定菜单全量覆盖：以 menu_ids 为目标绑定集合做整体替换（事务）
-	UpdateRoleMenus(ctx context.Context, in *UpdateRoleMenusRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	ListMyMenuTree(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*menu.ListMenuTreeResponse, error)
+	// 角色绑定菜单全量覆盖：以 menu_ids 为目标绑定集合做整体替换（事务）。
+	// 绑定仅决定可见性，不授予权限（ADR 0002）。
+	UpdateRoleMenus(ctx context.Context, in *menu.UpdateRoleMenusRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// 查询角色绑定的菜单 id 集合（编辑角色页回显用）
-	ListRoleMenus(ctx context.Context, in *ListRoleMenusRequest, opts ...grpc.CallOption) (*ListRoleMenusResponse, error)
+	ListRoleMenus(ctx context.Context, in *menu.ListRoleMenusRequest, opts ...grpc.CallOption) (*menu.ListRoleMenusResponse, error)
 }
 
 type menuServiceClient struct {
@@ -62,8 +64,8 @@ func NewMenuServiceClient(cc grpc.ClientConnInterface) MenuServiceClient {
 	return &menuServiceClient{cc}
 }
 
-func (c *menuServiceClient) CreateMenu(ctx context.Context, in *CreateMenuRequest, opts ...grpc.CallOption) (*Menu, error) {
-	out := new(Menu)
+func (c *menuServiceClient) CreateMenu(ctx context.Context, in *menu.CreateMenuRequest, opts ...grpc.CallOption) (*menu.Menu, error) {
+	out := new(menu.Menu)
 	err := c.cc.Invoke(ctx, MenuService_CreateMenu_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -71,8 +73,8 @@ func (c *menuServiceClient) CreateMenu(ctx context.Context, in *CreateMenuReques
 	return out, nil
 }
 
-func (c *menuServiceClient) GetMenu(ctx context.Context, in *common.GetRequest, opts ...grpc.CallOption) (*Menu, error) {
-	out := new(Menu)
+func (c *menuServiceClient) GetMenu(ctx context.Context, in *common.GetRequest, opts ...grpc.CallOption) (*menu.Menu, error) {
+	out := new(menu.Menu)
 	err := c.cc.Invoke(ctx, MenuService_GetMenu_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -80,7 +82,7 @@ func (c *menuServiceClient) GetMenu(ctx context.Context, in *common.GetRequest, 
 	return out, nil
 }
 
-func (c *menuServiceClient) UpdateMenu(ctx context.Context, in *UpdateMenuRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+func (c *menuServiceClient) UpdateMenu(ctx context.Context, in *menu.UpdateMenuRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, MenuService_UpdateMenu_FullMethodName, in, out, opts...)
 	if err != nil {
@@ -89,7 +91,7 @@ func (c *menuServiceClient) UpdateMenu(ctx context.Context, in *UpdateMenuReques
 	return out, nil
 }
 
-func (c *menuServiceClient) DeleteMenu(ctx context.Context, in *DeleteMenuRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+func (c *menuServiceClient) DeleteMenu(ctx context.Context, in *menu.DeleteMenuRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, MenuService_DeleteMenu_FullMethodName, in, out, opts...)
 	if err != nil {
@@ -98,8 +100,8 @@ func (c *menuServiceClient) DeleteMenu(ctx context.Context, in *DeleteMenuReques
 	return out, nil
 }
 
-func (c *menuServiceClient) ListMenuTree(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListMenuTreeResponse, error) {
-	out := new(ListMenuTreeResponse)
+func (c *menuServiceClient) ListMenuTree(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*menu.ListMenuTreeResponse, error) {
+	out := new(menu.ListMenuTreeResponse)
 	err := c.cc.Invoke(ctx, MenuService_ListMenuTree_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -107,8 +109,8 @@ func (c *menuServiceClient) ListMenuTree(ctx context.Context, in *emptypb.Empty,
 	return out, nil
 }
 
-func (c *menuServiceClient) ListMyMenuTree(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListMenuTreeResponse, error) {
-	out := new(ListMenuTreeResponse)
+func (c *menuServiceClient) ListMyMenuTree(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*menu.ListMenuTreeResponse, error) {
+	out := new(menu.ListMenuTreeResponse)
 	err := c.cc.Invoke(ctx, MenuService_ListMyMenuTree_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -116,7 +118,7 @@ func (c *menuServiceClient) ListMyMenuTree(ctx context.Context, in *emptypb.Empt
 	return out, nil
 }
 
-func (c *menuServiceClient) UpdateRoleMenus(ctx context.Context, in *UpdateRoleMenusRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+func (c *menuServiceClient) UpdateRoleMenus(ctx context.Context, in *menu.UpdateRoleMenusRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, MenuService_UpdateRoleMenus_FullMethodName, in, out, opts...)
 	if err != nil {
@@ -125,8 +127,8 @@ func (c *menuServiceClient) UpdateRoleMenus(ctx context.Context, in *UpdateRoleM
 	return out, nil
 }
 
-func (c *menuServiceClient) ListRoleMenus(ctx context.Context, in *ListRoleMenusRequest, opts ...grpc.CallOption) (*ListRoleMenusResponse, error) {
-	out := new(ListRoleMenusResponse)
+func (c *menuServiceClient) ListRoleMenus(ctx context.Context, in *menu.ListRoleMenusRequest, opts ...grpc.CallOption) (*menu.ListRoleMenusResponse, error) {
+	out := new(menu.ListRoleMenusResponse)
 	err := c.cc.Invoke(ctx, MenuService_ListRoleMenus_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -139,50 +141,51 @@ func (c *menuServiceClient) ListRoleMenus(ctx context.Context, in *ListRoleMenus
 // for forward compatibility
 type MenuServiceServer interface {
 	// 创建菜单，返回创建出的菜单（含 id）
-	CreateMenu(context.Context, *CreateMenuRequest) (*Menu, error)
+	CreateMenu(context.Context, *menu.CreateMenuRequest) (*menu.Menu, error)
 	// 获取菜单信息
-	GetMenu(context.Context, *common.GetRequest) (*Menu, error)
+	GetMenu(context.Context, *common.GetRequest) (*menu.Menu, error)
 	// 修改菜单信息
-	UpdateMenu(context.Context, *UpdateMenuRequest) (*emptypb.Empty, error)
+	UpdateMenu(context.Context, *menu.UpdateMenuRequest) (*emptypb.Empty, error)
 	// 删除菜单（仅当未被角色绑定引用时可删除）
-	DeleteMenu(context.Context, *DeleteMenuRequest) (*emptypb.Empty, error)
+	DeleteMenu(context.Context, *menu.DeleteMenuRequest) (*emptypb.Empty, error)
 	// 管理员视角全量菜单树（含停用菜单，前端置灰）
-	ListMenuTree(context.Context, *emptypb.Empty) (*ListMenuTreeResponse, error)
+	ListMenuTree(context.Context, *emptypb.Empty) (*menu.ListMenuTreeResponse, error)
 	// 当前登录用户可见菜单树：按用户角色绑定（t_r_role_menu）过滤并回补祖先路径，
 	// 仅需登录态（self-scoped，无需菜单权限）
-	ListMyMenuTree(context.Context, *emptypb.Empty) (*ListMenuTreeResponse, error)
-	// 角色绑定菜单全量覆盖：以 menu_ids 为目标绑定集合做整体替换（事务）
-	UpdateRoleMenus(context.Context, *UpdateRoleMenusRequest) (*emptypb.Empty, error)
+	ListMyMenuTree(context.Context, *emptypb.Empty) (*menu.ListMenuTreeResponse, error)
+	// 角色绑定菜单全量覆盖：以 menu_ids 为目标绑定集合做整体替换（事务）。
+	// 绑定仅决定可见性，不授予权限（ADR 0002）。
+	UpdateRoleMenus(context.Context, *menu.UpdateRoleMenusRequest) (*emptypb.Empty, error)
 	// 查询角色绑定的菜单 id 集合（编辑角色页回显用）
-	ListRoleMenus(context.Context, *ListRoleMenusRequest) (*ListRoleMenusResponse, error)
+	ListRoleMenus(context.Context, *menu.ListRoleMenusRequest) (*menu.ListRoleMenusResponse, error)
 }
 
 // UnimplementedMenuServiceServer should be embedded to have forward compatible implementations.
 type UnimplementedMenuServiceServer struct {
 }
 
-func (UnimplementedMenuServiceServer) CreateMenu(context.Context, *CreateMenuRequest) (*Menu, error) {
+func (UnimplementedMenuServiceServer) CreateMenu(context.Context, *menu.CreateMenuRequest) (*menu.Menu, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateMenu not implemented")
 }
-func (UnimplementedMenuServiceServer) GetMenu(context.Context, *common.GetRequest) (*Menu, error) {
+func (UnimplementedMenuServiceServer) GetMenu(context.Context, *common.GetRequest) (*menu.Menu, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetMenu not implemented")
 }
-func (UnimplementedMenuServiceServer) UpdateMenu(context.Context, *UpdateMenuRequest) (*emptypb.Empty, error) {
+func (UnimplementedMenuServiceServer) UpdateMenu(context.Context, *menu.UpdateMenuRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateMenu not implemented")
 }
-func (UnimplementedMenuServiceServer) DeleteMenu(context.Context, *DeleteMenuRequest) (*emptypb.Empty, error) {
+func (UnimplementedMenuServiceServer) DeleteMenu(context.Context, *menu.DeleteMenuRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteMenu not implemented")
 }
-func (UnimplementedMenuServiceServer) ListMenuTree(context.Context, *emptypb.Empty) (*ListMenuTreeResponse, error) {
+func (UnimplementedMenuServiceServer) ListMenuTree(context.Context, *emptypb.Empty) (*menu.ListMenuTreeResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListMenuTree not implemented")
 }
-func (UnimplementedMenuServiceServer) ListMyMenuTree(context.Context, *emptypb.Empty) (*ListMenuTreeResponse, error) {
+func (UnimplementedMenuServiceServer) ListMyMenuTree(context.Context, *emptypb.Empty) (*menu.ListMenuTreeResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListMyMenuTree not implemented")
 }
-func (UnimplementedMenuServiceServer) UpdateRoleMenus(context.Context, *UpdateRoleMenusRequest) (*emptypb.Empty, error) {
+func (UnimplementedMenuServiceServer) UpdateRoleMenus(context.Context, *menu.UpdateRoleMenusRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateRoleMenus not implemented")
 }
-func (UnimplementedMenuServiceServer) ListRoleMenus(context.Context, *ListRoleMenusRequest) (*ListRoleMenusResponse, error) {
+func (UnimplementedMenuServiceServer) ListRoleMenus(context.Context, *menu.ListRoleMenusRequest) (*menu.ListRoleMenusResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListRoleMenus not implemented")
 }
 
@@ -198,7 +201,7 @@ func RegisterMenuServiceServer(s grpc.ServiceRegistrar, srv MenuServiceServer) {
 }
 
 func _MenuService_CreateMenu_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CreateMenuRequest)
+	in := new(menu.CreateMenuRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -210,7 +213,7 @@ func _MenuService_CreateMenu_Handler(srv interface{}, ctx context.Context, dec f
 		FullMethod: MenuService_CreateMenu_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MenuServiceServer).CreateMenu(ctx, req.(*CreateMenuRequest))
+		return srv.(MenuServiceServer).CreateMenu(ctx, req.(*menu.CreateMenuRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -234,7 +237,7 @@ func _MenuService_GetMenu_Handler(srv interface{}, ctx context.Context, dec func
 }
 
 func _MenuService_UpdateMenu_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UpdateMenuRequest)
+	in := new(menu.UpdateMenuRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -246,13 +249,13 @@ func _MenuService_UpdateMenu_Handler(srv interface{}, ctx context.Context, dec f
 		FullMethod: MenuService_UpdateMenu_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MenuServiceServer).UpdateMenu(ctx, req.(*UpdateMenuRequest))
+		return srv.(MenuServiceServer).UpdateMenu(ctx, req.(*menu.UpdateMenuRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _MenuService_DeleteMenu_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(DeleteMenuRequest)
+	in := new(menu.DeleteMenuRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -264,7 +267,7 @@ func _MenuService_DeleteMenu_Handler(srv interface{}, ctx context.Context, dec f
 		FullMethod: MenuService_DeleteMenu_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MenuServiceServer).DeleteMenu(ctx, req.(*DeleteMenuRequest))
+		return srv.(MenuServiceServer).DeleteMenu(ctx, req.(*menu.DeleteMenuRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -306,7 +309,7 @@ func _MenuService_ListMyMenuTree_Handler(srv interface{}, ctx context.Context, d
 }
 
 func _MenuService_UpdateRoleMenus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UpdateRoleMenusRequest)
+	in := new(menu.UpdateRoleMenusRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -318,13 +321,13 @@ func _MenuService_UpdateRoleMenus_Handler(srv interface{}, ctx context.Context, 
 		FullMethod: MenuService_UpdateRoleMenus_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MenuServiceServer).UpdateRoleMenus(ctx, req.(*UpdateRoleMenusRequest))
+		return srv.(MenuServiceServer).UpdateRoleMenus(ctx, req.(*menu.UpdateRoleMenusRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _MenuService_ListRoleMenus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListRoleMenusRequest)
+	in := new(menu.ListRoleMenusRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -336,7 +339,7 @@ func _MenuService_ListRoleMenus_Handler(srv interface{}, ctx context.Context, de
 		FullMethod: MenuService_ListRoleMenus_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MenuServiceServer).ListRoleMenus(ctx, req.(*ListRoleMenusRequest))
+		return srv.(MenuServiceServer).ListRoleMenus(ctx, req.(*menu.ListRoleMenusRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
