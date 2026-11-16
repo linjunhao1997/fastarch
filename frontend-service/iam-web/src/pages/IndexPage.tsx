@@ -112,6 +112,17 @@ export default function IndexPage() {
     [applications],
   );
 
+  // 切换应用：服务端绑定成功后强制回首页（右侧内容随新应用上下文重建，
+  // 避免停留在上一应用的页面/数据上造成"没切过去"的错觉）
+  const handleAppSwitch = async (id: string) => {
+    try {
+      await setCurrentApplicationId(id);
+      navigate('/');
+    } catch {
+      // 错误提示已由 ApplicationContext 弹出；停留在原应用
+    }
+  };
+
   const renderSiderBody = () => {
     // 无可进入应用（非 admin 且未被分配准入）：引导联系管理员
     if (!contextLoading && applications.length === 0) {
@@ -123,8 +134,17 @@ export default function IndexPage() {
         />
       );
     }
-    // 菜单树加载中（且无旧数据可保留）
-    if (menuTreeQuery.isPending && !menuTreeQuery.data) {
+    // 应用上下文尚未绑定完成（清单加载中 / SelectApplication 进行中）
+    if (contextLoading || !currentApplicationId) {
+      return (
+        <Flex justify="center" align="center" style={{ padding: 32 }}>
+          <Spin tip="绑定应用..." />
+        </Flex>
+      );
+    }
+    // 菜单树加载中（且无旧数据可保留）；isLoading 仅在真实请求中为 true，
+    // 避免 enabled=false 时 isPending 恒真造成永久转圈
+    if (menuTreeQuery.isLoading && !menuTreeQuery.data) {
       return (
         <Flex justify="center" align="center" style={{ padding: 32 }}>
           <Spin tip="加载菜单..." />
@@ -207,7 +227,7 @@ export default function IndexPage() {
                 items: collapsedAppMenuItems,
                 selectable: true,
                 selectedKeys: currentApplicationId ? [currentApplicationId] : [],
-                onClick: ({ key }) => void setCurrentApplicationId(key),
+                onClick: ({ key }) => void handleAppSwitch(key),
               }}
               disabled={applications.length === 0}
             >
@@ -218,7 +238,7 @@ export default function IndexPage() {
               <Select
                 variant="borderless"
                 value={currentApplicationId ?? undefined}
-                onChange={(value) => void setCurrentApplicationId(value)}
+                onChange={(value) => void handleAppSwitch(value)}
                 loading={menuTreeQuery.isFetching && !menuTreeQuery.isPlaceholderData}
                 placeholder="选择应用"
                 style={{ width: '100%' }}

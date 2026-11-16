@@ -24,6 +24,7 @@ import type { MenuTreeNode } from '../types';
 
 const IndexPage = lazy(() => import('../pages/IndexPage'));
 const LoginPage = lazy(() => import('../pages/LoginPage'));
+const HomePage = lazy(() => import('../pages/HomePage'));
 const AccountListPage = lazy(() => import('../pages/AccountManagement/AccountListPage'));
 const CreateAccountPage = lazy(() => import('../pages/AccountManagement/CreateAccountPage'));
 const EditAccountPage = lazy(() => import('../pages/AccountManagement/EditAccountPage'));
@@ -65,6 +66,11 @@ export const routes: RouteObject[] = [
     handle: { label: '身份访问管理', breadcrumb: '身份访问管理' },
     element: withSuspense(<AuthWrapper><IndexPage /></AuthWrapper>),
     children: [
+      {
+        index: true,
+        handle: { breadcrumb: '首页' },
+        element: withSuspense(<HomePage />),
+      },
       {
         path: 'account_management',
         handle: { label: '用户管理', breadcrumb: '用户管理' },
