@@ -7,6 +7,12 @@ const (
 	GatewayOriginHTTP     = "http"
 )
 
+// 联邦内部契约的应用凭证元数据键（机器间调用，FederationService 服务内自鉴权）
+const (
+	MetadataAppId     = "x-fa-app-id"
+	MetadataAppSecret = "x-fa-app-secret"
+)
+
 const (
 	ApplicationCode           = "iam-service"
 	ApplicationStatusEnabled  = "enabled"
