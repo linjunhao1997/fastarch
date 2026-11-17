@@ -37,10 +37,6 @@ var authOnlyMethods = map[string]struct{}{
 	"/sender.v1.MenuService/ListMyMenuTree": {},
 }
 
-func methodPerms(fullMethod string) []string {
-	return methodPermissions[fullMethod]
-}
-
 // MethodPermsFor 供 authz 拦截器注入：full method → 所需权限码，未登记返回 nil（fail-closed）。
 func MethodPermsFor(fullMethod string) []string {
 	return methodPermissions[fullMethod]

@@ -12,8 +12,8 @@ import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 import "buf/validate/validate.proto";
 
-// 消息服务（sender 宿主）：发送消息并留下发送记录（投递本期为模拟 pending→sent）。
-// 消息为发送记录的同义入口动词；记录是落库实体（消息中心领域词汇见 GLOSSARY）。
+// 消息服务（sender 宿主）：触发一次发送并留下发送记录（投递本期为模拟 pending→sent）。
+// 发送记录是落库实体（领域词汇见 GLOSSARY：消息模板、发送记录）。
 // HTTP 路径以 /sender 服务前缀挂载，多宿主按路径前缀路由（ADR 0003）。
 service MessageService {
   // 发送消息：生成发送记录并模拟投递（pending→sent）

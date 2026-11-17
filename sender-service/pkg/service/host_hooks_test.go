@@ -104,7 +104,7 @@ func TestMethodPermissionsFailClosed(t *testing.T) {
 		}
 	}
 	// 未登记方法返回空 → authz 拦截器 fail-closed
-	if got := methodPerms("/sender.v1.MessageService/Unknown"); len(got) != 0 {
+	if got := MethodPermsFor("/sender.v1.MessageService/Unknown"); len(got) != 0 {
 		t.Fatalf("unregistered method perms = %v, want empty", got)
 	}
 	// 关键方法的码以 sender 服务段开头且来自种子清单
@@ -115,7 +115,7 @@ func TestMethodPermissionsFailClosed(t *testing.T) {
 		"/sender.v1.DictService/ListDictItems":      "sender.dict.list",
 	}
 	for method, want := range checks {
-		got := methodPerms(method)
+		got := MethodPermsFor(method)
 		if len(got) != 1 || got[0] != want {
 			t.Fatalf("method %s perms = %v, want [%s]", method, got, want)
 		}

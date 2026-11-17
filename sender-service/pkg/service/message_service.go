@@ -48,14 +48,12 @@ func (s *MessageService) SendMessage(ctx context.Context, req *sender_v1.SendMes
 		CreateTime:     now,
 		UpdateTime:     now,
 	}
+	// 事务内仅做落库：创建 pending 记录 + 模拟投递流转到 sent（#12 MVP）。
+	// 日志属外部 IO，移到事务外（宪法 XIV 4.3 事务禁外部 IO）。
 	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Select(model.MessageRecordFields).Create(&record).Error; err != nil {
 			return err
 		}
-		// 模拟投递（#12 MVP）：记录投递日志，pending→sent 在同一事务内完成。
-		slog.Info("deliver message (mock)",
-			"domain", "sender-service", "record_id", record.Id,
-			"recipient", record.Recipient, "channel", record.Channel)
 		record.SendStatus = model.SendStatusSent
 		record.Version = 2
 		record.UpdatedBy = operator
@@ -69,9 +67,13 @@ func (s *MessageService) SendMessage(ctx context.Context, req *sender_v1.SendMes
 				model.MessageRecordColumnUpdateTime: record.UpdateTime,
 			}).Error
 	}); err != nil {
-		slog.Warn("send message failed", "recipient", req.Recipient, "error", err)
+		slog.Warn("send message failed", "record_id", record.Id, "error", err)
 		return nil, err
 	}
+	// 模拟投递日志（真实渠道留给 #15）：接收对象脱敏，仅保留可诊断的 record_id/channel。
+	slog.Info("deliver message (mock)",
+		"domain", "sender-service", "record_id", record.Id,
+		"channel", record.Channel, "status", record.SendStatus)
 	return messageRecordToPb(record), nil
 }
 
@@ -140,13 +142,13 @@ func (s *MessageService) DeleteMessage(ctx context.Context, req *common_v1.GetRe
 		return nil, translateNotFound(err, ErrMessageNotFound)
 	}
 	now := time.Now()
-	suffix := "(已删除_" + now.Format("20060102150405.000") + ")"
+	// 发送记录无唯一键业务名称字段，软删除只需 is_deleted + 审计字段 + 版本递增；
+	// 不改写 recipient（它是业务数据，加后缀会污染留痕）。
 	updates := map[string]any{
-		model.MessageRecordColumnIsDeleted:   true,
-		model.MessageRecordColumnUpdateTime:  now,
-		model.MessageRecordColumnUpdatedBy:   operatorFromContext(ctx),
-		model.MessageRecordColumnRecipient:   record.Recipient + suffix,
-		model.MessageRecordColumnVersion:     record.Version + 1,
+		model.MessageRecordColumnIsDeleted:  true,
+		model.MessageRecordColumnUpdateTime: now,
+		model.MessageRecordColumnUpdatedBy:  operatorFromContext(ctx),
+		model.MessageRecordColumnVersion:    record.Version + 1,
 	}
 	result := s.db.WithContext(ctx).Model(&model.MessageRecord{}).
 		Where(model.MessageRecordColumnId, record.Id).
