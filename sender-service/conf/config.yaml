@@ -1,0 +1,24 @@
+database:
+  dsn: "root:mysql12345678@tcp(127.0.0.1:3306)/sender_dev?charset=utf8mb4&parseTime=True&loc=Local"
+
+redis:
+  addr: "localhost:6379"
+
+grpc:
+  addr: "127.0.0.1"
+  port: 9091
+
+http:
+  addr: "127.0.0.1"
+  port: 8081
+  endpoint: "127.0.0.1:9091"
+
+app:
+  name: "sender-service"
+  mode: "debug"
+
+sender:
+  # sender 应用在 IAM 注册表中的固定 id（IAM 迁移 000010 种子为 2）
+  application_id: 2
+  # IAM gRPC 地址，入站判权透传 JWT 调 CheckPermission
+  iam_addr: "127.0.0.1:9090"

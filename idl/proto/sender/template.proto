@@ -1,0 +1,94 @@
+syntax = "proto3";
+
+package sender.v1;
+
+option go_package = "github.com/linjunhao1997/idl/pb/sender;sender_v1";
+option java_multiple_files = true;
+option java_package = "com.sender.v1";
+
+import "common/common.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+import "buf/validate/validate.proto";
+
+// 消息模板服务（sender 宿主）：可复用的消息内容定义，按应用隔离。
+service TemplateService {
+  // 创建模板，返回创建出的模板（含 id）
+  rpc CreateTemplate(CreateTemplateRequest) returns (MessageTemplate) {
+    option (google.api.http) = {
+      post: "/sender/templates"
+      body: "*"
+    };
+  }
+
+  // 获取模板
+  rpc GetTemplate(common.v1.GetRequest) returns (MessageTemplate) {
+    option (google.api.http) = {
+      get: "/sender/templates/{id}"
+    };
+  }
+
+  // 模板分页列表：keyword 模糊匹配 code/name
+  rpc ListTemplates(ListTemplatesRequest) returns (ListTemplatesResponse) {
+    option (google.api.http) = {
+      get: "/sender/templates"
+    };
+  }
+
+  // 修改模板
+  rpc UpdateTemplate(UpdateTemplateRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      patch: "/sender/templates/{id}"
+      body: "*"
+    };
+  }
+
+  // 删除模板（业务型模型：逻辑删除）
+  rpc DeleteTemplate(common.v1.GetRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/sender/templates/{id}"
+    };
+  }
+}
+
+message CreateTemplateRequest {
+  string code = 1 [(buf.validate.field).string.min_len = 1];    // 应用内唯一
+  string name = 2 [(buf.validate.field).string.min_len = 1];
+  string content = 3;                                           // 模板内容
+  string remark = 4;
+}
+
+message UpdateTemplateRequest {
+  int64 id = 1 [(buf.validate.field).required = true];
+  string code = 2;
+  string name = 3;
+  string content = 4;
+  string remark = 5;
+  int64 version = 6 [(buf.validate.field).required = true];
+}
+
+message ListTemplatesRequest {
+  int64 current_page = 1;
+  int64 page_size = 2;
+  string keyword = 3;
+}
+
+message ListTemplatesResponse {
+  common.v1.Page page = 1;
+  repeated MessageTemplate templates = 2;
+}
+
+// 消息模板（落库实体，业务型模型）
+message MessageTemplate {
+  string id = 1;
+  string code = 2;
+  string name = 3;
+  string content = 4;
+  string remark = 5;
+  int64 version = 6;
+  string created_by = 7;
+  string updated_by = 8;
+  google.protobuf.Timestamp create_time = 9;
+  google.protobuf.Timestamp update_time = 10;
+}

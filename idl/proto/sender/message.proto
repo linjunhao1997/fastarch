@@ -1,0 +1,82 @@
+syntax = "proto3";
+
+package sender.v1;
+
+option go_package = "github.com/linjunhao1997/idl/pb/sender;sender_v1";
+option java_multiple_files = true;
+option java_package = "com.sender.v1";
+
+import "common/common.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+import "buf/validate/validate.proto";
+
+// 消息服务（sender 宿主）：发送消息并留下发送记录（投递本期为模拟 pending→sent）。
+// 消息为发送记录的同义入口动词；记录是落库实体（消息中心领域词汇见 GLOSSARY）。
+// HTTP 路径以 /sender 服务前缀挂载，多宿主按路径前缀路由（ADR 0003）。
+service MessageService {
+  // 发送消息：生成发送记录并模拟投递（pending→sent）
+  rpc SendMessage(SendMessageRequest) returns (MessageRecord) {
+    option (google.api.http) = {
+      post: "/sender/messages"
+      body: "*"
+    };
+  }
+
+  // 获取发送记录
+  rpc GetMessage(common.v1.GetRequest) returns (MessageRecord) {
+    option (google.api.http) = {
+      get: "/sender/records/{id}"
+    };
+  }
+
+  // 发送记录分页列表：keyword 模糊匹配接收对象/模板名
+  rpc ListMessages(ListMessagesRequest) returns (ListMessagesResponse) {
+    option (google.api.http) = {
+      get: "/sender/records"
+    };
+  }
+
+  // 删除发送记录（业务型模型：逻辑删除）
+  rpc DeleteMessage(common.v1.GetRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/sender/records/{id}"
+    };
+  }
+}
+
+message SendMessageRequest {
+  string recipient = 1 [(buf.validate.field).string.min_len = 1];  // 接收对象（地址/标识）
+  string template_code = 2;                                        // 可选：所用模板 code
+  string content = 3 [(buf.validate.field).string.min_len = 1];    // 渲染后的消息内容
+  string channel = 4;                                              // 可选：渠道（字典 channel）
+}
+
+// 发送记录（落库实体，业务型模型）
+message MessageRecord {
+  string id = 1;
+  string recipient = 2;
+  string template_code = 3;
+  string content = 4;
+  string channel = 5;
+  string send_status = 6;  // pending / sent / failed（字典 send_status）
+  int64 version = 7;
+  // 审计字段（只读回传，由服务端注入；请求消息不含此类字段，宪法 XII）
+  string created_by = 8;
+  string updated_by = 9;
+  google.protobuf.Timestamp create_time = 10;
+  google.protobuf.Timestamp update_time = 11;
+}
+
+message ListMessagesRequest {
+  int64 current_page = 1;
+  int64 page_size = 2;
+  string keyword = 3;
+  string send_status = 4;  // 可选状态过滤
+}
+
+message ListMessagesResponse {
+  common.v1.Page page = 1;
+  repeated MessageRecord records = 2;
+}
