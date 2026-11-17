@@ -199,6 +199,14 @@
             "$ref": "#/definitions/v1MyProfileApplication"
           },
           "title": "可进入应用列表（与 ListMyApplications 同源：admin 全量启用应用，其他按准入绑定）"
+        },
+        "homeApplicationId": {
+          "type": "string",
+          "title": "所属应用 id（string 编码）：默认进入的应用；admin/未设置为 \"0\""
+        },
+        "isAdmin": {
+          "type": "boolean",
+          "title": "是否 admin 角色（只读回传，服务端派生）：前端据此锁定所属应用等数据边界 UI"
         }
       }
     },
@@ -211,6 +219,10 @@
             "type": "object",
             "$ref": "#/definitions/v1MyProfileApplication"
           }
+        },
+        "homeApplicationId": {
+          "type": "string",
+          "title": "所属应用 id（string 编码）：前端默认选中；admin/未设置为 \"0\""
         }
       }
     },

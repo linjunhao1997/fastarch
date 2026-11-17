@@ -54,22 +54,22 @@ func TestServiceQueriesDoNotUseSelectStar(t *testing.T) {
 	if err := model.Seed(context.Background(), db); err != nil {
 		t.Fatal(err)
 	}
-	// 用户种子（bcrypt 密码摘要）
+	// 多应用裁决 #8：权限/菜单管理接口需要应用上下文，冒烟夹具同步补应用
+	app := model.Application{AppId: "900", Code: "test", Name: "Test App", Status: model.StatusEnabled, Version: 1}
+	if err := db.Select(model.ApplicationFields).Create(&app).Error; err != nil {
+		t.Fatal(err)
+	}
+	// 用户种子（bcrypt 密码摘要）；数据边界 ADR 0006：用户须有所属应用
 	hash, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.DefaultCost)
 	if err != nil {
 		t.Fatal(err)
 	}
-	user := model.User{Username: "test-user", Nickname: "Test User", PasswordHash: string(hash), Status: model.StatusEnabled, Version: 1}
+	user := model.User{Username: "test-user", Nickname: "Test User", PasswordHash: string(hash), Status: model.StatusEnabled, Version: 1, HomeApplicationId: app.Id}
 	if err := db.Select(model.UserFields).Create(&user).Error; err != nil {
 		t.Fatal(err)
 	}
 	role := model.Role{Code: "test-role", Name: "Test Role", Status: model.StatusEnabled, Version: 1}
 	if err := db.Select(model.RoleFields).Create(&role).Error; err != nil {
-		t.Fatal(err)
-	}
-	// 多应用裁决 #8：权限/菜单管理接口需要应用上下文，冒烟夹具同步补应用
-	app := model.Application{AppId: "900", Code: "test", Name: "Test App", Status: model.StatusEnabled, Version: 1}
-	if err := db.Select(model.ApplicationFields).Create(&app).Error; err != nil {
 		t.Fatal(err)
 	}
 	permission := model.Permission{Code: "test.perm.one", Name: "Test Permission", ApplicationId: app.Id, Type: "api", Status: model.StatusEnabled, Version: 1}

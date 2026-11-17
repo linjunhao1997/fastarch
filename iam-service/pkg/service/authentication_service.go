@@ -87,15 +87,26 @@ func (a AuthenticationService) PasswordAuth(ctx context.Context, request *iam_v1
 	if err = a.rdb.Set(ctx, constant.GetAccountPermissionKey(user.Id), jsonData, constant.AccountPermissionSnapshotTTL).Err(); err != nil {
 		return nil, err
 	}
-	// 应用上下文（多应用裁决 #8）：签发 jti 作为映射键；仅有一个可进入应用时
-	// 登录即自动绑定，多个应用时留空由前端 ListMyApplications → SelectApplication 选择。
+	// 应用上下文（多应用裁决 #8 + 模型 A）：签发 jti 作为映射键；
+	// 登录时优先绑定所属应用（必须在可进入清单内），否则沿用"仅一个可进入应用"自动绑定；
+	// 多应用且未设置所属应用时留空，由前端 ListMyApplications → SelectApplication 选择。
 	jti := cast.ToString(krand.NewID())
-	accessibleApps, err := loadAccessibleApplications(ctx, a.db, user.Id, isAdmin)
+	accessibleApps, err := loadAccessibleApplications(ctx, a.db, user.Id, user.HomeApplicationId, isAdmin)
 	if err != nil {
 		return nil, err
 	}
-	if len(accessibleApps) == 1 {
-		if err := auth.SetAppContext(ctx, a.rdb, jti, accessibleApps[0].Id, jwtDuration); err != nil {
+	bindAppId := int64(0)
+	for _, app := range accessibleApps {
+		if app.Id == user.HomeApplicationId {
+			bindAppId = app.Id
+			break
+		}
+	}
+	if bindAppId == 0 && len(accessibleApps) == 1 {
+		bindAppId = accessibleApps[0].Id
+	}
+	if bindAppId != 0 {
+		if err := auth.SetAppContext(ctx, a.rdb, jti, bindAppId, jwtDuration); err != nil {
 			return nil, err
 		}
 	}
@@ -143,19 +154,21 @@ func (a AuthenticationService) GetMyProfile(ctx context.Context, empty *emptypb.
 		slog.Warn("get my profile failed", "account_id", accountId, "error", err)
 		return nil, err
 	}
-	apps, err := loadAccessibleApplications(ctx, a.db, user.Id, auth.IsAdminFromContext(ctx))
+	apps, err := loadAccessibleApplications(ctx, a.db, user.Id, user.HomeApplicationId, auth.IsAdminFromContext(ctx))
 	if err != nil {
 		return nil, err
 	}
 	return &iam_v1.GetMyProfileResponse{
-		Id:           cast.ToString(user.Id),
-		Username:     user.Username,
-		Nickname:     user.Nickname,
-		Email:        user.EmailString(),
-		Status:       user.Status,
-		CreatedBy:    user.CreatedBy,
-		CreateTime:   timestamppb.New(user.CreateTime),
-		Applications: applicationsToMyProfilePb(apps),
+		Id:                cast.ToString(user.Id),
+		Username:          user.Username,
+		Nickname:          user.Nickname,
+		Email:             user.EmailString(),
+		Status:            user.Status,
+		CreatedBy:         user.CreatedBy,
+		CreateTime:        timestamppb.New(user.CreateTime),
+		Applications:      applicationsToMyProfilePb(apps),
+		HomeApplicationId: cast.ToString(user.HomeApplicationId),
+		IsAdmin:           auth.IsAdminFromContext(ctx),
 	}, nil
 }
 
@@ -180,13 +193,22 @@ func (a AuthenticationService) ListMyApplications(ctx context.Context, empty *em
 	if userId == 0 {
 		return nil, status.Error(codes.Unauthenticated, "authentication required")
 	}
-	apps, err := loadAccessibleApplications(ctx, a.db, userId, auth.IsAdminFromContext(ctx))
+	var user model.User
+	if err := a.db.WithContext(ctx).
+		Select(model.UserFields).
+		Where(model.UserColumnId, userId).
+		First(&user).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		slog.Warn("list my applications: load user failed", "user_id", userId, "error", err)
+		return nil, err
+	}
+	apps, err := loadAccessibleApplications(ctx, a.db, userId, user.HomeApplicationId, auth.IsAdminFromContext(ctx))
 	if err != nil {
 		slog.Warn("list my applications failed", "user_id", userId, "error", err)
 		return nil, err
 	}
 	return &iam_v1.ListMyApplicationsResponse{
-		Applications: applicationsToMyProfilePb(apps),
+		Applications:      applicationsToMyProfilePb(apps),
+		HomeApplicationId: cast.ToString(user.HomeApplicationId),
 	}, nil
 }
 
@@ -217,19 +239,30 @@ func (a AuthenticationService) SelectApplication(ctx context.Context, request *i
 	if app.Status != model.StatusEnabled {
 		return nil, status.Error(codes.FailedPrecondition, "应用已停用")
 	}
-	// 准入校验（fail-closed）：admin 旁路；其他用户必须在 t_r_user_application 绑定
+	// 准入校验（fail-closed）：admin 旁路；其他用户所属应用隐式准入，
+	// 其余应用必须在 t_r_user_application 绑定。
 	if !auth.IsAdminFromContext(ctx) {
-		var count int64
-		err = a.db.WithContext(ctx).
-			Model(model.RUserApplication{}).
-			Where(model.RUserApplicationColumnUserId+" = ? AND "+model.RUserApplicationColumnApplicationId+" = ?", userId, app.Id).
-			Count(&count).Error
-		if err != nil {
-			slog.Warn("select application: access check failed", "user_id", userId, "application_id", app.Id, "error", err)
+		var user model.User
+		if err := a.db.WithContext(ctx).
+			Select(model.UserFields).
+			Where(model.UserColumnId, userId).
+			First(&user).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			slog.Warn("select application: load user failed", "user_id", userId, "error", err)
 			return nil, err
 		}
-		if count == 0 {
-			return nil, status.Error(codes.PermissionDenied, "无权进入该应用")
+		if app.Id != user.HomeApplicationId {
+			var count int64
+			err = a.db.WithContext(ctx).
+				Model(model.RUserApplication{}).
+				Where(model.RUserApplicationColumnUserId+" = ? AND "+model.RUserApplicationColumnApplicationId+" = ?", userId, app.Id).
+				Count(&count).Error
+			if err != nil {
+				slog.Warn("select application: access check failed", "user_id", userId, "application_id", app.Id, "error", err)
+				return nil, err
+			}
+			if count == 0 {
+				return nil, status.Error(codes.PermissionDenied, "无权进入该应用")
+			}
 		}
 	}
 	if err := auth.SetAppContext(ctx, a.rdb, jti, app.Id, constant.AppContextTTL); err != nil {

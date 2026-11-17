@@ -298,11 +298,10 @@ func loadUsersRoles(ctx context.Context, db *gorm.DB, users []model.User) error 
 	return nil
 }
 
-
-// loadAccessibleApplications 加载用户可进入的应用清单（多应用裁决 #8）：
-// admin 角色旁路全部启用应用；其他用户按 t_r_user_application 准入绑定过滤。
+// loadAccessibleApplications 加载用户可进入的应用清单（多应用裁决 #8 + 模型 A）：
+// admin 角色旁路全部启用应用；其他用户 = 所属应用（隐式准入）+ t_r_user_application 准入绑定。
 // 仅返回启用状态应用；停用应用一律不可进入。
-func loadAccessibleApplications(ctx context.Context, db *gorm.DB, userId int64, isAdmin bool) ([]model.Application, error) {
+func loadAccessibleApplications(ctx context.Context, db *gorm.DB, userId int64, homeAppId int64, isAdmin bool) ([]model.Application, error) {
 	var apps []model.Application
 	if isAdmin {
 		err := db.WithContext(ctx).
@@ -323,12 +322,25 @@ func loadAccessibleApplications(ctx context.Context, db *gorm.DB, userId int64, 
 	if err != nil {
 		return nil, err
 	}
-	if len(bindings) == 0 {
-		return []model.Application{}, nil
+	appIds := make([]int64, 0, len(bindings)+1)
+	seen := make(map[int64]struct{}, len(bindings)+1)
+	addApp := func(id int64) {
+		if id <= 0 {
+			return
+		}
+		if _, exists := seen[id]; exists {
+			return
+		}
+		seen[id] = struct{}{}
+		appIds = append(appIds, id)
 	}
-	appIds := make([]int64, 0, len(bindings))
+	// 所属应用隐式准入，不依赖 t_r_user_application 绑定。
+	addApp(homeAppId)
 	for _, binding := range bindings {
-		appIds = append(appIds, binding.ApplicationId)
+		addApp(binding.ApplicationId)
+	}
+	if len(appIds) == 0 {
+		return []model.Application{}, nil
 	}
 	err = db.WithContext(ctx).
 		Where(model.ApplicationColumnId+" IN ?", appIds).

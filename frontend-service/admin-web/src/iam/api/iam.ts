@@ -78,6 +78,8 @@ const buildListUrl = (baseUrl: string, currentPage: number, pageSize: number, ke
 
 export interface ListMyApplicationsResponse {
   applications: MyProfileApplication[];
+  /** 所属应用 id（"0" = 未设置），前端默认选中；隐式准入，可能不在 applications 中 */
+  homeApplicationId: string;
 }
 
 export const authApi = {
@@ -139,11 +141,11 @@ export const accountApi = {
   updateRoles: (id: string, data: UpdateAccountRolesRequest) =>
     request<void>(`/account/accounts/${id}/roles`, { method: 'PATCH', body: data }),
   /** 管理员重置用户密码（无需旧密码；新密码 ≥8 位） */
-  /** 分配可进入应用：全量覆盖语义（空数组 = 清空准入） */
-  updateApplications: (id: string, applicationIds: string[]) =>
+  /** 设置准入应用与所属应用：applicationIds 全量覆盖（不含所属应用） */
+  updateApplications: (id: string, applicationIds: string[], homeApplicationId: string) =>
     request<void>(`/account/accounts/${id}/applications`, {
       method: 'PATCH',
-      body: { accountId: id, applicationIds },
+      body: { accountId: id, applicationIds, homeApplicationId },
     }),
   resetPassword: (id: string, data: ResetAccountPasswordRequest) =>
     request<void>(`/account/accounts/${id}/reset-password`, { method: 'POST', body: data }),

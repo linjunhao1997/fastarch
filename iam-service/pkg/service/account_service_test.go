@@ -72,11 +72,13 @@ func createTestUser(t *testing.T, db *gorm.DB, id int64, username string, versio
 func TestAccountUsernameUnique(t *testing.T) {
 	db := setupAccountTestDB(t)
 	createTestUser(t, db, 1, "alice", 0)
+	createTestApp(t, db, 900, "iam", model.StatusEnabled)
 	service := NewAccountService(db, nil)
 
 	_, err := service.CreateAccount(context.Background(), &iam_v1.CreateAccountRequest{
-		Username: "alice",
-		Password: "password123",
+		Username:          "alice",
+		Password:          "password123",
+		HomeApplicationId: "900",
 	})
 	if err != ErrUsernameDuplicated {
 		t.Fatalf("CreateAccount() error = %v, want %v", err, ErrUsernameDuplicated)
@@ -106,12 +108,14 @@ func TestCreateAccountPasswordRequired(t *testing.T) {
 // 创建用户：bcrypt 摘要落 password_hash，明文不落盘。
 func TestCreateAccountHashesPassword(t *testing.T) {
 	db := setupAccountTestDB(t)
+	createTestApp(t, db, 900, "iam", model.StatusEnabled)
 	service := NewAccountService(db, nil)
 
 	created, err := service.CreateAccount(context.Background(), &iam_v1.CreateAccountRequest{
-		Username: "hashed",
-		Password: "password123",
-		Nickname: "Hashed User",
+		Username:          "hashed",
+		Password:          "password123",
+		Nickname:          "Hashed User",
+		HomeApplicationId: "900",
 	})
 	if err != nil {
 		t.Fatalf("CreateAccount() error = %v", err)
@@ -131,12 +135,14 @@ func TestCreateAccountHashesPassword(t *testing.T) {
 // email 可选唯一：重复 email 返回 ErrEmailDuplicated；不传 email（NULL）不冲突。
 func TestCreateAccountEmailUnique(t *testing.T) {
 	db := setupAccountTestDB(t)
+	createTestApp(t, db, 900, "iam", model.StatusEnabled)
 	service := NewAccountService(db, nil)
 
 	first, err := service.CreateAccount(context.Background(), &iam_v1.CreateAccountRequest{
-		Username: "first",
-		Password: "password123",
-		Email:    "first@example.com",
+		Username:          "first",
+		Password:          "password123",
+		Email:             "first@example.com",
+		HomeApplicationId: "900",
 	})
 	if err != nil {
 		t.Fatalf("CreateAccount() #1 error = %v", err)
@@ -147,9 +153,10 @@ func TestCreateAccountEmailUnique(t *testing.T) {
 
 	// 重复 email 被拒绝
 	_, err = service.CreateAccount(context.Background(), &iam_v1.CreateAccountRequest{
-		Username: "second",
-		Password: "password123",
-		Email:    "first@example.com",
+		Username:          "second",
+		Password:          "password123",
+		Email:             "first@example.com",
+		HomeApplicationId: "900",
 	})
 	if err != ErrEmailDuplicated {
 		t.Fatalf("CreateAccount() #2 error = %v, want %v", err, ErrEmailDuplicated)
@@ -158,8 +165,9 @@ func TestCreateAccountEmailUnique(t *testing.T) {
 	// 不传 email（NULL）的多个用户互不冲突
 	for _, username := range []string{"third", "fourth"} {
 		if _, err := service.CreateAccount(context.Background(), &iam_v1.CreateAccountRequest{
-			Username: username,
-			Password: "password123",
+			Username:          username,
+			Password:          "password123",
+			HomeApplicationId: "900",
 		}); err != nil {
 			t.Fatalf("CreateAccount() %s error = %v", username, err)
 		}
@@ -169,6 +177,7 @@ func TestCreateAccountEmailUnique(t *testing.T) {
 // 创建用户：role_ids 初始角色绑定生效。
 func TestCreateAccountWithRoleIds(t *testing.T) {
 	db := setupAccountTestDB(t)
+	createTestApp(t, db, 900, "iam", model.StatusEnabled)
 	role := model.Role{Id: 11, Name: "role", Code: "role", Status: model.StatusEnabled}
 	if err := db.Create(&role).Error; err != nil {
 		t.Fatalf("create role: %v", err)
@@ -176,9 +185,10 @@ func TestCreateAccountWithRoleIds(t *testing.T) {
 	service := NewAccountService(db, nil)
 
 	created, err := service.CreateAccount(context.Background(), &iam_v1.CreateAccountRequest{
-		Username: "with-roles",
-		Password: "password123",
-		RoleIds:  []string{cast.ToString(role.Id)},
+		Username:          "with-roles",
+		Password:          "password123",
+		RoleIds:           []string{cast.ToString(role.Id)},
+		HomeApplicationId: "900",
 	})
 	if err != nil {
 		t.Fatalf("CreateAccount() error = %v", err)
@@ -364,7 +374,7 @@ func TestUpdateAccountEmailDuplicated(t *testing.T) {
 
 // ResetAccountPassword：新密码 bcrypt 落库，version+1，审计注入。
 func TestResetAccountPassword(t *testing.T) {
-	ctx := context.WithValue(context.Background(), "accountId", "42")
+	ctx := auth.WithAdmin(auth.WithAccountId(context.Background(), 42))
 	db := setupAccountTestDB(t)
 	createTestUser(t, db, 1, "one", 1)
 	service := NewAccountService(db, nil)
@@ -656,14 +666,16 @@ func TestLoadPermissionSnapshotReadThrough(t *testing.T) {
 // 认证上下文操作者）；Update 仅更新 update_time/updated_by，created_by 保持不变；
 // Get 回填审计字段。
 func TestAccountAuditFields(t *testing.T) {
-	createCtx := context.WithValue(context.Background(), "accountId", "42")
-	updateCtx := context.WithValue(context.Background(), "accountId", "43")
+	createCtx := auth.WithAdmin(auth.WithAccountId(context.Background(), 42))
+	updateCtx := auth.WithAdmin(auth.WithAccountId(context.Background(), 43))
 	db := setupAccountTestDB(t)
+	createTestApp(t, db, 900, "iam", model.StatusEnabled)
 	service := NewAccountService(db, nil)
 
 	created, err := service.CreateAccount(createCtx, &iam_v1.CreateAccountRequest{
-		Username: "audit-user",
-		Password: "password123",
+		Username:          "audit-user",
+		Password:          "password123",
+		HomeApplicationId: "900",
 	})
 	if err != nil {
 		t.Fatalf("CreateAccount() error = %v", err)
@@ -714,11 +726,13 @@ func TestAccountAuditFields(t *testing.T) {
 // T060 补充：无认证上下文时操作者注入为空串（内部调用/迁移场景）。
 func TestAccountAuditFieldsWithoutAuthContext(t *testing.T) {
 	db := setupAccountTestDB(t)
+	createTestApp(t, db, 900, "iam", model.StatusEnabled)
 	service := NewAccountService(db, nil)
 
 	created, err := service.CreateAccount(context.Background(), &iam_v1.CreateAccountRequest{
-		Username: "no-auth-user",
-		Password: "password123",
+		Username:          "no-auth-user",
+		Password:          "password123",
+		HomeApplicationId: "900",
 	})
 	if err != nil {
 		t.Fatalf("CreateAccount() error = %v", err)

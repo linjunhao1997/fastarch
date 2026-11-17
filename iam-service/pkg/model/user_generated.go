@@ -12,11 +12,12 @@ const (
 
 // 手工补回：contrib 生成器会丢失 string 类列与 uniqueIndex 列常量（项目已知问题）
 const (
-	UserColumnUsername     = "username"
-	UserColumnPasswordHash = "password_hash"
-	UserColumnNickname     = "nickname"
-	UserColumnEmail        = "email"
-	UserColumnStatus       = "status"
-	UserColumnCreatedBy    = "created_by"
-	UserColumnUpdatedBy    = "updated_by"
+	UserColumnUsername          = "username"
+	UserColumnPasswordHash      = "password_hash"
+	UserColumnNickname          = "nickname"
+	UserColumnEmail             = "email"
+	UserColumnStatus            = "status"
+	UserColumnHomeApplicationId = "home_application_id"
+	UserColumnCreatedBy         = "created_by"
+	UserColumnUpdatedBy         = "updated_by"
 )

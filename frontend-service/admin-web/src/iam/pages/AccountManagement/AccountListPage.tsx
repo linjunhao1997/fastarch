@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router';
 import { accountApi } from '@/iam/api/iam';
 import { useConfirmDelete } from '@/shared/components/ConfirmDelete';
 import { BindRolesModal } from '@/iam/components/BindRolesModal';
-import { AssignApplicationsModal } from '@/iam/components/AssignApplicationsModal';
+import { AdmittedApplicationsModal } from '@/iam/components/AdmittedApplicationsModal';
 import { EmptyState, ErrorState } from '@/shared/components/states';
 import { useApiErrorNotification } from '@/shared/hooks/useApiError';
 import { usePermissions } from '@/shared/hooks/permission-context';
@@ -51,6 +51,13 @@ export default function AccountListPage() {
         roleCodeList && roleCodeList.length > 0
           ? <Flex gap={4} wrap>{roleCodeList.map((code) => <Tag key={code}>{code}</Tag>)}</Flex>
           : '—',
+    },
+    {
+      title: '所属应用',
+      dataIndex: 'homeApplication',
+      key: 'homeApplication',
+      render: (home: AccountApplication | undefined) =>
+        home ? <Tag color="gold">{home.name}（{home.code}）</Tag> : '—',
     },
     {
       title: '准入应用',
@@ -152,7 +159,7 @@ export default function AccountListPage() {
           message.success(buildSuccessMessage(ACTIONS.bindRoles));
         }}
       />
-      <AssignApplicationsModal
+      <AdmittedApplicationsModal
         open={assignAppsAccount !== null}
         account={assignAppsAccount}
         onClose={() => setAssignAppsAccount(null)}

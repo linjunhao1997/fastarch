@@ -62,6 +62,7 @@ var (
 	ErrUpdatePermissionBusy     = NewErrorWithCode("1001013", codes.FailedPrecondition, errors.New("权限已被他人修改，请刷新后重试"))
 	ErrInvalidPermissionCode    = NewErrorWithCode("1001014", codes.InvalidArgument, errors.New("权限码格式不合法，须为 服务.模块.操作（如 iam.user.delete）"))
 	ErrRoleAdminProtected       = NewErrorWithCode("1001018", codes.FailedPrecondition, errors.New("管理员角色为系统内置，禁止删除"))
+	ErrHomeApplicationInvalid   = NewErrorWithCode("1001020", codes.InvalidArgument, errors.New("所属应用必须是已启用的应用"))
 	ErrUsernameDuplicated       = NewErrorWithCode("1001027", codes.AlreadyExists, errors.New("用户名已被占用"))
 	ErrUsernameRequired         = NewErrorWithCode("1001046", codes.InvalidArgument, errors.New("用户名不能为空"))
 	ErrEmailDuplicated          = NewErrorWithCode("1001048", codes.AlreadyExists, errors.New("邮箱已被占用"))
@@ -87,4 +88,7 @@ var (
 	ErrPermissionCodeSegmentMismatch = NewErrorWithCode("1001058", codes.InvalidArgument, errors.New("权限码服务段与当前应用不一致"))
 	ErrApplicationNotFoundForScope   = NewErrorWithCode("1001059", codes.NotFound, errors.New("应用不存在"))
 	ErrApplicationCodeDuplicated     = NewErrorWithCode("1001060", codes.AlreadyExists, errors.New("应用服务段编码已被占用"))
+	// 数据边界（ADR 0006）：创建必填所属应用；非 admin 仅可见/可操作所属应用的用户
+	ErrHomeApplicationRequired = NewErrorWithCode("1001061", codes.InvalidArgument, errors.New("所属应用不能为空"))
+	ErrAccountOutOfScope       = NewErrorWithCode("1001062", codes.PermissionDenied, errors.New("只能查看/操作所属应用的用户"))
 )

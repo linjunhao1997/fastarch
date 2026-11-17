@@ -78,10 +78,16 @@ message GetMyProfileResponse {
   google.protobuf.Timestamp create_time = 7;  // 创建时间
   // 可进入应用列表（与 ListMyApplications 同源：admin 全量启用应用，其他按准入绑定）
   repeated MyProfileApplication applications = 8;
+  // 所属应用 id（string 编码）：默认进入的应用；admin/未设置为 "0"
+  string home_application_id = 9;
+  // 是否 admin 角色（只读回传，服务端派生）：前端据此锁定所属应用等数据边界 UI
+  bool is_admin = 10;
 }
 
 message ListMyApplicationsResponse {
   repeated MyProfileApplication applications = 1;
+  // 所属应用 id（string 编码）：前端默认选中；admin/未设置为 "0"
+  string home_application_id = 2;
 }
 
 message SelectApplicationRequest {
