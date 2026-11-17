@@ -8,7 +8,7 @@
 
 ```
 ┌───────────────────────────────────────────────────────────────┐
-│  前端 frontend-service/iam-web :5173                          │
+│  前端 frontend-service/admin-web :5173                          │
 │  React 19 + Ant Design + Vite + TS                            │
 │  按 <服务前缀> 代理 → /account /authorization /sender ...      │
 └──────────────────────────┬────────────────────────────────────┘
@@ -37,7 +37,7 @@
 | `idl/` | `idl`（对外名 `github.com/linjunhao1997/idl`） | **接口层**：proto 定义 + 生成的 pb/gateway/swagger 代码 + 公共拦截器库（`lib/grpclib`、`lib/gwlib`） |
 | `contrib/` | `github.com/linjunhao1997/contrib` | **共享基础设施**：配置加载、cobra 应用引导、grpcserver/httpserver 组装、MySQL/Redis 助手、代码生成器 |
 | `iam-service/` | `iam-service` | 业务服务（每个业务服务一个这样的目录） |
-| `frontend-service/iam-web/` | — | React 前端 |
+| `frontend-service/admin-web/` | — | React 管理前端（IAM + sender 等宿主） |
 
 依赖方向：`iam-service → idl + contrib`，`contrib → idl`，均通过 `replace ../` 指向本地。**idl 被所有服务依赖，contrib 被所有服务复用，业务服务之间不互相依赖**（需要跨服务调用走 gRPC）。
 
@@ -51,7 +51,7 @@
 | 应用层（Application） | `iam-service/pkg/service/*_service.go` | 实现 pb 生成的 `XxxServiceServer` 接口；做 DTO(model↔pb) 转换、编排、事务边界 |
 | 领域/持久层（Domain/Infra） | `iam-service/pkg/model/` + `pkg/helper/` | GORM 模型 + 生成的列名常量；helper 提供分页等横切工具 |
 | 共享内核（Shared Kernel） | `idl/lib/*`、`contrib/pkg/*` | 拦截器、错误转换、配置、服务组装——业务服务只"用"不"改" |
-| 前端（BFF 视角） | `frontend-service/iam-web/src/{api,pages,routers}` | api 按服务一个文件，页面三件套，路由即菜单 |
+| 前端（BFF 视角） | `frontend-service/admin-web/src/{app,shared,iam,sender}` | 三层垂直切片：app 壳 / shared 公用 / 各服务专属域；路由即菜单 |
 
 ## 三、目录结构
 
@@ -93,11 +93,12 @@ fastarch/
 │       ├── model/                # 手写模型 + *_generated.go(列名常量) + ddl.sql
 │       └── service/              # 业务实现 + service_error.go 业务错误
 │
-└── frontend-service/iam-web/     # React 前端
+└── frontend-service/admin-web/   # React 管理前端
     └── src/
-        ├── api/                  # request.ts 统一封装 + iam.ts（每服务一个文件: xxxApi）
-        ├── pages/<XxxManagement>/ # XxxListPage / CreateXxxPage / EditXxxPage 三件套
-        ├── routers/router.tsx    # createBrowserRouter + handle 元数据（菜单/面包屑自动生成）
+        ├── app/                  # 应用壳：入口/路由聚合/布局页
+        ├── shared/               # 公用：api(含动态前缀)、组件、hooks、context、types
+        ├── iam/                  # IAM 专属：api/components/pages/types
+        └── sender/               # sender 专属：api/pages/router（路径与菜单种子对齐）
         ├── components/           # AuthWrapper、AutoBreadcrumb
         └── hooks/                # useNotification、useApiError
 ```
@@ -183,9 +184,9 @@ VALUES (1, 1, (SELECT id FROM t_application LIMIT 1));
 ### 5.5 启动前端
 
 ```bash
-cd frontend-service/iam-web
+cd frontend-service/admin-web
 pnpm install
-pnpm dev           # :5173，代理 /account /application /authorization /authentication → :8080
+pnpm dev           # :5173，代理 /account /application /authorization /authentication /iam → :8080，/sender → :8081
 ```
 
 浏览器打开 http://localhost:5173 ，用引导账号登录即可。
@@ -514,10 +515,10 @@ proto 契约 → 代码生成 → model(如涉新表/新列) → service 实现 
 | 4 | 模型 | `pkg/model/` | 新表才动 model：手写结构体 + `TableName()` + `init(){migrate}` + `ddl.sql` 同步；查询条件只用生成的列名常量 |
 | 5 | 业务实现 | `pkg/service/xxx_service.go` | `var _ xxx_v1.XxxServiceServer = (*Service)(nil)` 编译断言；model↔pb 转换用 `xxxToPb` 函数；分页必走 `helper`；错误必走 `service_error.go` 业务码 |
 | 6 | 注册（仅新 service 需要） | `server/grpc.go` / `server/http.go` | 只加 `Register` 两行；已有 service 新增方法**不需要**动 server 层 |
-| 7 | 前端 API | `frontend-service/iam-web/src/api/<domain>.ts` | 每服务一个文件；复用统一 `request<T>`；类型与 proto 响应一一对应 |
-| 8 | 前端页面 | `frontend-service/iam-web/src/pages/<XxxManagement>/` | 三件套：`XxxListPage` / `CreateXxxPage` / `EditXxxPage`；错误统一 `useApiErrorNotification()` |
-| 9 | 路由 | `frontend-service/iam-web/src/routers/router.tsx` | handle 元数据驱动菜单/面包屑（见 9.3）；**不要新建静态菜单配置** |
-| 10 | 代理 | `frontend-service/iam-web/vite.config.ts` | 仅新服务前缀时加一条 |
+| 7 | 前端 API | `frontend-service/admin-web/src/<domain>/api/<domain>.ts` | 每服务一个文件；复用 `shared/api/request`；类型与 proto 响应一一对应 |
+| 8 | 前端页面 | `frontend-service/admin-web/src/<domain>/pages/` | 三件套：`XxxListPage` / `CreateXxxPage` / `EditXxxPage`；错误统一 `useApiErrorNotification()` |
+| 9 | 路由 | `frontend-service/admin-web/src/app/router.tsx`（各域子树单独文件） | handle 元数据驱动菜单/面包屑（见 9.3）；**不要新建静态菜单配置** |
+| 10 | 代理 | `frontend-service/admin-web/vite.config.ts` | 仅新服务前缀时加一条 |
 
 > 在已有服务上加接口 = 步骤 1/2/3/5 + 前端 7/8/9；新服务 = 第七节 + 上述全部。
 
@@ -608,4 +609,4 @@ export const senderApi = {
 | 生成模型列名常量 | `go run ../contrib/main.go gen_gorm_mysql_repository -m pkg/model/xxx.go`（`go generate ./...` 亦可） |
 | 启动某服务 gRPC / 网关 | `cd <service> && go run . grpc` / `go run . http` |
 | 指定配置/端口 | `go run . grpc -c conf/config.yaml` / `go run . http --addr 127.0.0.1 --port 8080 --endpoint 127.0.0.1:9090` |
-| 前端开发 | `cd frontend-service/iam-web && pnpm dev` |
+| 前端开发 | `cd frontend-service/admin-web && pnpm dev` |
