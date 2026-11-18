@@ -1,27 +1,36 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Flex, Spin } from 'antd';
-import { useNavigate } from 'react-router-dom';
-import { getCookie } from '@/shared/api/request';
-import { ApplicationProvider } from '@/shared/context/ApplicationContext';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { getStoredToken } from '@/shared/api/request';
+import { ConsoleProvider } from '@/shared/context/ConsoleContext';
 import { PermissionProvider } from '@/shared/hooks/PermissionProvider';
 
 interface AuthWrapperProps {
+  /** 该受保护区所属控制台（登录即锁定，ADR 0007） */
+  consoleKind: 'iam' | 'sender';
   children: ReactNode;
 }
 
-export default function AuthWrapper({ children }: AuthWrapperProps) {
+/** 各控制台的登录页路由 */
+const LOGIN_PATHS: Record<'iam' | 'sender', string> = {
+  iam: '/login',
+  sender: '/sender/login',
+};
+
+export default function AuthWrapper({ consoleKind, children }: AuthWrapperProps) {
   const navigate = useNavigate();
+  const location = useLocation();
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    const token = getCookie('access_token');
+    const token = getStoredToken();
     if (!token || token.trim().length === 0) {
       const redirectPath = encodeURIComponent(window.location.pathname + window.location.search);
-      navigate(`/login?redirect=${redirectPath}`);
+      navigate(`${LOGIN_PATHS[consoleKind]}?redirect=${redirectPath}`);
     } else {
       setChecking(false);
     }
-  }, [navigate]);
+  }, [navigate, consoleKind, location.pathname, location.search]);
 
   if (checking) {
     return (
@@ -31,9 +40,11 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
     );
   }
 
+  // 两个控制台共用权限快照：IndexPage 的权限门与菜单过滤均依赖 usePermissions，
+  // Provider 必须挂在受保护区外层（重构 #7 曾遗漏，导致运行时抛错）。
   return (
-    <ApplicationProvider>
+    <ConsoleProvider>
       <PermissionProvider>{children}</PermissionProvider>
-    </ApplicationProvider>
+    </ConsoleProvider>
   );
 }

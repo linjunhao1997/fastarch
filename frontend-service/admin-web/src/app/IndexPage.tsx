@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Avatar, Button, Dropdown, Empty, Flex, Layout, Menu, Select, Spin, message } from 'antd';
+import { Avatar, Button, Dropdown, Empty, Flex, Layout, Menu, Spin, message } from 'antd';
 import { MenuFoldOutlined, MenuUnfoldOutlined, UserOutlined } from '@ant-design/icons';
 import { Navigate, Outlet, useLocation, useMatches, useNavigate } from 'react-router';
 import AutoBreadcrumb from '@/shared/components/AutoBreadcrumb';
@@ -12,7 +12,8 @@ import {
 } from '@/app/router';
 import { usePermissions } from '@/shared/hooks/permission-context';
 import { menuApi } from '@/shared/api/menu-dict-api';
-import { useApplicationContext } from '@/shared/context/ApplicationContext';
+import { getConsole, setConsole } from '@/shared/api/app-context';
+import { useConsole } from '@/shared/context/ConsoleContext';
 import { layoutTokens, themeTokens } from '@/shared/theme';
 
 const { Header, Sider, Content } = Layout;
@@ -25,6 +26,7 @@ function handleLogout(navigate: ReturnType<typeof useNavigate>) {
   clearCookie('access_token');
   localStorage.removeItem('access_token');
   localStorage.removeItem('current_application_id');
+  setConsole('iam'); // 登出回 IAM 登录页（sender 登录页由 AuthWrapper 按控制台路由决定）
   navigate('/login');
 }
 
@@ -60,18 +62,17 @@ function UnauthorizedRedirect() {
 
 export default function IndexPage() {
   const [collapsed, setCollapsed] = useState(false);
+  const location = useLocation();
   const navigate = useNavigate();
-  const { applications, currentApplicationId, currentAppCode, setCurrentApplicationId, loading: contextLoading } = useApplicationContext();
+  const { label: consoleLabel } = useConsole();
   const { permissionCodes } = usePermissions();
 
-  // 菜单树：服务端按应用上下文返回全量启用菜单（纯码门槛裁决）；
+  // 菜单树：服务端按登录锁定应用返回全量启用菜单（纯码门槛裁决）；
   // 可见性由前端按菜单 permission_code 与用户快照码过滤。
   const menuTreeQuery = useQuery({
-    // 应用上下文在服务端（token→app 映射），queryKey 带 appId 仅为按应用隔离缓存
-    queryKey: ['my-menu-tree', currentApplicationId],
+    // 应用上下文登录即锁定（ADR 0007），queryKey 带 console 仅为按控制台隔离缓存
+    queryKey: ['my-menu-tree', getConsole()],
     queryFn: () => menuApi.listMyTree(),
-    // app code 绑定成功前不发请求：避免首屏 localStorage 残留旧 id 时用错的 code 拼前缀
-    enabled: !!currentApplicationId && !!currentAppCode,
     placeholderData: (previous) => previous,
     retry: 1,
   });
@@ -94,57 +95,7 @@ export default function IndexPage() {
     return hit ? [hit] : [];
   }, [menuTreeQuery.data, location.pathname]);
 
-  const appOptions = useMemo(
-    () =>
-      applications.map((app) => ({
-        value: app.id,
-        label: app.status === 'enabled' ? app.name : `${app.name}（已停用）`,
-        disabled: app.status !== 'enabled',
-      })),
-    [applications],
-  );
-
-  // 折叠态：图标按钮 + Dropdown 保持应用切换可用（specs/008 T023）
-  const collapsedAppMenuItems = useMemo(
-    () =>
-      applications.map((app) => ({
-        key: app.id,
-        label: app.status === 'enabled' ? app.name : `${app.name}（已停用）`,
-        disabled: app.status !== 'enabled',
-      })),
-    [applications],
-  );
-
-  // 切换应用：服务端绑定成功后强制回首页（右侧内容随新应用上下文重建，
-  // 避免停留在上一应用的页面/数据上造成"没切过去"的错觉）
-  const handleAppSwitch = async (id: string) => {
-    try {
-      await setCurrentApplicationId(id);
-      navigate('/');
-    } catch {
-      // 错误提示已由 ApplicationContext 弹出；停留在原应用
-    }
-  };
-
   const renderSiderBody = () => {
-    // 无可进入应用（非 admin 且未被分配准入）：引导联系管理员
-    if (!contextLoading && applications.length === 0) {
-      return (
-        <Empty
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description="暂无可进入的应用，请联系管理员分配"
-          style={{ padding: 24 }}
-        />
-      );
-    }
-    // 应用上下文尚未绑定完成（清单加载中 / SelectApplication 进行中）
-    if (contextLoading || !currentApplicationId) {
-      return (
-        <Flex justify="center" align="center" style={{ padding: 32 }}>
-          <Spin tip="绑定应用..." />
-        </Flex>
-      );
-    }
     // 菜单树加载中（且无旧数据可保留）；isLoading 仅在真实请求中为 true，
     // 避免 enabled=false 时 isPending 恒真造成永久转圈
     if (menuTreeQuery.isLoading && !menuTreeQuery.data) {
@@ -222,33 +173,11 @@ export default function IndexPage() {
             color: themeTokens.colorPrimary,
             borderBottom: `1px solid ${themeTokens.colorBorder}`,
             padding: collapsed ? 0 : '0 8px',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
           }}
         >
-          {collapsed ? (
-            <Dropdown
-              menu={{
-                items: collapsedAppMenuItems,
-                selectable: true,
-                selectedKeys: currentApplicationId ? [currentApplicationId] : [],
-                onClick: ({ key }) => void handleAppSwitch(key),
-              }}
-              disabled={applications.length === 0}
-            >
-              <Button type="text" title="切换应用">⚡</Button>
-            </Dropdown>
-          ) : (
-            <Flex align="center" gap={8} style={{ width: '100%' }}>
-              <Select
-                variant="borderless"
-                value={currentApplicationId ?? undefined}
-                onChange={(value) => void handleAppSwitch(value)}
-                loading={menuTreeQuery.isFetching && !menuTreeQuery.isPlaceholderData}
-                placeholder="选择应用"
-                style={{ width: '100%' }}
-                options={appOptions}
-              />
-            </Flex>
-          )}
+          {collapsed ? 'FA' : consoleLabel}
         </div>
         {renderSiderBody()}
         {menuTreeQuery.isFetching && !!menuTreeQuery.data ? (

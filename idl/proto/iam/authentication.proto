@@ -13,7 +13,10 @@ import "buf/validate/validate.proto";
 
 // 认证服务
 service AuthenticationService {
-  // 密码认证：identifier 即登录标识（username 或 email，服务端双路径查询）
+  // 密码认证：identifier 即登录标识（username 或 email，服务端双路径查询）。
+  // 目标应用由 gRPC metadata 的 application_code 决定（人机边界认 code）。
+  // 自有控制台登录可不带该 metadata（缺省回退 iam 应用）；外部应用（如 sender）
+  // 经内部 gRPC 调用时在出站 metadata 中携带自身 code，登录即锁定所属应用。
   rpc PasswordAuth(PasswordAuthRequest) returns (PasswordAuthResponse) {
     option (google.api.http) = {
       post: "/authentication/password-auth"
@@ -21,29 +24,11 @@ service AuthenticationService {
     };
   }
 
-  // 获取当前登录用户的个人信息（基本信息 + 可进入应用列表）
+  // 获取当前登录用户的个人信息（基本信息）
   // 仅凭登录态（JWT accountId）返回，不接收用户标识参数
   rpc GetMyProfile(google.protobuf.Empty) returns (GetMyProfileResponse) {
     option (google.api.http) = {
       get: "/authentication/my-profile"
-    };
-  }
-
-  // 列出当前用户可进入的应用（admin 旁路全部启用应用；
-  // 其他用户按 t_r_user_application 准入绑定过滤）。
-  rpc ListMyApplications(google.protobuf.Empty) returns (ListMyApplicationsResponse) {
-    option (google.api.http) = {
-      get: "/authentication/my-applications"
-    };
-  }
-
-  // 选择当前应用上下文：校验准入后写入 jti→应用映射（切换不重签令牌，
-  // 多应用裁决 #8）。外部/机器令牌的 application_id 在签发时锁定于 claim，
-  // 不经本接口。
-  rpc SelectApplication(SelectApplicationRequest) returns (google.protobuf.Empty) {
-    option (google.api.http) = {
-      post: "/authentication/select-application"
-      body: "*"
     };
   }
 }
@@ -58,14 +43,6 @@ message PasswordAuthResponse {
   string access_token = 1;
 }
 
-// 账号归属的应用摘要（个人信息用；含停用应用，前端置灰不可选）
-message MyProfileApplication {
-  string id = 1;      // 应用 id（string 编码）
-  string code = 2;    // 应用编码
-  string name = 3;    // 应用名称
-  string status = 4;  // 启用/停用状态
-}
-
 message GetMyProfileResponse {
   // 用户基本信息（不含密码摘要、AK/SK 等敏感凭据字段）
   string id = 1;
@@ -76,21 +53,10 @@ message GetMyProfileResponse {
   // 审计字段（只读回传，服务端注入）
   string created_by = 6;                      // 创建人（用户 id）
   google.protobuf.Timestamp create_time = 7;  // 创建时间
-  // 可进入应用列表（与 ListMyApplications 同源：admin 全量启用应用，其他按准入绑定）
-  repeated MyProfileApplication applications = 8;
-  // 所属应用 id（string 编码）：默认进入的应用；admin/未设置为 "0"
-  string home_application_id = 9;
+  // 所属应用 id（string 编码，ADR 0006 数据边界）：非 admin 创建用户时锁定为
+  // 操作者所属应用。admin/未设置为 "0"。注意与"可进入应用清单"无关——
+  // 登录已锁定应用（ADR 0007），profile 不再返回可切换清单。
+  string home_application_id = 8;
   // 是否 admin 角色（只读回传，服务端派生）：前端据此锁定所属应用等数据边界 UI
-  bool is_admin = 10;
-}
-
-message ListMyApplicationsResponse {
-  repeated MyProfileApplication applications = 1;
-  // 所属应用 id（string 编码）：前端默认选中；admin/未设置为 "0"
-  string home_application_id = 2;
-}
-
-message SelectApplicationRequest {
-  // 应用服务段编码（人机边界认 code，服务端换 application_id；多应用裁决 #8）
-  string application_code = 1 [(buf.validate.field).string.min_len = 1];
+  bool is_admin = 9;
 }

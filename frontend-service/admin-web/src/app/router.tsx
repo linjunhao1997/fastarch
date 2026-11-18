@@ -25,6 +25,7 @@ import { senderRoutes } from '@/sender/router';
 
 const IndexPage = lazy(() => import('@/app/IndexPage'));
 const LoginPage = lazy(() => import('@/shared/pages/LoginPage'));
+const SenderLoginPage = lazy(() => import('@/sender/pages/SenderLoginPage'));
 const HomePage = lazy(() => import('@/app/HomePage'));
 const AccountListPage = lazy(() => import('@/iam/pages/AccountManagement/AccountListPage'));
 const CreateAccountPage = lazy(() => import('@/iam/pages/AccountManagement/CreateAccountPage'));
@@ -62,9 +63,10 @@ type MenuItem = NonNullable<MenuProps['items']>[number] & {
  */
 export const routes: RouteObject[] = [
   { path: '/login', element: withSuspense(<LoginPage />) },
+  { path: '/sender/login', element: withSuspense(<SenderLoginPage />) },
   {
     path: '/',
-    element: withSuspense(<AuthWrapper><IndexPage /></AuthWrapper>),
+    element: withSuspense(<AuthWrapper consoleKind="iam"><IndexPage /></AuthWrapper>),
     children: [
       {
         index: true,
@@ -216,9 +218,13 @@ export const routes: RouteObject[] = [
           },
         ],
       },
-      // sender 业务路由子树（垂直切片，路径与 sender 菜单种子对齐）
-      ...senderRoutes,
     ],
+  },
+  // sender 控制台（ADR 0007 单工程双控制台）：独立登录页 + 独立子树
+  {
+    path: '/sender',
+    element: withSuspense(<AuthWrapper consoleKind="sender"><IndexPage /></AuthWrapper>),
+    children: [...senderRoutes],
   },
 ];
 

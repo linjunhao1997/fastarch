@@ -41,6 +41,7 @@ func RunGrpcServer(ctx context.Context, cfg *conf.Config) error {
 	if err != nil {
 		return fmt.Errorf("init credential cipher: %w", err)
 	}
+	signatureStore := auth.NewSignatureStore(db, rdb, credentialAES, credentialWindow)
 
 	srv, err := grpcserver.New(cfg.GRpc.AddrWithPort(),
 		grpcserver.WithDefaultInterceptors(),
@@ -49,7 +50,7 @@ func RunGrpcServer(ctx context.Context, cfg *conf.Config) error {
 		grpcserver.WithServerOptions(
 			// 权限快照读穿回源函数注入鉴权拦截器（research.md D6-②）；
 			// 签名验签器注入 AK/SK 双轨分支（specs/009-ak-sk-auth T017）
-			grpc.ChainUnaryInterceptor(auth.Interceptor(rdb, service.NewPermissionSnapshotLoader(db), auth.NewSignatureStore(db, rdb, credentialAES, credentialWindow))),
+			grpc.ChainUnaryInterceptor(auth.Interceptor(rdb, service.NewPermissionSnapshotLoader(db), signatureStore)),
 			grpc.StatsHandler(otelgrpc.NewClientHandler()),
 		),
 	)
@@ -58,7 +59,7 @@ func RunGrpcServer(ctx context.Context, cfg *conf.Config) error {
 	}
 
 	s := srv.Grpc()
-	iam_v1.RegisterAuthenticationServiceServer(s, service.NewAuthenticationService(db, rdb))
+	iam_v1.RegisterAuthenticationServiceServer(s, service.NewAuthenticationServiceWithSignature(db, rdb, signatureStore))
 	iam_v1.RegisterAccountServiceServer(s, service.NewAccountService(db, rdb))
 	iam_v1.RegisterAuthorizationServiceServer(s, service.NewAuthorizationService(db, rdb))
 	iam_v1.RegisterApplicationServiceServer(s, service.NewApplicationService(db))

@@ -15,6 +15,16 @@ import type {
   UpdateTemplateRequest,
 } from '@/sender/types/sender';
 
+/** sender 独立登录端点：凭据校验委托 IAM，登录即锁定 sender 应用（ADR 0007） */
+export const authApi = {
+  login: (data: { identifier: string; password: string }) =>
+    request<{ accessToken: string }>('/sender/authentication/password-auth', {
+      method: 'POST',
+      body: data,
+      skipToken: true,
+    }),
+};
+
 const buildListUrl = (
   base: string,
   currentPage = 1,

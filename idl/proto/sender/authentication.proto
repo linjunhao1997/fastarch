@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package sender.v1;
+
+option go_package = "github.com/linjunhao1997/idl/pb/sender;sender_v1";
+option java_multiple_files = true;
+option java_package = "com.sender.v1";
+
+import "google/api/annotations.proto";
+import "buf/validate/validate.proto";
+
+// 认证服务（sender 宿主独立登录端点，ADR 0007）。
+// sender 无自有用户库：凭据校验委托 IAM PasswordAuth；目标应用 code 由
+// sender 自身配置固定（不接收客户端传入），登录即锁定所属应用，无运行时切换。
+service AuthenticationService {
+  // 密码认证：identifier 即登录标识（username 或 email）。
+  // 内部以 IAM 为唯一身份权威（gRPC metadata 携带 application_code=sender）。
+  rpc PasswordAuth(PasswordAuthRequest) returns (PasswordAuthResponse) {
+    option (google.api.http) = {
+      post: "/sender/authentication/password-auth"
+      body: "*"
+    };
+  }
+}
+
+message PasswordAuthRequest {
+  // 登录标识：username 或 email（双标识登录，011 裁决）
+  string identifier = 1 [(buf.validate.field).string.min_len = 1];
+  string password = 2 [(buf.validate.field).string.min_len = 1];
+}
+
+message PasswordAuthResponse {
+  string access_token = 1;
+}

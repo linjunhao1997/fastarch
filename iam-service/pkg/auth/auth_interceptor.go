@@ -37,11 +37,8 @@ var notAuthMethod = map[string]struct{}{
 var authOnlyMethods = map[string]struct{}{
 	iam_v1.AuthorizationService_GetMyPermissions_FullMethodName: {},
 	iam_v1.AuthorizationService_CheckPermission_FullMethodName:  {},
-	// specs/008-account-app-context：自描述接口，仅需登录态（无需具体资源权限）
+	// 自描述接口，仅需登录态（无需具体资源权限）
 	iam_v1.AuthenticationService_GetMyProfile_FullMethodName: {},
-	// 多应用裁决 #8：应用清单与选择仅需登录态（准入校验在服务内 fail-closed）
-	iam_v1.AuthenticationService_ListMyApplications_FullMethodName: {},
-	iam_v1.AuthenticationService_SelectApplication_FullMethodName: {},
 	// 菜单树自查：仅需登录态，按角色绑定服务端过滤（无需菜单权限）
 	iam_v1.MenuService_ListMyMenuTree_FullMethodName: {},
 }
@@ -89,8 +86,8 @@ func Interceptor(rdb *redis.Client, load PermissionLoader, store *SignatureStore
 		newCtx := context.WithValue(ctx, contextAccountId, accountId)
 		newCtx = context.WithValue(newCtx, contextIsAdmin, isAdmin)
 		newCtx = WithTokenJti(newCtx, claims.ID)
-		// 解析当前应用上下文：Redis app:ctx:{jti} 优先，回落 claim.ApplicationId。
-		newCtx = withResolvedApplication(newCtx, rdb, claims.ID, claims.ApplicationId)
+		// 应用上下文（ADR 0007）：登录已锁定，appId 直接取签名 claim，可靠不可变。
+		newCtx = WithApplicationId(newCtx, claims.ApplicationId)
 
 		if isAdmin {
 			return handler(newCtx, req)

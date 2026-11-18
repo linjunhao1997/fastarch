@@ -119,6 +119,14 @@ func (service *AccessCredentialService) CreateAccessCredential(ctx context.Conte
 		if account.Status != constant.AccountStatusEnabled {
 			return ErrAccessCredentialAccountInvalid
 		}
+		// 数据边界（ADR 0006 补充）：凭证随所属用户 home 隔离（账号已行锁加载，不复查）
+		homeId, scoped, err := operatorHomeScope(ctx, tx)
+		if err != nil {
+			return err
+		}
+		if scoped && (homeId <= 0 || homeId != account.HomeApplicationId) {
+			return ErrAccountOutOfScope
+		}
 		// 单账号凭证上限（FR-010）；行锁下计数，规避并发创建的 check-then-act 放大
 		var count int64
 		err = tx.Model(model.AccessCredential{}).
@@ -207,9 +215,36 @@ func firstCredential(ctx context.Context, db *gorm.DB, id int64) (model.AccessCr
 	return credential, err
 }
 
+// requireCredentialScope 凭证数据边界（ADR 0006 补充）：凭证随所属用户 home 隔离。
+// admin/系统调用旁路；非 admin home 未设置、所属用户不存在或与 home 不一致一律拒绝。
+func (service *AccessCredentialService) requireCredentialScope(ctx context.Context, userId int64) error {
+	homeId, scoped, err := operatorHomeScope(ctx, service.db)
+	if err != nil || !scoped {
+		return err
+	}
+	var owner model.User
+	err = service.db.WithContext(ctx).
+		Select(model.UserColumnId, model.UserColumnHomeApplicationId).
+		Where(model.UserColumnId, userId).
+		First(&owner).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return ErrAccountOutOfScope
+	}
+	if err != nil {
+		return err
+	}
+	if homeId <= 0 || homeId != owner.HomeApplicationId {
+		return ErrAccountOutOfScope
+	}
+	return nil
+}
+
 func (service *AccessCredentialService) GetAccessCredential(ctx context.Context, request *common_v1.GetRequest) (*iam_v1.AccessCredential, error) {
 	credential, err := firstCredential(ctx, service.db, request.Id)
 	if err != nil {
+		return nil, err
+	}
+	if err := service.requireCredentialScope(ctx, credential.UserId); err != nil {
 		return nil, err
 	}
 	return accessCredentialToPb(credential, accountNameById(ctx, service.db, credential.UserId)), nil
@@ -217,18 +252,36 @@ func (service *AccessCredentialService) GetAccessCredential(ctx context.Context,
 
 func (service *AccessCredentialService) ListAccessCredentials(ctx context.Context, request *iam_v1.ListAccessCredentialsRequest) (*iam_v1.ListAccessCredentialsResponse, error) {
 	limit, offset := helper.GetLimitAndOffset(request.CurrentPage, request.PageSize)
+	// 数据边界（ADR 0006 补充）：凭证随所属用户 home 隔离；home 未设置 fail-closed 空列表
+	homeId, scoped, err := operatorHomeScope(ctx, service.db)
+	if err != nil {
+		return nil, err
+	}
+	if scoped && homeId <= 0 {
+		return &iam_v1.ListAccessCredentialsResponse{
+			AccessCredentials: []*iam_v1.AccessCredential{},
+			Page:              helper.GetPage(request.CurrentPage, request.PageSize, 0),
+		}, nil
+	}
 	var count int64
 	var res []model.AccessCredential
+	credentialTable := (&model.AccessCredential{}).TableName()
 	buildQuery := func() *gorm.DB {
 		query := service.db.WithContext(ctx).Model(model.AccessCredential{})
+		if scoped {
+			// 联表按所属用户 home 过滤（凭证表无归属列，边界随账号域）
+			userTable := (&model.User{}).TableName()
+			query = query.Joins("JOIN "+userTable+" ON "+userTable+"."+model.UserColumnId+" = "+credentialTable+"."+model.AccessCredentialColumnUserId).
+				Where(userTable+"."+model.UserColumnHomeApplicationId+" = ?", homeId)
+		}
 		if request.UserId > 0 {
-			query = query.Where(model.AccessCredentialColumnUserId, request.UserId)
+			query = query.Where(credentialTable+"."+model.AccessCredentialColumnUserId, request.UserId)
 		}
 		if len(request.AccessKey) > 0 {
-			query = query.Where(model.AccessCredentialColumnAccessKey+" LIKE ?", request.AccessKey+"%")
+			query = query.Where(credentialTable+"."+model.AccessCredentialColumnAccessKey+" LIKE ?", request.AccessKey+"%")
 		}
 		if len(request.Status) > 0 {
-			query = query.Where(model.AccessCredentialColumnStatus, request.Status)
+			query = query.Where(credentialTable+"."+model.AccessCredentialColumnStatus, request.Status)
 		}
 		return query
 	}
@@ -238,7 +291,7 @@ func (service *AccessCredentialService) ListAccessCredentials(ctx context.Contex
 	if err := buildQuery().
 		Limit(limit).
 		Offset(offset).
-		Order(model.AccessCredentialColumnId + " DESC").
+		Order(credentialTable + "." + model.AccessCredentialColumnId + " DESC").
 		Find(&res).Error; err != nil {
 		return nil, err
 	}
@@ -266,6 +319,9 @@ func (service *AccessCredentialService) UpdateAccessCredential(ctx context.Conte
 	operator := auth.GetAccountId(ctx)
 	credential, err := firstCredential(ctx, service.db, request.Id)
 	if err != nil {
+		return nil, err
+	}
+	if err := service.requireCredentialScope(ctx, credential.UserId); err != nil {
 		return nil, err
 	}
 	updates := map[string]interface{}{}
@@ -307,6 +363,9 @@ func (service *AccessCredentialService) ChangeAccessCredentialStatus(ctx context
 	if err != nil {
 		return nil, err
 	}
+	if err := service.requireCredentialScope(ctx, credential.UserId); err != nil {
+		return nil, err
+	}
 	if credential.Status == request.Status {
 		return &emptypb.Empty{}, nil // 幂等
 	}
@@ -337,6 +396,9 @@ func (service *AccessCredentialService) ResetAccessCredentialSecret(ctx context.
 	operator := auth.GetAccountId(ctx)
 	credential, err := firstCredential(ctx, service.db, request.Id)
 	if err != nil {
+		return nil, err
+	}
+	if err := service.requireCredentialScope(ctx, credential.UserId); err != nil {
 		return nil, err
 	}
 	plainSecret, err := generateSecretKey()
@@ -376,6 +438,9 @@ func (service *AccessCredentialService) DeleteAccessCredential(ctx context.Conte
 	operator := auth.GetAccountId(ctx)
 	credential, err := firstCredential(ctx, service.db, request.Id)
 	if err != nil {
+		return nil, err
+	}
+	if err := service.requireCredentialScope(ctx, credential.UserId); err != nil {
 		return nil, err
 	}
 	result := service.db.WithContext(ctx).

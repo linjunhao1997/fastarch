@@ -1,9 +1,7 @@
-import { useEffect, useState } from "react";
 import { useQueryClient } from '@tanstack/react-query';
-import { Form, Input, Button, Radio, Select, message } from "antd";
+import { Form, Input, Button, Radio, message } from "antd";
 import { useNavigate } from "react-router";
-import { applicationApi, permissionApi } from "@/iam/api/iam";
-import { useApplicationContext } from "@/shared/context/ApplicationContext";
+import { permissionApi } from "@/iam/api/iam";
 import { useApiErrorNotification } from "@/shared/hooks/useApiError";
 import { useSubmitLock } from "@/shared/hooks/useSubmitLock";
 import { ACTIONS, PERMISSION_KIND_LABELS, type PermissionKind } from "@/iam/types";
@@ -20,27 +18,12 @@ export default function CreatePermissionPage() {
   const queryClient = useQueryClient();
   const { isSubmitting, run } = useSubmitLock();
   const showNotification = useApiErrorNotification();
-  const [applications, setApplications] = useState<{ label: string; value: string }[]>([]);
-  // 默认带入当前选中应用（specs/008 US4），保持可改；资源树选择器随 useWatch 联动
-  const { currentApplicationId } = useApplicationContext();
 
-  useEffect(() => {
-    if (currentApplicationId) {
-      form.setFieldsValue({ applicationId: currentApplicationId });
-    }
-  }, [currentApplicationId, form]);
-
-  const loadApplications = () => {
-    applicationApi.list(1, 1000).then((response) => {
-      setApplications(response.applications.map((app) => ({ label: app.name, value: app.id })));
-    });
-  };
-
-  // 资源模型已废弃（重构 #4）：绑定资源选择器移除，resourceIdList 不再提交
-  const onFinish = async (values: { applicationId: string; name: string; code: string; kind: PermissionKind; value?: string; description?: string }) => {
+  // 资源模型已废弃（重构 #4）：绑定资源选择器移除，resourceIdList 不再提交。
+  // 权限归属应用由登录锁定（ADR 0007），服务端从认证上下文取，前端不提交。
+  const onFinish = async (values: { name: string; code: string; kind: PermissionKind; value?: string; description?: string }) => {
     run(async () => {
       await permissionApi.create({
-        applicationId: values.applicationId,
         name: values.name,
         code: values.code,
         kind: values.kind,
@@ -57,9 +40,6 @@ export default function CreatePermissionPage() {
     <div>
       <h2>创建权限</h2>
       <Form form={form} layout="vertical" onFinish={onFinish}>
-        <Form.Item label="所属应用" name="applicationId" rules={[{ required: true, message: "请选择应用" }]}>
-          <Select options={applications} onFocus={loadApplications} placeholder="选择应用" />
-        </Form.Item>
         <Form.Item label="权限名称" name="name" rules={[{ required: true, message: "请输入权限名称" }]}>
           <Input />
         </Form.Item>

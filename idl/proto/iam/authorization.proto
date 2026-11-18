@@ -114,7 +114,9 @@ message CreatePermissionRequest {
 message CreateRoleRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
   string role_code = 2 [(buf.validate.field).string.min_len = 1];
-  reserved 3;  // application_id 已废除：011 模型角色不归属应用
+  reserved 3;  // 历史字段号，不复用
+  // 角色归属应用（数据边界）。非 admin 必须等于自身 home，否则 fail-closed；admin 可指定。
+  int64 application_id = 4;
 }
 
 message ListPermissionsRequest {
@@ -197,7 +199,8 @@ message Role {
   google.protobuf.Timestamp create_time = 9;  // 创建时间
   google.protobuf.Timestamp update_time = 10; // 修改时间
   repeated PermissionSummary permission_list = 11;
-  reserved 12;  // application 归属已废除
+  reserved 12;  // 历史字段号，不复用
+  int64 application_id = 13;  // 角色归属应用（数据边界，ADR 0006）
 }
 
 message PermissionSummary {

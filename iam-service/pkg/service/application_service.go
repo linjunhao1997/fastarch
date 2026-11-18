@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-dev-frame/sponge/pkg/krand"
+	contribmodel "github.com/linjunhao1997/contrib/model"
 	common_v1 "github.com/linjunhao1997/idl/pb/common"
 	iam_v1 "github.com/linjunhao1997/idl/pb/iam"
 	"github.com/spf13/cast"
@@ -64,6 +65,10 @@ func generateApplicationSecret() (plaintext string, hash string, err error) {
 // CreateApplication 创建应用：服务端生成 app_id 与随机 secret，响应一次性返回
 // secret 明文（服务端只存 sha256 hex 摘要，之后任何接口不再返回）。
 func (s *ApplicationService) CreateApplication(ctx context.Context, request *iam_v1.CreateApplicationRequest) (*iam_v1.CreateApplicationResponse, error) {
+	// 应用域写操作硬门槛（ADR 0006 补充）：仅 admin/系统调用，码门槛不足以约束租户
+	if err := requireAdminOperator(ctx); err != nil {
+		return nil, err
+	}
 	// 服务段编码唯一性预检（多应用裁决 #8：code 是权限码命名空间，全局唯一）
 	var codeCount int64
 	err := s.db.WithContext(ctx).Model(model.Application{}).
@@ -161,6 +166,10 @@ func (s *ApplicationService) ListApplications(ctx context.Context, request *iam_
 
 // UpdateApplication 修改应用：name/status 可选更新（空串 = 不修改）。
 func (s *ApplicationService) UpdateApplication(ctx context.Context, request *iam_v1.UpdateApplicationRequest) (*emptypb.Empty, error) {
+	// 应用域写操作硬门槛（ADR 0006 补充）：仅 admin/系统调用
+	if err := requireAdminOperator(ctx); err != nil {
+		return nil, err
+	}
 	updates := map[string]interface{}{}
 	if len(request.Name) > 0 {
 		updates[model.ApplicationColumnName] = request.Name
@@ -187,9 +196,46 @@ func (s *ApplicationService) UpdateApplication(ctx context.Context, request *iam
 	return &emptypb.Empty{}, nil
 }
 
-// DeleteApplication 删除应用：011 模型角色/权限不再归属应用，应用为叶子资源
-// 直接物理删除（删除策略: 基础架构型，物理删除 + 审计日志）。
+// countApplicationReferences 统计引用该应用的数据行数：角色/权限/菜单/字典归属、
+// 用户所属应用（home）与准入绑定。固定六项 Count（非数据驱动 N+1），任一引用即禁删。
+func (s *ApplicationService) countApplicationReferences(ctx context.Context, appId int64) (int64, error) {
+	refs := []struct {
+		model  interface{}
+		column string
+	}{
+		{model.Role{}, model.RoleColumnApplicationId},
+		{model.Permission{}, model.PermissionColumnApplicationId},
+		{contribmodel.Menu{}, contribmodel.MenuColumnApplicationId},
+		{contribmodel.DictType{}, contribmodel.DictTypeColumnApplicationId},
+		{model.User{}, model.UserColumnHomeApplicationId},
+		{model.RUserApplication{}, model.RUserApplicationColumnApplicationId},
+	}
+	var total int64
+	for _, ref := range refs {
+		var count int64
+		if err := s.db.WithContext(ctx).Model(ref.model).Where(ref.column, appId).Count(&count).Error; err != nil {
+			return 0, err
+		}
+		total += count
+	}
+	return total, nil
+}
+
+// DeleteApplication 删除应用（删除策略: 基础架构型，物理删除 + 审计日志）：
+// admin-only 硬门槛 + 引用校验（ADR 0006 补充）。000013 起角色/权限重新归属应用，
+// 叠加菜单/字典归属与用户 home/准入绑定，存在引用时拒绝删除，避免孤儿数据。
 func (s *ApplicationService) DeleteApplication(ctx context.Context, request *iam_v1.DeleteApplicationRequest) (*emptypb.Empty, error) {
+	if err := requireAdminOperator(ctx); err != nil {
+		return nil, err
+	}
+	refs, err := s.countApplicationReferences(ctx, request.Id)
+	if err != nil {
+		return nil, err
+	}
+	if refs > 0 {
+		slog.Warn("delete application rejected: referenced by data", "app_id", request.Id, "reference_count", refs)
+		return nil, ErrApplicationReferenced
+	}
 	result := s.db.WithContext(ctx).
 		Where(model.ApplicationColumnId, request.Id).
 		Delete(model.Application{})

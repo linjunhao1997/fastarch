@@ -26,15 +26,66 @@ import (
 	"gorm.io/gorm"
 )
 
+// defaultApplicationCode 是人机登录未携带 AK/SK 时的回退值：IAM 自有控制台。
+const defaultApplicationCode = "iam"
+
+// resolveLoginApplicationCode 解析登录目标应用 code（ADR 0007 补充裁决）：
+//   - 入站携带 AK/SK：验签通过后以机机账号所属应用为准，调用方自报的
+//     application_code 一律忽略（应用身份不能由调用方声明）；
+//   - 未携带 AK/SK：IAM 自有控制台登录，锁定 iam 应用。
+//
+// 机机账号只证明“谁在调”，不代替用户凭据；用户准入仍由 resolveLoginApplication 校验。
+func (a AuthenticationService) resolveLoginApplicationCode(ctx context.Context) (string, error) {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok || len(md.Get(auth.MetadataAccessKey)) == 0 {
+		return defaultApplicationCode, nil
+	}
+	if a.signatures == nil {
+		return "", status.Error(codes.Unauthenticated, "service authentication unavailable")
+	}
+	serviceAccountId, err := a.signatures.Authenticate(ctx, md)
+	if err != nil {
+		slog.Warn("service authentication failed on password auth", "error", err)
+		return "", status.Error(codes.Unauthenticated, "service authentication failed")
+	}
+	var serviceAccount model.User
+	if err := a.db.WithContext(ctx).
+		Select(model.UserFields).
+		Where(model.UserColumnId, serviceAccountId).
+		First(&serviceAccount).Error; err != nil {
+		slog.Warn("service account lookup failed", "account_id", serviceAccountId, "error", err)
+		return "", status.Error(codes.Unauthenticated, "service account not found")
+	}
+	if serviceAccount.HomeApplicationId <= 0 {
+		return "", status.Error(codes.FailedPrecondition, "service account has no home application")
+	}
+	var application model.Application
+	if err := a.db.WithContext(ctx).
+		Select(model.ApplicationFields).
+		Where(model.ApplicationColumnId, serviceAccount.HomeApplicationId).
+		First(&application).Error; err != nil {
+		slog.Warn("service application lookup failed", "application_id", serviceAccount.HomeApplicationId, "error", err)
+		return "", status.Error(codes.FailedPrecondition, "service application not found")
+	}
+	return application.Code, nil
+}
+
 type AuthenticationService struct {
-	db  *gorm.DB
-	rdb *redis.Client
+	db         *gorm.DB
+	rdb        *redis.Client
+	signatures *auth.SignatureStore
 }
 
 var _ iam_v1.AuthenticationServiceServer = (*AuthenticationService)(nil)
 
+// NewAuthenticationService 构造认证服务（无 AK/SK 验签器，仅用于人机登录测试）。
 func NewAuthenticationService(db *gorm.DB, rdb *redis.Client) iam_v1.AuthenticationServiceServer {
 	return &AuthenticationService{db: db, rdb: rdb}
+}
+
+// NewAuthenticationServiceWithSignature 构造支持机机代登录的认证服务。
+func NewAuthenticationServiceWithSignature(db *gorm.DB, rdb *redis.Client, signatures *auth.SignatureStore) iam_v1.AuthenticationServiceServer {
+	return &AuthenticationService{db: db, rdb: rdb, signatures: signatures}
 }
 
 // PasswordAuth 密码登录（011 模型：t_user + bcrypt 摘要）。
@@ -70,8 +121,9 @@ func (a AuthenticationService) PasswordAuth(ctx context.Context, request *iam_v1
 	}
 	isAdmin := false
 	for _, role := range user.RoleList {
-		// 管理员角色判定统一走常量
-		if role.Code == model.RoleAdmin {
+		// 超管判定按标志（000014 起）：角色码应用内唯一，各应用可自建 'admin'
+		// 应用级角色，按码判定会把应用级管理员误升为平台超管。
+		if role.IsSuperAdmin {
 			isAdmin = true
 			break
 		}
@@ -87,35 +139,25 @@ func (a AuthenticationService) PasswordAuth(ctx context.Context, request *iam_v1
 	if err = a.rdb.Set(ctx, constant.GetAccountPermissionKey(user.Id), jsonData, constant.AccountPermissionSnapshotTTL).Err(); err != nil {
 		return nil, err
 	}
-	// 应用上下文（多应用裁决 #8 + 模型 A）：签发 jti 作为映射键；
-	// 登录时优先绑定所属应用（必须在可进入清单内），否则沿用"仅一个可进入应用"自动绑定；
-	// 多应用且未设置所属应用时留空，由前端 ListMyApplications → SelectApplication 选择。
-	jti := cast.ToString(krand.NewID())
-	accessibleApps, err := loadAccessibleApplications(ctx, a.db, user.Id, user.HomeApplicationId, isAdmin)
+	// 应用锁定（ADR 0007 补充裁决）：机机代登录时目标应用由 AK/SK 验签后的服务账号
+	// 所属应用决定；人机登录缺省 iam。调用方自报的 application_code 不参与决策。
+	// 随后仍按 code 查启用应用并校验用户准入（admin 旁路；非 admin 须所属或准入绑定）。
+	appCode, err := a.resolveLoginApplicationCode(ctx)
 	if err != nil {
 		return nil, err
 	}
-	bindAppId := int64(0)
-	for _, app := range accessibleApps {
-		if app.Id == user.HomeApplicationId {
-			bindAppId = app.Id
-			break
-		}
+	appId, err := resolveLoginApplication(ctx, a.db, user.Id, user.HomeApplicationId, isAdmin, appCode)
+	if err != nil {
+		return nil, err
 	}
-	if bindAppId == 0 && len(accessibleApps) == 1 {
-		bindAppId = accessibleApps[0].Id
-	}
-	if bindAppId != 0 {
-		if err := auth.SetAppContext(ctx, a.rdb, jti, bindAppId, jwtDuration); err != nil {
-			return nil, err
-		}
-	}
+	jti := cast.ToString(krand.NewID())
 	jwtStr, err := auth.GenerateJWT(auth.ClaimsParam{
 		UserId:         cast.ToString(user.Id),
 		Username:       user.Username,
 		ExpirationTime: expirationTime,
 		IsAdmin:        isAdmin,
 		Jti:            jti,
+		ApplicationId:  appId,
 	})
 
 	accessTokenCookie := http.Cookie{
@@ -154,10 +196,6 @@ func (a AuthenticationService) GetMyProfile(ctx context.Context, empty *emptypb.
 		slog.Warn("get my profile failed", "account_id", accountId, "error", err)
 		return nil, err
 	}
-	apps, err := loadAccessibleApplications(ctx, a.db, user.Id, user.HomeApplicationId, auth.IsAdminFromContext(ctx))
-	if err != nil {
-		return nil, err
-	}
 	return &iam_v1.GetMyProfileResponse{
 		Id:                cast.ToString(user.Id),
 		Username:          user.Username,
@@ -166,108 +204,7 @@ func (a AuthenticationService) GetMyProfile(ctx context.Context, empty *emptypb.
 		Status:            user.Status,
 		CreatedBy:         user.CreatedBy,
 		CreateTime:        timestamppb.New(user.CreateTime),
-		Applications:      applicationsToMyProfilePb(apps),
 		HomeApplicationId: cast.ToString(user.HomeApplicationId),
 		IsAdmin:           auth.IsAdminFromContext(ctx),
 	}, nil
-}
-
-// applicationsToMyProfilePb 应用模型转个人信息/列表响应摘要。
-func applicationsToMyProfilePb(apps []model.Application) []*iam_v1.MyProfileApplication {
-	list := make([]*iam_v1.MyProfileApplication, 0, len(apps))
-	for _, app := range apps {
-		list = append(list, &iam_v1.MyProfileApplication{
-			Id:     cast.ToString(app.Id),
-			Code:   app.Code,
-			Name:   app.Name,
-			Status: app.Status,
-		})
-	}
-	return list
-}
-
-// ListMyApplications 列出当前用户可进入的应用（admin 旁路全部启用应用；
-// 其他用户按 t_r_user_application 准入绑定过滤，多应用裁决 #8）。
-func (a AuthenticationService) ListMyApplications(ctx context.Context, empty *emptypb.Empty) (*iam_v1.ListMyApplicationsResponse, error) {
-	userId := auth.GetAccountId(ctx)
-	if userId == 0 {
-		return nil, status.Error(codes.Unauthenticated, "authentication required")
-	}
-	var user model.User
-	if err := a.db.WithContext(ctx).
-		Select(model.UserFields).
-		Where(model.UserColumnId, userId).
-		First(&user).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		slog.Warn("list my applications: load user failed", "user_id", userId, "error", err)
-		return nil, err
-	}
-	apps, err := loadAccessibleApplications(ctx, a.db, userId, user.HomeApplicationId, auth.IsAdminFromContext(ctx))
-	if err != nil {
-		slog.Warn("list my applications failed", "user_id", userId, "error", err)
-		return nil, err
-	}
-	return &iam_v1.ListMyApplicationsResponse{
-		Applications:      applicationsToMyProfilePb(apps),
-		HomeApplicationId: cast.ToString(user.HomeApplicationId),
-	}, nil
-}
-
-// SelectApplication 选择当前应用上下文：校验准入后写入 jti→应用映射
-// （切换不重签令牌，多应用裁决 #8）。人机边界认 code，内部换 application_id。
-func (a AuthenticationService) SelectApplication(ctx context.Context, request *iam_v1.SelectApplicationRequest) (*emptypb.Empty, error) {
-	userId := auth.GetAccountId(ctx)
-	if userId == 0 {
-		return nil, status.Error(codes.Unauthenticated, "authentication required")
-	}
-	jti := auth.GetTokenJti(ctx)
-	if jti == "" {
-		// 机器/外部令牌无 jti：应用上下文在签发时锁定于 claim，不可切换
-		return nil, status.Error(codes.FailedPrecondition, "当前令牌不支持切换应用")
-	}
-	var app model.Application
-	err := a.db.WithContext(ctx).
-		Select(model.ApplicationFields).
-		Where(model.ApplicationColumnCode, request.ApplicationCode).
-		First(&app).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, status.Error(codes.NotFound, "应用不存在")
-		}
-		slog.Warn("select application: query app failed", "code", request.ApplicationCode, "error", err)
-		return nil, err
-	}
-	if app.Status != model.StatusEnabled {
-		return nil, status.Error(codes.FailedPrecondition, "应用已停用")
-	}
-	// 准入校验（fail-closed）：admin 旁路；其他用户所属应用隐式准入，
-	// 其余应用必须在 t_r_user_application 绑定。
-	if !auth.IsAdminFromContext(ctx) {
-		var user model.User
-		if err := a.db.WithContext(ctx).
-			Select(model.UserFields).
-			Where(model.UserColumnId, userId).
-			First(&user).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-			slog.Warn("select application: load user failed", "user_id", userId, "error", err)
-			return nil, err
-		}
-		if app.Id != user.HomeApplicationId {
-			var count int64
-			err = a.db.WithContext(ctx).
-				Model(model.RUserApplication{}).
-				Where(model.RUserApplicationColumnUserId+" = ? AND "+model.RUserApplicationColumnApplicationId+" = ?", userId, app.Id).
-				Count(&count).Error
-			if err != nil {
-				slog.Warn("select application: access check failed", "user_id", userId, "application_id", app.Id, "error", err)
-				return nil, err
-			}
-			if count == 0 {
-				return nil, status.Error(codes.PermissionDenied, "无权进入该应用")
-			}
-		}
-	}
-	if err := auth.SetAppContext(ctx, a.rdb, jti, app.Id, constant.AppContextTTL); err != nil {
-		slog.Error("select application: bind app context failed", "user_id", userId, "application_id", app.Id, "error", err)
-		return nil, status.Error(codes.FailedPrecondition, "应用上下文暂不可用，请稍后重试")
-	}
-	return &emptypb.Empty{}, nil
 }

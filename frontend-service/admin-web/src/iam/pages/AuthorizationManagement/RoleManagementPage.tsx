@@ -1,8 +1,9 @@
 import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Button, Flex, Tag, message } from 'antd';
 import { CheckCircleOutlined, StopOutlined } from '@ant-design/icons';
 import { useNavigate, useSearchParams } from 'react-router';
-import { roleApi } from '@/iam/api/iam';
+import { applicationApi, roleApi } from '@/iam/api/iam';
 import { ListPageShell } from '@/shared/components/ListPageShell';
 import { useConfirmDelete } from '@/shared/components/ConfirmDelete';
 import { useApiErrorNotification } from '@/shared/hooks/useApiError';
@@ -22,11 +23,30 @@ export default function RoleManagementPage() {
     getItems: (response) => response.roles,
   });
 
+  // 角色码应用内唯一（000014）：admin 视角跨应用角色同列展示，应用名消歧
+  const { data: appsData } = useQuery({
+    queryKey: ['applications', 'role-list-labels'],
+    queryFn: () => applicationApi.list(1, 100),
+  });
+  const appNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const app of appsData?.applications ?? []) {
+      map.set(app.id, `${app.name}（${app.code}）`);
+    }
+    return map;
+  }, [appsData]);
+
   const columns = useMemo(() => [
     { title: 'ID', dataIndex: 'id', key: 'id' },
     { title: '角色名称', dataIndex: 'name', key: 'name' },
     { title: '角色编码', dataIndex: 'roleCode', key: 'roleCode' },
-    { title: '所属应用', dataIndex: 'applicationId', key: 'applicationId' },
+    {
+      title: '所属应用',
+      dataIndex: 'applicationId',
+      key: 'applicationId',
+      render: (applicationId: string) =>
+        appNameById.get(applicationId) ?? (applicationId === '0' ? '—' : applicationId),
+    },
     {
       title: '状态',
       dataIndex: 'enabledStatus',
@@ -75,7 +95,7 @@ export default function RoleManagementPage() {
         </Flex>
       ),
     },
-  ], [navigate, showNotification, tableQuery]);
+  ], [navigate, showNotification, tableQuery, appNameById]);
 
   return (
     <ListPageShell<Role>

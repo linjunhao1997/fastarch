@@ -533,6 +533,11 @@
         },
         "roleCode": {
           "type": "string"
+        },
+        "applicationId": {
+          "type": "string",
+          "format": "int64",
+          "title": "角色归属应用（数据边界）。非 admin 必须等于自身 home，否则 fail-closed；admin 可指定。"
         }
       }
     },
@@ -715,6 +720,11 @@
             "type": "object",
             "$ref": "#/definitions/v1PermissionSummary"
           }
+        },
+        "applicationId": {
+          "type": "string",
+          "format": "int64",
+          "title": "角色归属应用（数据边界，ADR 0006）"
         }
       },
       "title": "角色信息"

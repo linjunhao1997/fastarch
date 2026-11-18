@@ -62,7 +62,7 @@
         ]
       },
       "post": {
-        "summary": "创建用户：初始密码必填（bcrypt 落库），所属应用必填（数据边界 ADR 0006），\n返回创建出的用户（含 id、所属应用与准入应用回填）",
+        "summary": "创建用户：初始密码必填（bcrypt 落库），所属应用必填（数据边界 ADR 0006），\r\n返回创建出的用户（含 id、所属应用与准入应用回填）",
         "operationId": "AccountService_CreateAccount",
         "responses": {
           "200": {
@@ -95,7 +95,7 @@
     },
     "/account/accounts/{accountId}/applications": {
       "patch": {
-        "summary": "设置用户准入应用与所属应用（多应用裁决 #8 + 模型 A）：\napplication_ids 全量覆盖语义，空数组 = 清空准入；\nhome_application_id 为默认所属应用（隐式可进入，无需重复放进准入集合），必须已启用；\n空串 = 保留仍有效旧值或清空。",
+        "summary": "设置用户准入应用与所属应用（多应用裁决 #8 + 模型 A）：\r\napplication_ids 全量覆盖语义，空数组 = 清空准入；\r\nhome_application_id 为默认所属应用（隐式可进入，无需重复放进准入集合），必须已启用；\r\n空串 = 保留仍有效旧值或清空。",
         "operationId": "AccountService_UpdateAccountApplications",
         "responses": {
           "200": {
@@ -136,7 +136,7 @@
                 },
                 "homeApplicationId": {
                   "type": "string",
-                  "title": "所属应用 id（string 编码）：默认进入的应用，必须属于 application_ids 且已启用；\n空串 = 保留仍有效的旧值，旧值失效则清空。"
+                  "title": "所属应用 id（string 编码）：默认进入的应用，必须属于 application_ids 且已启用；\r\n空串 = 保留仍有效的旧值，旧值失效则清空。"
                 }
               }
             }
@@ -455,7 +455,7 @@
             "type": "object",
             "$ref": "#/definitions/v1AccountApplication"
           },
-          "title": "可进入的应用清单（只读回传；GetAccount 与 ListAccounts 均回填，含展示字段，\n前端直接渲染，无需二次查询应用目录）"
+          "title": "可进入的应用清单（只读回传；GetAccount 与 ListAccounts 均回填，含展示字段，\r\n前端直接渲染，无需二次查询应用目录）"
         },
         "homeApplicationId": {
           "type": "string",
@@ -514,14 +514,14 @@
         },
         "homeApplicationId": {
           "type": "string",
-          "title": "所属应用 id（string 编码）：必填且必须已启用（数据边界 ADR 0006）；\n非 admin 只能创建所属应用等于操作者所属应用的用户"
+          "title": "所属应用 id（string 编码）：必填且必须已启用（数据边界 ADR 0006）；\r\n非 admin 只能创建所属应用等于操作者所属应用的用户"
         },
         "applicationIds": {
           "type": "array",
           "items": {
             "type": "string"
           },
-          "title": "额外准入应用 id 集合（string 编码），可选；所属应用隐式准入，\n服务端自动将其剔除出本集合（功能边界 ADR 0006）"
+          "title": "额外准入应用 id 集合（string 编码），可选；所属应用隐式准入，\r\n服务端自动将其剔除出本集合（功能边界 ADR 0006）"
         }
       }
     },

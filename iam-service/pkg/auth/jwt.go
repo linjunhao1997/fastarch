@@ -15,8 +15,8 @@ type CustomClaims struct {
 	Username string `json:"username"`
 	Roles    string `json:"roles"`
 	IsAdmin  bool   `json:"isAdmin"`
-	// ApplicationId 为令牌签发时锁定的目标应用（外部平台/机器令牌直接带入）；
-	// 人用登录令牌通常为 0，当前应用改由 Redis app:ctx:{jti} 映射决定（切换不重签）。
+	// ApplicationId 为令牌签发时锁定的目标应用（登录即锁定，ADR 0007）；
+	// 所有会话（人用/机器）签发时即带入，拦截器直接取 claim，不可变。
 	ApplicationId int64 `json:"applicationId"`
 	jwt.RegisteredClaims
 }
@@ -28,7 +28,7 @@ type ClaimsParam struct {
 	IsAdmin        bool      `json:"isAdmin"`
 	// Jti 令牌唯一标识：作为服务端 app 上下文映射（app:ctx:{jti}）的键。
 	Jti string `json:"jti"`
-	// ApplicationId 签发即锁定的应用（机器/外部令牌用；人用登录传 0）。
+	// ApplicationId 签发即锁定的应用（人用/机器令牌皆须填写，ADR 0007）。
 	ApplicationId int64 `json:"applicationId"`
 }
 

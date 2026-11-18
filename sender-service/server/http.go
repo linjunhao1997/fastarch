@@ -20,6 +20,9 @@ func RunHttpServer(ctx context.Context, cfg *conf.Config) error {
 	}
 	mux := httpserver.NewMux()
 
+	if err := sender_v1.RegisterAuthenticationServiceHandlerFromEndpoint(ctx, mux, cfg.Http.Endpoint, dialOptions); err != nil {
+		return fmt.Errorf("register authentication service handler: %w", err)
+	}
 	if err := sender_v1.RegisterMessageServiceHandlerFromEndpoint(ctx, mux, cfg.Http.Endpoint, dialOptions); err != nil {
 		return fmt.Errorf("register message service handler: %w", err)
 	}

@@ -37,8 +37,10 @@ func Seed(ctx context.Context, db *gorm.DB) error {
 }
 
 func seedAdminRole(tx *gorm.DB) (*Role, error) {
+	// 按超管标志查找（000014 起角色码应用内唯一，各应用可有同名 'admin' 角色，
+	// 按 code 查会误命中应用级角色）。
 	var existing Role
-	err := tx.Where("code = ?", RoleAdmin).First(&existing).Error
+	err := tx.Where(RoleColumnIsSuperAdmin+" = ?", true).First(&existing).Error
 	if err == nil {
 		return &existing, nil
 	}
@@ -47,15 +49,16 @@ func seedAdminRole(tx *gorm.DB) (*Role, error) {
 	}
 	now := time.Now()
 	role := Role{
-		Id:         krand.NewID(),
-		Name:       "系统管理员",
-		Code:       RoleAdmin,
-		Status:     StatusEnabled,
-		Version:    1,
-		CreatedBy:  "system",
-		UpdatedBy:  "system",
-		CreateTime: now,
-		UpdateTime: now,
+		Id:           krand.NewID(),
+		Name:         "系统管理员",
+		Code:         RoleAdmin,
+		Status:       StatusEnabled,
+		IsSuperAdmin: true,
+		Version:      1,
+		CreatedBy:    "system",
+		UpdatedBy:    "system",
+		CreateTime:   now,
+		UpdateTime:   now,
 	}
 	if err := tx.Create(&role).Error; err != nil {
 		return nil, err

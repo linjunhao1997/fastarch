@@ -12,7 +12,6 @@ import type {
   CreateApplicationResponse,
   CreatePermissionRequest,
   CreateRoleRequest,
-  MyProfileApplication,
   ResetAccountPasswordRequest,
   MyProfile,
   Permission,
@@ -76,27 +75,13 @@ const buildListUrl = (baseUrl: string, currentPage: number, pageSize: number, ke
   return `${baseUrl}?${params.toString()}`;
 };
 
-export interface ListMyApplicationsResponse {
-  applications: MyProfileApplication[];
-  /** 所属应用 id（"0" = 未设置），前端默认选中；隐式准入，可能不在 applications 中 */
-  homeApplicationId: string;
-}
-
 export const authApi = {
+  /** IAM 自有控制台登录：目标应用缺省为 iam（ADR 0007，经 gRPC metadata 缺省回退） */
   login: (data: { identifier: string; password: string }) =>
     request<PasswordAuthResponse>('/authentication/password-auth', {
       method: 'POST',
       body: data,
       skipToken: true,
-    }),
-  /** 当前用户可进入的应用（admin 全量启用应用；其他按准入绑定） */
-  listMyApplications: () =>
-    request<ListMyApplicationsResponse>('/authentication/my-applications'),
-  /** 选择当前应用上下文：服务端写 jti→应用映射（切换不重签令牌） */
-  selectApplication: (applicationCode: string) =>
-    request<void>('/authentication/select-application', {
-      method: 'POST',
-      body: { applicationCode },
     }),
 };
 

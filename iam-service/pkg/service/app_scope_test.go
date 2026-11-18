@@ -15,8 +15,6 @@ import (
 	common_menu_v1 "github.com/linjunhao1997/idl/pb/common/menu"
 	iam_v1 "github.com/linjunhao1997/idl/pb/iam"
 	"github.com/spf13/cast"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"gorm.io/gorm"
 )
@@ -181,12 +179,17 @@ func TestDictItemScopedByTypeApplication(t *testing.T) {
 	}
 }
 
-// ── 权限管理数据按应用隔离（授予仍全局）──────────────────────────────────
+// ── 权限管理数据按所属应用隔离（授予仍全局）──────────────────────────────
 
 func TestListPermissionsScopedByApplication(t *testing.T) {
 	db := setupAuthorizationTestDB(t)
 	createTestApp(t, db, testAppIdIam, "iam", model.StatusEnabled)
 	createTestApp(t, db, testAppIdOrder, "order", model.StatusEnabled)
+	operator := createTestUser(t, db, 1, "permission-list-operator", 1)
+	operator.HomeApplicationId = testAppIdIam
+	if err := db.Save(&operator).Error; err != nil {
+		t.Fatalf("set operator home: %v", err)
+	}
 	iamPerm := createTestPermission(t, db, 1, "iam.user.list", 1)
 	orderPerm := model.Permission{
 		Id: 2, Name: "order", Code: "order.list.all", ApplicationId: testAppIdOrder,
@@ -221,80 +224,71 @@ func TestCreateApplicationCodeDuplicated(t *testing.T) {
 	}
 }
 
-// ── SelectApplication 准入与绑定 ───────────────────────────────────────
+// ── 登录锁定应用（ADR 0007）：resolveLoginApplication 准入与锁定 ─────────
 
-func TestSelectApplicationAccessAndBinding(t *testing.T) {
+func TestResolveLoginApplication(t *testing.T) {
 	db := setupAuthorizationTestDB(t)
-	rdb, mr := setupTestRedis(t)
-	createTestApp(t, db, testAppIdIam, "iam", model.StatusEnabled)
-	createTestApp(t, db, testAppIdOrder, "order", model.StatusEnabled)
-	disabled := createTestApp(t, db, 902, "crm", model.StatusDisabled)
-	user := createTestUser(t, db, 5, "scoped-user", 1)
-	// 用户仅绑定 order 应用
-	if err := db.Create(&model.RUserApplication{UserId: user.Id, ApplicationId: testAppIdOrder}).Error; err != nil {
-		t.Fatalf("bind user app: %v", err)
-	}
-	svc := &AuthenticationService{db: db, rdb: rdb}
-
-	userCtx := auth.WithTokenJti(auth.WithAccountId(context.Background(), user.Id), "jti-user")
-	// 未准入应用拒绝
-	if _, err := svc.SelectApplication(userCtx, &iam_v1.SelectApplicationRequest{ApplicationCode: "iam"}); status.Code(err) != codes.PermissionDenied {
-		t.Fatalf("SelectApplication(iam) error = %v, want PermissionDenied", err)
-	}
-	// 停用应用拒绝
-	if _, err := svc.SelectApplication(userCtx, &iam_v1.SelectApplicationRequest{ApplicationCode: disabled.Code}); status.Code(err) != codes.FailedPrecondition {
-		t.Fatalf("SelectApplication(disabled) error = %v, want FailedPrecondition", err)
-	}
-	// 已准入应用绑定成功，Redis 写入映射
-	if _, err := svc.SelectApplication(userCtx, &iam_v1.SelectApplicationRequest{ApplicationCode: "order"}); err != nil {
-		t.Fatalf("SelectApplication(order) error = %v", err)
-	}
-	got, err := rdb.Get(context.Background(), "auth:app-ctx:jti-user").Int64()
-	if err != nil || got != testAppIdOrder {
-		t.Fatalf("app context binding = %d (err %v), want %d", got, err, testAppIdOrder)
-	}
-	if !mr.Exists("auth:app-ctx:jti-user") {
-		t.Fatal("binding key missing in redis")
-	}
-	// admin 旁路：无绑定也可进入任意启用应用
-	adminCtx := auth.WithTokenJti(auth.WithAdmin(auth.WithAccountId(context.Background(), 1)), "jti-admin")
-	if _, err := svc.SelectApplication(adminCtx, &iam_v1.SelectApplicationRequest{ApplicationCode: "iam"}); err != nil {
-		t.Fatalf("SelectApplication(admin) error = %v", err)
-	}
-	// 无 jti（机器令牌）不可切换
-	if _, err := svc.SelectApplication(auth.WithAccountId(context.Background(), user.Id), &iam_v1.SelectApplicationRequest{ApplicationCode: "order"}); status.Code(err) != codes.FailedPrecondition {
-		t.Fatalf("SelectApplication(no jti) error = %v, want FailedPrecondition", err)
-	}
-}
-
-func TestListMyApplicationsScoping(t *testing.T) {
-	db := setupAuthorizationTestDB(t)
-	rdb, _ := setupTestRedis(t)
 	createTestApp(t, db, testAppIdIam, "iam", model.StatusEnabled)
 	createTestApp(t, db, testAppIdOrder, "order", model.StatusEnabled)
 	createTestApp(t, db, 902, "crm", model.StatusDisabled)
 	user := createTestUser(t, db, 5, "scoped-user", 1)
+	// 用户 home=iam，另绑定 order 应用
 	if err := db.Create(&model.RUserApplication{UserId: user.Id, ApplicationId: testAppIdOrder}).Error; err != nil {
 		t.Fatalf("bind user app: %v", err)
 	}
-	svc := &AuthenticationService{db: db, rdb: rdb}
+	admin := createTestUser(t, db, 6, "admin-user", 1)
+	ctx := context.Background()
 
-	// 普通用户：仅准入的启用应用
-	resp, err := svc.ListMyApplications(auth.WithAccountId(context.Background(), user.Id), &emptypb.Empty{})
-	if err != nil {
-		t.Fatalf("ListMyApplications() error = %v", err)
-	}
-	if len(resp.Applications) != 1 || resp.Applications[0].Code != "order" {
-		t.Fatalf("ListMyApplications() = %v, want [order]", resp.Applications)
-	}
-	// admin：全部启用应用（crm 停用不出现）
-	adminResp, err := svc.ListMyApplications(auth.WithAdmin(auth.WithAccountId(context.Background(), 1)), &emptypb.Empty{})
-	if err != nil {
-		t.Fatalf("ListMyApplications(admin) error = %v", err)
-	}
-	if len(adminResp.Applications) != 2 {
-		t.Fatalf("ListMyApplications(admin) = %d apps, want 2 enabled", len(adminResp.Applications))
-	}
+	t.Run("unknown code fail-closed", func(t *testing.T) {
+		_, err := resolveLoginApplication(ctx, db, user.Id, user.HomeApplicationId, false, "workflow")
+		if err != ErrApplicationNotFoundForScope {
+			t.Fatalf("error = %v, want %v", err, ErrApplicationNotFoundForScope)
+		}
+	})
+
+	t.Run("disabled app fail-closed", func(t *testing.T) {
+		_, err := resolveLoginApplication(ctx, db, user.Id, user.HomeApplicationId, false, "crm")
+		if err != ErrApplicationNotFoundForScope {
+			t.Fatalf("error = %v, want %v", err, ErrApplicationNotFoundForScope)
+		}
+	})
+
+	t.Run("non-admin without grant denied", func(t *testing.T) {
+		createTestUser(t, db, 7, "outsider", 1) // home=0，无任何准入
+		_, err := resolveLoginApplication(ctx, db, 7, 0, false, "iam")
+		if err != ErrApplicationAccessDenied {
+			t.Fatalf("error = %v, want %v", err, ErrApplicationAccessDenied)
+		}
+	})
+
+	t.Run("home application implicit grant", func(t *testing.T) {
+		got, err := resolveLoginApplication(ctx, db, user.Id, testAppIdIam, false, "iam")
+		if err != nil || got != testAppIdIam {
+			t.Fatalf("got %d (err %v), want %d", got, err, testAppIdIam)
+		}
+	})
+
+	t.Run("admitted application grant", func(t *testing.T) {
+		got, err := resolveLoginApplication(ctx, db, user.Id, testAppIdIam, false, "order")
+		if err != nil || got != testAppIdOrder {
+			t.Fatalf("got %d (err %v), want %d", got, err, testAppIdOrder)
+		}
+	})
+
+	t.Run("admin bypass any enabled app", func(t *testing.T) {
+		got, err := resolveLoginApplication(ctx, db, admin.Id, 0, true, "crm")
+		if err != ErrApplicationNotFoundForScope {
+			// crm 停用：admin 也进不去（fail-closed 停用应用）
+			if err == nil {
+				t.Fatalf("admin logging into disabled app should fail, got %d", got)
+			}
+			t.Fatalf("error = %v, want %v", err, ErrApplicationNotFoundForScope)
+		}
+		got, err = resolveLoginApplication(ctx, db, admin.Id, 0, true, "iam")
+		if err != nil || got != testAppIdIam {
+			t.Fatalf("admin iam get %d (err %v)", got, err)
+		}
+	})
 }
 
 // ── 用户应用准入分配（全量覆盖）─────────────────────────────────────────

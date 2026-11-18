@@ -1,19 +1,19 @@
 import { Card, Typography } from 'antd';
-import { useApplicationContext } from '@/shared/context/ApplicationContext';
+import { useConsole } from '@/shared/context/ConsoleContext';
 
-/** 首页：展示当前应用上下文，引导从左侧菜单进入功能页 */
+/** 首页：展示当前控制台（登录即锁定，ADR 0007），引导从左侧菜单进入功能页 */
 export default function HomePage() {
-  const { currentApplication } = useApplicationContext();
+  const { label } = useConsole();
   return (
     <Card>
       <Typography.Title level={4} style={{ marginTop: 0 }}>
-        {currentApplication ? `欢迎使用${currentApplication.name}` : '欢迎使用'}
+        欢迎使用{label}
       </Typography.Title>
       <Typography.Paragraph type="secondary">
-        当前应用：{currentApplication ? `${currentApplication.name}（${currentApplication.code}）` : '未选择'}
+        当前控制台：{label}
       </Typography.Paragraph>
       <Typography.Paragraph type="secondary">
-        请从左侧菜单进入功能页面；切换顶部应用可管理其他应用的菜单、字典与权限。
+        请从左侧菜单进入功能页面。
       </Typography.Paragraph>
     </Card>
   );

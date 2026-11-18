@@ -116,6 +116,7 @@ func roleToPb(r model.Role) *iam_v1.Role {
 		Name:          r.Name,
 		RoleCode:      r.Code,
 		EnabledStatus: r.Status,
+		ApplicationId: r.ApplicationId,
 		Version:       r.Version,
 		CreatedBy:     r.CreatedBy,
 		UpdatedBy:     r.UpdatedBy,
@@ -170,10 +171,14 @@ func (a *AuthorizationService) CreatePermission(ctx context.Context, request *ia
 	if !model.IsValidPermissionCode(request.Code) {
 		return nil, ErrInvalidPermissionCode
 	}
-	// 多应用裁决 #8：码归属当前应用上下文，服务段必须等于应用 code
-	appId, err := requireApplicationId(ctx)
+	// 数据边界（ADR 0006）：非 admin 的码归属其 home，服务段必须等于 home 应用 code；
+	// admin/系统调用沿用当前应用上下文。
+	appId, scoped, err := dataScopeApplicationId(ctx, a.db)
 	if err != nil {
 		return nil, err
+	}
+	if scoped && appId <= 0 {
+		return nil, ErrHomeApplicationRequired
 	}
 	if err := requireCodeSegmentMatchesApp(ctx, a.db, appId, request.Code); err != nil {
 		return nil, err
@@ -222,26 +227,28 @@ func (a *AuthorizationService) CreatePermission(ctx context.Context, request *ia
 }
 
 func (a *AuthorizationService) GetPermission(ctx context.Context, request *common_v1.GetRequest) (*iam_v1.Permission, error) {
-	appId, err := requireApplicationId(ctx)
+	var permission model.Permission
+	err := a.db.WithContext(ctx).
+		Select(model.PermissionFields).
+		Where(model.PermissionColumnId, request.Id).
+		First(&permission).Error
 	if err != nil {
 		return nil, err
 	}
-	var permission model.Permission
-	err = a.db.WithContext(ctx).
-		Select(model.PermissionFields).
-		Where(model.PermissionColumnId, request.Id).
-		Where(model.PermissionColumnApplicationId, appId).
-		First(&permission).Error
-	if err != nil {
+	if err := requirePermissionScope(ctx, a.db, permission.ApplicationId); err != nil {
 		return nil, err
 	}
 	return permissionToPb(permission), nil
 }
 
 func (a *AuthorizationService) ListPermissions(ctx context.Context, request *iam_v1.ListPermissionsRequest) (*iam_v1.ListPermissionsResponse, error) {
-	appId, err := requireApplicationId(ctx)
+	appId, scoped, err := dataScopeApplicationId(ctx, a.db)
 	if err != nil {
 		return nil, err
+	}
+	// home 未设置的非 admin fail-closed：返回空列表，不暴露其他应用的权限码。
+	if scoped && appId <= 0 {
+		return &iam_v1.ListPermissionsResponse{Permissions: []*iam_v1.Permission{}}, nil
 	}
 	limit, offset := helper.GetLimitAndOffset(request.CurrentPage, request.PageSize)
 	keywordConditions := []string{
@@ -291,11 +298,18 @@ func (a *AuthorizationService) UpdatePermission(ctx context.Context, request *ia
 	updates[model.PermissionColumnVersion] = gorm.Expr(model.PermissionColumnVersion + " + 1")
 
 	changedStatus := len(request.EnabledStatus) > 0
-	appId, err := requireApplicationId(ctx)
-	if err != nil {
+	var permission model.Permission
+	if err := a.db.WithContext(ctx).
+		Select(model.PermissionColumnId, model.PermissionColumnApplicationId).
+		Where(model.PermissionColumnId, request.Id).
+		First(&permission).Error; err != nil {
 		return nil, err
 	}
-	err = a.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	if err := requirePermissionScope(ctx, a.db, permission.ApplicationId); err != nil {
+		return nil, err
+	}
+	appId := permission.ApplicationId
+	err := a.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		result := tx.Model(model.Permission{}).
 			Where(model.PermissionColumnId, request.Id).
 			Where(model.PermissionColumnApplicationId, appId).
@@ -329,21 +343,36 @@ func (a *AuthorizationService) CreateRole(ctx context.Context, request *iam_v1.C
 	now := time.Now()
 	// 审计字段服务端注入：created_by/updated_by 取认证上下文操作者
 	operator := cast.ToString(auth.GetAccountId(ctx))
-	role := model.Role{
-		Id:         pkId,
-		Name:       request.Name,
-		Code:       request.RoleCode,
-		Status:     model.StatusEnabled,
-		Version:    1,
-		CreatedBy:  operator,
-		UpdatedBy:  operator,
-		CreateTime: now,
-		UpdateTime: now,
+	homeId, scoped, err := operatorHomeScope(ctx, a.db)
+	if err != nil {
+		return nil, err
 	}
-	err := a.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	applicationId := request.ApplicationId
+	if scoped {
+		// 非 admin 不能自选归属：强制锁定自身 home；home 未设置则 fail-closed。
+		if homeId <= 0 {
+			return nil, ErrHomeApplicationRequired
+		}
+		applicationId = homeId
+	}
+	role := model.Role{
+		Id:            pkId,
+		Name:          request.Name,
+		Code:          request.RoleCode,
+		Status:        model.StatusEnabled,
+		ApplicationId: applicationId,
+		Version:       1,
+		CreatedBy:     operator,
+		UpdatedBy:     operator,
+		CreateTime:    now,
+		UpdateTime:    now,
+	}
+	err = a.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// 角色码应用内唯一（000014 起）：查重带归属应用，跨应用同名码互不冲突
 		var count int64
 		if err := tx.Model(model.Role{}).
 			Where(model.RoleColumnCode, request.RoleCode).
+			Where(model.RoleColumnApplicationId, applicationId).
 			Count(&count).Error; err != nil {
 			return err
 		}

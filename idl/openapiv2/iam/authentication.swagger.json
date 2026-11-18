@@ -16,32 +16,9 @@
     "application/json"
   ],
   "paths": {
-    "/authentication/my-applications": {
-      "get": {
-        "summary": "列出当前用户可进入的应用（admin 旁路全部启用应用；\n其他用户按 t_r_user_application 准入绑定过滤）。",
-        "operationId": "AuthenticationService_ListMyApplications",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/v1ListMyApplicationsResponse"
-            }
-          },
-          "default": {
-            "description": "An unexpected error response.",
-            "schema": {
-              "$ref": "#/definitions/rpcStatus"
-            }
-          }
-        },
-        "tags": [
-          "AuthenticationService"
-        ]
-      }
-    },
     "/authentication/my-profile": {
       "get": {
-        "summary": "获取当前登录用户的个人信息（基本信息 + 可进入应用列表）\n仅凭登录态（JWT accountId）返回，不接收用户标识参数",
+        "summary": "获取当前登录用户的个人信息（基本信息）\r\n仅凭登录态（JWT accountId）返回，不接收用户标识参数",
         "operationId": "AuthenticationService_GetMyProfile",
         "responses": {
           "200": {
@@ -64,7 +41,7 @@
     },
     "/authentication/password-auth": {
       "post": {
-        "summary": "密码认证：identifier 即登录标识（username 或 email，服务端双路径查询）",
+        "summary": "密码认证：identifier 即登录标识（username 或 email，服务端双路径查询）。\r\n目标应用由 gRPC metadata 的 application_code 决定（人机边界认 code）。\r\n自有控制台登录可不带该 metadata（缺省回退 iam 应用）；外部应用（如 sender）\r\n经内部 gRPC 调用时在出站 metadata 中携带自身 code，登录即锁定所属应用。",
         "operationId": "AuthenticationService_PasswordAuth",
         "responses": {
           "200": {
@@ -87,40 +64,6 @@
             "required": true,
             "schema": {
               "$ref": "#/definitions/v1PasswordAuthRequest"
-            }
-          }
-        ],
-        "tags": [
-          "AuthenticationService"
-        ]
-      }
-    },
-    "/authentication/select-application": {
-      "post": {
-        "summary": "选择当前应用上下文：校验准入后写入 jti→应用映射（切换不重签令牌，\n多应用裁决 #8）。外部/机器令牌的 application_id 在签发时锁定于 claim，\n不经本接口。",
-        "operationId": "AuthenticationService_SelectApplication",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "type": "object",
-              "properties": {}
-            }
-          },
-          "default": {
-            "description": "An unexpected error response.",
-            "schema": {
-              "$ref": "#/definitions/rpcStatus"
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "body",
-            "in": "body",
-            "required": true,
-            "schema": {
-              "$ref": "#/definitions/v1SelectApplicationRequest"
             }
           }
         ],
@@ -192,61 +135,15 @@
           "format": "date-time",
           "title": "创建时间"
         },
-        "applications": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "$ref": "#/definitions/v1MyProfileApplication"
-          },
-          "title": "可进入应用列表（与 ListMyApplications 同源：admin 全量启用应用，其他按准入绑定）"
-        },
         "homeApplicationId": {
           "type": "string",
-          "title": "所属应用 id（string 编码）：默认进入的应用；admin/未设置为 \"0\""
+          "title": "所属应用 id（string 编码，ADR 0006 数据边界）：非 admin 创建用户时锁定为\r\n操作者所属应用。admin/未设置为 \"0\"。注意与\"可进入应用清单\"无关——\r\n登录已锁定应用（ADR 0007），profile 不再返回可切换清单。"
         },
         "isAdmin": {
           "type": "boolean",
           "title": "是否 admin 角色（只读回传，服务端派生）：前端据此锁定所属应用等数据边界 UI"
         }
       }
-    },
-    "v1ListMyApplicationsResponse": {
-      "type": "object",
-      "properties": {
-        "applications": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "$ref": "#/definitions/v1MyProfileApplication"
-          }
-        },
-        "homeApplicationId": {
-          "type": "string",
-          "title": "所属应用 id（string 编码）：前端默认选中；admin/未设置为 \"0\""
-        }
-      }
-    },
-    "v1MyProfileApplication": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string",
-          "title": "应用 id（string 编码）"
-        },
-        "code": {
-          "type": "string",
-          "title": "应用编码"
-        },
-        "name": {
-          "type": "string",
-          "title": "应用名称"
-        },
-        "status": {
-          "type": "string",
-          "title": "启用/停用状态"
-        }
-      },
-      "title": "账号归属的应用摘要（个人信息用；含停用应用，前端置灰不可选）"
     },
     "v1PasswordAuthRequest": {
       "type": "object",
@@ -265,15 +162,6 @@
       "properties": {
         "accessToken": {
           "type": "string"
-        }
-      }
-    },
-    "v1SelectApplicationRequest": {
-      "type": "object",
-      "properties": {
-        "applicationCode": {
-          "type": "string",
-          "title": "应用服务段编码（人机边界认 code，服务端换 application_id；多应用裁决 #8）"
         }
       }
     }

@@ -1,3 +1,5 @@
+import { getConsole } from './app-context';
+
 export class UnauthorizedError extends Error {
   constructor(message?: string) {
     super(message || '请重新登录');
@@ -29,6 +31,16 @@ export function getCookie(name: string): string | null {
   return null;
 }
 
+/**
+ * 登录态 token 解析：localStorage 优先（登录页持久化），cookie 兜底。
+ * cookie 路径不可依赖：sender 登录响应 Set-Cookie 为 HttpOnly 且同名
+ * access_token，document.cookie 的同名写入被浏览器静默忽略（RFC 6265 §5.3）
+ * 且不可读；网关亦不转发 Cookie 头。AuthWrapper 与请求层共用本解析。
+ */
+export function getStoredToken(): string | null {
+  return localStorage.getItem('access_token') || getCookie('access_token');
+}
+
 function extractErrorMessage(data: unknown): string {
   if (data && typeof data === 'object') {
     const errorData = data as { message?: unknown; error?: unknown; msg?: unknown };
@@ -42,7 +54,7 @@ function extractErrorMessage(data: unknown): string {
 export async function request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
   const { method = 'GET', body, headers = {}, skipToken = false } = options;
 
-  const token = localStorage.getItem("access_token") || getCookie("access_token");
+  const token = getStoredToken();
 
   const defaultHeaders: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -74,7 +86,9 @@ export async function request<T>(endpoint: string, options: RequestOptions = {})
     if (response.status === 401) {
       if (!skipToken) {
         const redirectPath = encodeURIComponent(window.location.pathname + window.location.search);
-        window.location.assign(`/login?redirect=${redirectPath}`);
+        // 按当前控制台回各自登录页（ADR 0007：IAM 与 sender 各有独立登录页）
+        const loginPath = getConsole() === 'sender' ? '/sender/login' : '/login';
+        window.location.assign(`${loginPath}?redirect=${redirectPath}`);
       }
       // 使用服务器返回的错误消息，如果没有则使用默认消息
       throw new UnauthorizedError(serverMessage || undefined);

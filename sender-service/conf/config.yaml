@@ -18,7 +18,8 @@ app:
   mode: "debug"
 
 sender:
-  # sender 应用在 IAM 注册表中的固定 id（IAM 迁移 000010 种子为 2）
-  application_id: 2
-  # IAM gRPC 地址，入站判权透传 JWT 调 CheckPermission
+  # IAM gRPC 地址：入站判权透传 JWT 调 CheckPermission；代登录由机机账号 AK/SK 推导应用
   iam_addr: "127.0.0.1:9090"
+  # 代登录机机账号凭证：仓库留空（ADR-0007），部署时填写，缺失即启动失败
+  iam_access_key: ""
+  iam_secret_key: ""

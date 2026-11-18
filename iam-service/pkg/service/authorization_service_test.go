@@ -318,6 +318,14 @@ func TestRoleAuditFields(t *testing.T) {
 	updateCtx := appCtx(context.WithValue(context.Background(), "accountId", "43"))
 	db := setupAuthorizationTestDB(t)
 	setupTestApplication(t, db)
+	// 角色归属 home：非 admin 操作者须在库中存在且已设置所属应用（ADR 0006）
+	for _, id := range []int64{42, 43} {
+		operator := createTestUser(t, db, id, "operator-"+cast.ToString(id), 1)
+		operator.HomeApplicationId = testAppId
+		if err := db.Save(&operator).Error; err != nil {
+			t.Fatalf("set operator home: %v", err)
+		}
+	}
 	service := NewAuthorizationService(db, nil)
 
 	created, err := service.CreateRole(createCtx, &iam_v1.CreateRoleRequest{
@@ -372,10 +380,18 @@ func TestRoleAuditFields(t *testing.T) {
 
 // 审计字段注入：CreatePermission / UpdatePermission 对称覆盖。
 func TestPermissionAuditFields(t *testing.T) {
-	createCtx := appCtx(context.WithValue(context.Background(), "accountId", "42"))
-	updateCtx := appCtx(context.WithValue(context.Background(), "accountId", "43"))
+	createCtx := appCtx(auth.WithAccountId(context.Background(), 42))
+	updateCtx := appCtx(auth.WithAccountId(context.Background(), 43))
 	db := setupAuthorizationTestDB(t)
 	setupTestApplication(t, db)
+	// 权限管理按 home 隔离：审计测试的操作者须有所属应用（ADR 0006）。
+	for _, id := range []int64{42, 43} {
+		operator := createTestUser(t, db, id, "permission-audit-"+cast.ToString(id), 1)
+		operator.HomeApplicationId = testAppId
+		if err := db.Save(&operator).Error; err != nil {
+			t.Fatalf("set operator home: %v", err)
+		}
+	}
 	service := NewAuthorizationService(db, nil)
 
 	created, err := service.CreatePermission(createCtx, &iam_v1.CreatePermissionRequest{
@@ -539,11 +555,15 @@ func TestCheckPermissionMatchesCode(t *testing.T) {
 
 // ── 管理员角色保护 ──
 
-// 管理员角色禁止删除。
+// 内置超管角色禁止删除（000014 起按 is_super_admin 标志判定，'admin' 码不再是全局键）。
 func TestDeleteRoleRejectsAdminRole(t *testing.T) {
 	db := setupAuthorizationTestDB(t)
 	service := NewAuthorizationService(db, nil)
 	adminRole := createTestRole(t, db, 1, model.RoleAdmin, 1)
+	if err := db.Model(&model.Role{}).Where(model.RoleColumnId, adminRole.Id).
+		Update(model.RoleColumnIsSuperAdmin, true).Error; err != nil {
+		t.Fatalf("set super admin flag: %v", err)
+	}
 
 	_, err := service.DeleteRole(context.Background(), &iam_v1.DeleteRoleRequest{Id: cast.ToInt64(adminRole.Id)})
 	if err == nil || !errors.Is(err, ErrRoleAdminProtected) {

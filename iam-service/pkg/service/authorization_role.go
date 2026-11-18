@@ -26,6 +26,9 @@ func (a *AuthorizationService) GetRole(ctx context.Context, request *common_v1.G
 	if err != nil {
 		return nil, err
 	}
+	if err := requireRoleScope(ctx, a.db, role.ApplicationId); err != nil {
+		return nil, err
+	}
 	if err := loadRolePermissions(ctx, a.db, &role); err != nil {
 		return nil, err
 	}
@@ -38,11 +41,23 @@ func (a *AuthorizationService) ListRoles(ctx context.Context, request *iam_v1.Li
 		model.RoleColumnName + " LIKE ?",
 		model.RoleColumnCode + " LIKE ?",
 	}
+	homeId, scoped, err := operatorHomeScope(ctx, a.db)
+	if err != nil {
+		return nil, err
+	}
+	// home 未设置（0）时非 admin fail-closed：返回空列表，不暴露全局角色。
+	if scoped && homeId <= 0 {
+		return &iam_v1.ListRolesResponse{Roles: []*iam_v1.Role{}}, nil
+	}
 	buildQuery := func() *gorm.DB {
-		return applyKeywordFilter(a.db.WithContext(ctx).Model(model.Role{}), keywordConditions, request.Keyword)
+		query := applyKeywordFilter(a.db.WithContext(ctx).Model(model.Role{}), keywordConditions, request.Keyword)
+		if scoped {
+			query = query.Where(model.RoleColumnApplicationId, homeId)
+		}
+		return query
 	}
 	var count int64
-	err := buildQuery().Count(&count).Error
+	err = buildQuery().Count(&count).Error
 	if err != nil {
 		return nil, err
 	}
@@ -76,6 +91,9 @@ func (a *AuthorizationService) UpdateRole(ctx context.Context, request *iam_v1.U
 	if err != nil {
 		return nil, err
 	}
+	if err := requireRoleScope(ctx, a.db, role.ApplicationId); err != nil {
+		return nil, err
+	}
 	if err := loadRolePermissions(ctx, a.db, &role); err != nil {
 		return nil, err
 	}
@@ -101,6 +119,17 @@ func (a *AuthorizationService) UpdateRole(ctx context.Context, request *iam_v1.U
 				slog.Warn("update role rejected: permission code not found",
 					"role_id", request.Id, "permission_code", code)
 				return nil, ErrPermissionNotFound
+			}
+		}
+		// 数据边界（ADR 0006 补充）：待挂码逐个校验归属 home，
+		// 防止非 admin 经挂码自授跨应用能力（码门槛不构成租户边界）。
+		if len(request.AddedPermissionCodeList) > 0 {
+			addedPermissions := make([]model.Permission, 0, len(request.AddedPermissionCodeList))
+			for _, code := range request.AddedPermissionCodeList {
+				addedPermissions = append(addedPermissions, permissionByCode[code])
+			}
+			if err := requirePermissionBindScope(ctx, a.db, addedPermissions); err != nil {
+				return nil, err
 			}
 		}
 	}
@@ -186,9 +215,12 @@ func (a *AuthorizationService) DeleteRole(ctx context.Context, request *iam_v1.D
 	if err != nil {
 		return nil, err
 	}
-	// 管理员角色为系统内置，禁止删除
-	if role.Code == model.RoleAdmin {
-		slog.Warn("delete role rejected: admin role protected", "role_id", request.Id, "role_code", role.Code)
+	if err := requireRoleScope(ctx, a.db, role.ApplicationId); err != nil {
+		return nil, err
+	}
+	// 内置超管角色禁止删除（按标志判定，000014 起；应用级 'admin' 角色不受保护）
+	if role.IsSuperAdmin {
+		slog.Warn("delete role rejected: super admin role protected", "role_id", request.Id, "role_code", role.Code)
 		return nil, ErrRoleAdminProtected
 	}
 	var count int64
@@ -218,12 +250,19 @@ func (a *AuthorizationService) DeleteRole(ctx context.Context, request *iam_v1.D
 }
 
 func (a *AuthorizationService) DeletePermission(ctx context.Context, request *iam_v1.DeletePermissionRequest) (*emptypb.Empty, error) {
-	appId, err := requireApplicationId(ctx)
-	if err != nil {
+	var permission model.Permission
+	if err := a.db.WithContext(ctx).
+		Select(model.PermissionColumnId, model.PermissionColumnApplicationId).
+		Where(model.PermissionColumnId, request.Id).
+		First(&permission).Error; err != nil {
 		return nil, err
 	}
+	if err := requirePermissionScope(ctx, a.db, permission.ApplicationId); err != nil {
+		return nil, err
+	}
+	appId := permission.ApplicationId
 	var count int64
-	err = a.db.WithContext(ctx).Model(model.RRolePermission{}).
+	err := a.db.WithContext(ctx).Model(model.RRolePermission{}).
 		Where(model.RRolePermissionColumnPermissionId, request.Id).
 		Count(&count).Error
 	if err != nil {

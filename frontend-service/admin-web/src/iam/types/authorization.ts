@@ -79,7 +79,6 @@ export interface Permission {
 }
 
 export interface CreatePermissionRequest {
-  applicationId: string;
   name: string;
   code: string;
   kind: PermissionKind;
@@ -124,9 +123,10 @@ export interface PermissionSummary {
 }
 
 export interface CreateRoleRequest {
-  applicationId: string;
   name: string;
   roleCode: string;
+  /** 角色归属应用（数据边界）；非 admin 由服务端强制锁定为自身 home */
+  applicationId: string;
 }
 
 export interface UpdateRoleRequest {

@@ -2,9 +2,14 @@ package service
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	iam_v1 "github.com/linjunhao1997/idl/pb/iam"
 	"golang.org/x/crypto/bcrypt"
@@ -16,6 +21,7 @@ import (
 	"gorm.io/gorm"
 
 	"iam-service/pkg/auth"
+	"iam-service/pkg/cipher"
 	"iam-service/pkg/constant"
 	"iam-service/pkg/model"
 )
@@ -51,12 +57,9 @@ func TestGetMyProfile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetMyProfile() error = %v", err)
 	}
-	// 011 模型：username/nickname/email/status；无应用归属
+	// 011 模型：username/nickname/email/status；无应用归属列表（登录锁定应用，ADR 0007）
 	if resp.Id != "1" || resp.Username != "one" || resp.Email != "" || resp.Nickname != "one" {
 		t.Fatalf("GetMyProfile() basic info = %+v", resp)
-	}
-	if len(resp.Applications) != 0 {
-		t.Fatalf("applications = %v, want empty", resp.Applications)
 	}
 }
 
@@ -103,7 +106,7 @@ func TestPasswordAuthDisabledAccountRejected(t *testing.T) {
 	ctx := grpc.NewContextWithServerTransportStream(auth.WithAdmin(context.Background()), stubServerTransportStream{})
 	_, err := service.PasswordAuth(ctx, &iam_v1.PasswordAuthRequest{
 		Identifier: "disabled",
-		Password: "password123",
+		Password:   "password123",
 	})
 	if err == nil {
 		t.Fatal("expected disabled account login to be rejected")
@@ -124,22 +127,37 @@ func (stubServerTransportStream) SendHeader(metadata.MD) error { return nil }
 func (stubServerTransportStream) SetTrailer(metadata.MD) error { return nil }
 
 // TestPasswordAuthEnabledAccountAllowed 启用账号正常登录（防误伤）。
+// 无 metadata 时缺省目标应用为 iam（ADR 0007）。
 func TestPasswordAuthEnabledAccountAllowed(t *testing.T) {
 	db := setupProfileTestDB(t)
 	rdb, _ := setupTestRedis(t)
-	createTestUserWithPassword(t, db, 1, "enabled", "password123", constant.AccountStatusEnabled)
+	createTestApp(t, db, testAppIdIam, "iam", model.StatusEnabled)
+	user := createTestUserWithPassword(t, db, 1, "enabled", "password123", constant.AccountStatusEnabled)
+	// 非 admin：所属应用隐式准入，登录缺省 iam 应用需 home 命中
+	user.HomeApplicationId = testAppIdIam
+	if err := db.Save(&user).Error; err != nil {
+		t.Fatalf("set user home: %v", err)
+	}
 
 	service := NewAuthenticationService(db, rdb)
-	ctx := grpc.NewContextWithServerTransportStream(auth.WithAdmin(context.Background()), stubServerTransportStream{})
+	ctx := grpc.NewContextWithServerTransportStream(context.Background(), stubServerTransportStream{})
 	resp, err := service.PasswordAuth(ctx, &iam_v1.PasswordAuthRequest{
 		Identifier: "enabled",
-		Password: "password123",
+		Password:   "password123",
 	})
 	if err != nil {
 		t.Fatalf("enabled account login should pass: %v", err)
 	}
 	if resp.GetAccessToken() == "" {
 		t.Fatal("expected non-empty access token")
+	}
+	token, err := auth.ParseClaims(resp.GetAccessToken())
+	if err != nil {
+		t.Fatalf("parse issued token: %v", err)
+	}
+	// 缺省 iam 应用已锁定进 claim
+	if token.ApplicationId != testAppIdIam {
+		t.Fatalf("issued token appId = %d, want %d (iam)", token.ApplicationId, testAppIdIam)
 	}
 }
 
@@ -155,7 +173,7 @@ func TestPasswordAuthInvalidCredentials(t *testing.T) {
 	// 密码错误
 	_, err := service.PasswordAuth(ctx, &iam_v1.PasswordAuthRequest{
 		Identifier: "enabled",
-		Password: "wrong-password",
+		Password:   "wrong-password",
 	})
 	if err != ErrInvalidAccountPassword {
 		t.Fatalf("wrong password error = %v, want %v", err, ErrInvalidAccountPassword)
@@ -164,9 +182,153 @@ func TestPasswordAuthInvalidCredentials(t *testing.T) {
 	// 用户不存在：与密码错误同语义
 	_, err = service.PasswordAuth(ctx, &iam_v1.PasswordAuthRequest{
 		Identifier: "missing-user",
-		Password: "password123",
+		Password:   "password123",
 	})
 	if err != ErrInvalidAccountPassword {
 		t.Fatalf("missing user error = %v, want %v", err, ErrInvalidAccountPassword)
+	}
+}
+
+// TestPasswordAuthIgnoresCallerApplicationCode 调用方自报 application_code 不参与目标应用选择：
+// 无人机 AK/SK 时一律锁定 iam；机机代登录的目标应用由 AK/SK 服务账号推导（另测）。
+func TestPasswordAuthIgnoresCallerApplicationCode(t *testing.T) {
+	db := setupProfileTestDB(t)
+	rdb, _ := setupTestRedis(t)
+	createTestApp(t, db, testAppIdIam, "iam", model.StatusEnabled)
+	createTestApp(t, db, testAppIdOrder, "order", model.StatusEnabled)
+	user := createTestUserWithPassword(t, db, 1, "iam-user", "password123", constant.AccountStatusEnabled)
+	user.HomeApplicationId = testAppIdIam
+	if err := db.Save(&user).Error; err != nil {
+		t.Fatalf("set user home: %v", err)
+	}
+	// 即使用户也准入 order，自报 code 仍不能改变登录目标
+	if err := db.Create(&model.RUserApplication{UserId: user.Id, ApplicationId: testAppIdOrder}).Error; err != nil {
+		t.Fatalf("bind user order: %v", err)
+	}
+
+	service := NewAuthenticationService(db, rdb)
+	baseCtx := grpc.NewContextWithServerTransportStream(context.Background(), stubServerTransportStream{})
+	spoofCtx := metadata.NewIncomingContext(baseCtx, metadata.Pairs("application_code", "order"))
+
+	resp, err := service.PasswordAuth(spoofCtx, &iam_v1.PasswordAuthRequest{Identifier: "iam-user", Password: "password123"})
+	if err != nil {
+		t.Fatalf("PasswordAuth(spoofed code) error = %v", err)
+	}
+	token, err := auth.ParseClaims(resp.GetAccessToken())
+	if err != nil {
+		t.Fatalf("parse issued token: %v", err)
+	}
+	if token.ApplicationId != testAppIdIam {
+		t.Fatalf("issued token appId = %d, want %d (caller code must be ignored)", token.ApplicationId, testAppIdIam)
+	}
+
+	// 未准入 iam 的用户即使自报已准入应用的 code 也无法登录
+	createTestUserWithPassword(t, db, 2, "no-home", "password123", constant.AccountStatusEnabled)
+	_, err = service.PasswordAuth(
+		metadata.NewIncomingContext(baseCtx, metadata.Pairs("application_code", "order")),
+		&iam_v1.PasswordAuthRequest{Identifier: "no-home", Password: "password123"},
+	)
+	if err == nil {
+		t.Fatal("login with spoofed code to un-admitted app should fail")
+	}
+}
+
+// TestPasswordAuthServiceAccountDerivesApplication 机机代登录：目标应用由 AK/SK
+// 服务账号所属应用推导；用户仍需属于该应用（准入校验不因机机账号而旁路）。
+func TestPasswordAuthServiceAccountDerivesApplication(t *testing.T) {
+	db := setupProfileTestDB(t)
+	rdb, _ := setupTestRedis(t)
+	if err := db.AutoMigrate(&model.AccessCredential{}); err != nil {
+		t.Fatalf("migrate access credential: %v", err)
+	}
+	createTestApp(t, db, testAppIdIam, "iam", model.StatusEnabled)
+	createTestApp(t, db, testAppIdOrder, "order", model.StatusEnabled)
+
+	human := createTestUserWithPassword(t, db, 20, "order-user", "password123", constant.AccountStatusEnabled)
+	human.HomeApplicationId = testAppIdOrder
+	if err := db.Save(&human).Error; err != nil {
+		t.Fatalf("set human home: %v", err)
+	}
+	serviceAccount := createTestUser(t, db, 21, "svc-order", 1)
+	serviceAccount.HomeApplicationId = testAppIdOrder
+	if err := db.Save(&serviceAccount).Error; err != nil {
+		t.Fatalf("set service account home: %v", err)
+	}
+
+	aes, err := cipher.NewAESGCMFromEncodedKey("0123456789abcdef0123456789abcdef")
+	if err != nil {
+		t.Fatalf("new aes: %v", err)
+	}
+	secretCipher, err := aes.Encrypt([]byte("svc-secret"))
+	if err != nil {
+		t.Fatalf("encrypt sk: %v", err)
+	}
+	credential := model.AccessCredential{
+		Id:              1,
+		AccessKey:       "FAKSVCORDER00000000000000001",
+		SecretKeyCipher: secretCipher,
+		UserId:          21,
+		Status:          constant.AccessCredentialStatusEnabled,
+		Version:         1,
+	}
+	if err := db.Create(&credential).Error; err != nil {
+		t.Fatalf("seed credential: %v", err)
+	}
+
+	store := auth.NewSignatureStore(db, rdb, aes, 300)
+	service := NewAuthenticationServiceWithSignature(db, rdb, store)
+	baseCtx := grpc.NewContextWithServerTransportStream(context.Background(), stubServerTransportStream{})
+
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	nonce := "nonce-service-app-1"
+	stringToSign := strings.Join([]string{
+		"POST", "/authentication/password-auth", "", credential.AccessKey, timestamp, nonce, auth.EmptyBodyDigestHex,
+	}, "\n")
+	mac := hmac.New(sha256.New, []byte("svc-secret"))
+	mac.Write([]byte(stringToSign))
+	md := metadata.Pairs(
+		auth.MetadataAccessKey, credential.AccessKey,
+		auth.MetadataTimestamp, timestamp,
+		auth.MetadataNonce, nonce,
+		auth.MetadataSignature, hex.EncodeToString(mac.Sum(nil)),
+		auth.MetadataOriginalMethod, "POST",
+		auth.MetadataOriginalURI, "/authentication/password-auth",
+		auth.MetadataBodyDigest, auth.EmptyBodyDigestHex,
+	)
+	serviceCtx := metadata.NewIncomingContext(baseCtx, md)
+
+	resp, err := service.PasswordAuth(serviceCtx, &iam_v1.PasswordAuthRequest{Identifier: "order-user", Password: "password123"})
+	if err != nil {
+		t.Fatalf("PasswordAuth via service account error = %v", err)
+	}
+	token, err := auth.ParseClaims(resp.GetAccessToken())
+	if err != nil {
+		t.Fatalf("parse issued token: %v", err)
+	}
+	if token.ApplicationId != testAppIdOrder {
+		t.Fatalf("issued token appId = %d, want %d (service account home)", token.ApplicationId, testAppIdOrder)
+	}
+
+	// 用户不属于服务账号所属应用时仍应被准入校验拒绝（换新 nonce 避免重放误判）
+	createTestUserWithPassword(t, db, 22, "iam-user-2", "password123", constant.AccountStatusEnabled)
+	nonce2 := "nonce-service-app-2"
+	stringToSign2 := strings.Join([]string{
+		"POST", "/authentication/password-auth", "", credential.AccessKey, timestamp, nonce2, auth.EmptyBodyDigestHex,
+	}, "\n")
+	mac2 := hmac.New(sha256.New, []byte("svc-secret"))
+	mac2.Write([]byte(stringToSign2))
+	md2 := metadata.Pairs(
+		auth.MetadataAccessKey, credential.AccessKey,
+		auth.MetadataTimestamp, timestamp,
+		auth.MetadataNonce, nonce2,
+		auth.MetadataSignature, hex.EncodeToString(mac2.Sum(nil)),
+		auth.MetadataOriginalMethod, "POST",
+		auth.MetadataOriginalURI, "/authentication/password-auth",
+		auth.MetadataBodyDigest, auth.EmptyBodyDigestHex,
+	)
+	serviceCtx2 := metadata.NewIncomingContext(baseCtx, md2)
+	_, err = service.PasswordAuth(serviceCtx2, &iam_v1.PasswordAuthRequest{Identifier: "iam-user-2", Password: "password123"})
+	if err == nil {
+		t.Fatal("user outside service application must be rejected")
 	}
 }

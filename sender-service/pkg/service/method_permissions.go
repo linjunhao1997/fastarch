@@ -35,6 +35,8 @@ var methodPermissions = map[string][]string{
 // 不得据此做写操作归责。
 var authOnlyMethods = map[string]struct{}{
 	"/sender.v1.MenuService/ListMyMenuTree": {},
+	// 登录接口：凭据校验委托 IAM（ADR 0007），无 JWT 场景，必须免判权。
+	"/sender.v1.AuthenticationService/PasswordAuth": {},
 }
 
 // MethodPermsFor 供 authz 拦截器注入：full method → 所需权限码，未登记返回 nil（fail-closed）。

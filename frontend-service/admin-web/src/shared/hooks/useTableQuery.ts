@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
+import { getConsole } from '@/shared/api/app-context';
 import { ApiError } from '@/shared/api/request';
-import { useApplicationContext } from '@/shared/context/ApplicationContext';
 import { useDebouncedValue } from '@/shared/hooks/useDebouncedValue';
 import type { Page } from '@/shared/api/request';
 
@@ -30,9 +30,8 @@ export function useTableQuery<TResponse extends PagedResponse, T extends { id: s
   const { domain, fetcher, getItems } = options;
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
-  // 缓存键携带当前应用（#9）：服务端按 token→app 映射隔离数据，
-  // 键里带 appId 防止切换应用后命中上一应用范围的旧缓存
-  const { currentApplicationId } = useApplicationContext();
+  // 缓存键携带当前控制台（#9 + ADR 0007）：服务端按登录锁定应用隔离数据，
+  // 键里带 console 防止跨控制台命中旧缓存
 
   const currentPage = Math.max(1, Number.parseInt(searchParams.get('current_page') ?? '1', 10) || 1);
   const pageSize = Math.max(1, Number.parseInt(searchParams.get('page_size') ?? '10', 10) || 10);
@@ -53,8 +52,8 @@ export function useTableQuery<TResponse extends PagedResponse, T extends { id: s
   }, [filterKeySignature, searchParams]);
 
   const queryKey = useMemo(
-    () => [domain, currentApplicationId, debouncedKeyword, currentPage, pageSize, filters] as const,
-    [domain, currentApplicationId, debouncedKeyword, currentPage, pageSize, filters],
+    () => [domain, getConsole(), debouncedKeyword, currentPage, pageSize, filters] as const,
+    [domain, debouncedKeyword, currentPage, pageSize, filters],
   );
 
   const query = useQuery({

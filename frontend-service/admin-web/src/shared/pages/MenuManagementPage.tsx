@@ -6,9 +6,9 @@ import {
 import type { TableColumnsType } from 'antd';
 import { CheckCircleOutlined, PlusOutlined, StopOutlined } from '@ant-design/icons';
 import { menuApi } from '@/shared/api/menu-dict-api';
+import { getConsole } from '@/shared/api/app-context';
 import { permissionApi } from '@/iam/api/iam';
 import { useConfirmDelete } from '@/shared/components/ConfirmDelete';
-import { useApplicationContext } from '@/shared/context/ApplicationContext';
 import { useApiErrorNotification } from '@/shared/hooks/useApiError';
 import { useSubmitLock } from '@/shared/hooks/useSubmitLock';
 import { MENU_ICONS } from '@/app/router';
@@ -55,15 +55,14 @@ export default function MenuManagementPage() {
   const [form] = Form.useForm<MenuFormValues>();
   const [editing, setEditing] = useState<EditingState | null>(null);
   const { isSubmitting, run } = useSubmitLock();
-  const { currentApplicationId } = useApplicationContext();
 
   const treeQuery = useQuery({
-    // 缓存按应用隔离（#9）：服务端按 token→app 隔离数据，键带 appId 防串应用旧缓存
-    queryKey: ['menu-tree', currentApplicationId],
+    // 缓存按控制台隔离（#9 + ADR 0007）：服务端按登录锁定应用隔离数据
+    queryKey: ['menu-tree', getConsole()],
     queryFn: () => menuApi.listTree(),
   });
   const permissionQuery = useQuery({
-    queryKey: ['permissions', 'all', currentApplicationId],
+    queryKey: ['permissions', 'all', getConsole()],
     queryFn: () => permissionApi.list(1, 500),
   });
 

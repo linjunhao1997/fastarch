@@ -1,6 +1,6 @@
 import { Breadcrumb } from 'antd';
 import { Link, useMatches, type UIMatch } from 'react-router-dom';
-import { useApplicationContext } from '@/shared/context/ApplicationContext';
+import { useConsole } from '@/shared/context/ConsoleContext';
 
 type RouteHandle = {
   breadcrumb?: string;
@@ -8,8 +8,8 @@ type RouteHandle = {
 };
 
 export default function AutoBreadcrumb() {
-  // 面包屑一级 = 当前应用（左上角切换后随之变化，未绑定时不显示）
-  const { currentApplication } = useApplicationContext();
+  // 面包屑一级 = 当前控制台（登录即锁定，ADR 0007）
+  const { label } = useConsole();
   const matches = useMatches() as UIMatch<unknown, RouteHandle>[];
   const routeItems = matches
     .filter((match) => match.handle?.breadcrumb)
@@ -24,9 +24,5 @@ export default function AutoBreadcrumb() {
       };
     });
 
-  const items = currentApplication
-    ? [{ title: currentApplication.name }, ...routeItems]
-    : routeItems;
-
-  return <Breadcrumb items={items} />;
+  return <Breadcrumb items={[{ title: label }, ...routeItems]} />;
 }

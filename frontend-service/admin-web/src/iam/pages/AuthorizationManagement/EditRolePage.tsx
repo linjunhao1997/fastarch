@@ -28,6 +28,7 @@ export default function EditRolePage() {
           name: response.name,
           enabledStatus: response.enabledStatus,
           permissionCodeList: response.permissionCodeList,
+          applicationId: response.applicationId,
         });
         setVersion(response.version);
         setCurrentPermissionCodes(response.permissionCodeList || []);
@@ -78,6 +79,14 @@ export default function EditRolePage() {
       <Form form={form} layout="vertical" onFinish={onFinish} initialValues={{ enabledStatus: "enabled" }}>
         <Form.Item label="角色名称" name="name" rules={[{ required: true, message: "请输入角色名称" }]}>
           <Input disabled={loading} />
+        </Form.Item>
+
+        <Form.Item
+          label="所属应用"
+          name="applicationId"
+          extra="角色归属在数据边界上创建时锁定，不可修改（ADR 0006）"
+        >
+          <Input disabled />
         </Form.Item>
 
         <Form.Item

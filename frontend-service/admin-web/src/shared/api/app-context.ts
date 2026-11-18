@@ -1,26 +1,59 @@
 /**
- * 当前应用 code 的读取点（跨 services 共享）。
+ * 当前控制台的读取点（登录即锁定，ADR 0007）。
  *
- * 背景：管理员在宿主切换应用后，菜单/字典的配置要写到对应服务的库——
- * iam 应用走 /iam/...，sender 应用走 /sender/...。API 前缀由这里决定。
+ * 背景：管理员经各自应用的登录页登录后，应用上下文（application_code）即锁定，
+ * 无运行时切换。菜单/字典 API 前缀由此决定：iam 应用走 /iam/...，sender 应用走
+ * /sender/...。
  *
- * 时序约束：当前 app code 由 ApplicationContext 在服务端绑定成功后设置
- * （setCurrentAppCode），菜单树请求以 currentAppCode 门控，确保发请求前 code 已就位。
+ * 时序约束：登录成功后由登录页调用 setConsole，控制台内所有请求据此拼前缀。
  */
-let currentAppCode: string | null = null;
+export type ConsoleKinds = 'iam' | 'sender';
 
-export function getCurrentAppCode(): string | null {
-  return currentAppCode;
+const CONSOLE_STORAGE_KEY = 'app_console';
+
+export const CONSOLE_LABELS: Record<ConsoleKinds, string> = {
+  iam: '身份认证平台',
+  sender: '消息中心',
+};
+
+let currentConsole: ConsoleKinds;
+
+function loadInitialConsole(): ConsoleKinds {
+  try {
+    const stored = localStorage.getItem(CONSOLE_STORAGE_KEY);
+    if (stored === 'iam' || stored === 'sender') return stored;
+  } catch {
+    // ignore
+  }
+  return 'iam'; // 缺省：IAM 自有控制台
+}
+currentConsole = loadInitialConsole();
+
+export function getConsole(): ConsoleKinds {
+  return currentConsole;
 }
 
-export function setCurrentAppCode(code: string | null): void {
-  currentAppCode = code;
+export function setConsole(code: ConsoleKinds): void {
+  currentConsole = code;
+  try {
+    localStorage.setItem(CONSOLE_STORAGE_KEY, code);
+  } catch {
+    // ignore
+  }
+}
+
+export function clearConsole(): void {
+  try {
+    localStorage.removeItem(CONSOLE_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
 }
 
 /**
- * 按当前应用拼菜单/字典 API 前缀。
- * 未设置 code 时回退 'iam'（首屏兜底；正常时序下由门控避免）。
+ * 按当前控制台拼菜单/字典 API 前缀。
+ * 登录即锁定，取值只有 /iam 或 /sender。
  */
 export function appApiPrefix(): string {
-  return `/${currentAppCode ?? 'iam'}`;
+  return `/${currentConsole}`;
 }

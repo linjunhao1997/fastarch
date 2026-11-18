@@ -91,4 +91,16 @@ var (
 	// 数据边界（ADR 0006）：创建必填所属应用；非 admin 仅可见/可操作所属应用的用户
 	ErrHomeApplicationRequired = NewErrorWithCode("1001061", codes.InvalidArgument, errors.New("所属应用不能为空"))
 	ErrAccountOutOfScope       = NewErrorWithCode("1001062", codes.PermissionDenied, errors.New("只能查看/操作所属应用的用户"))
+	// 登录锁定应用（ADR 0007）：非 admin 未获得目标应用准入时拒绝登录
+	ErrApplicationAccessDenied = NewErrorWithCode("1001063", codes.PermissionDenied, errors.New("无权进入该应用"))
+	// 角色归属应用（推翻 ADR 0006 的「角色全局」）：非 admin 仅可见/可操作所属应用的角色
+	ErrRoleOutOfScope = NewErrorWithCode("1001064", codes.PermissionDenied, errors.New("只能查看/操作所属应用的角色"))
+	// 权限归属应用（ADR 0006 数据边界扩展到权限管理）：非 admin 仅可见/可操作所属应用的权限码
+	ErrPermissionOutOfScope = NewErrorWithCode("1001065", codes.PermissionDenied, errors.New("只能查看/操作所属应用的权限码"))
+	// 应用域写操作硬门槛（ADR 0006 补充）：创建/修改/删除仅限 admin 或系统调用
+	ErrApplicationAdminRequired = NewErrorWithCode("1001066", codes.PermissionDenied, errors.New("应用管理仅限管理员操作"))
+	// 应用删除引用校验（ADR 0006 补充）：角色/权限/菜单/字典归属与用户 home/准入均引用应用
+	ErrApplicationReferenced = NewErrorWithCode("1001067", codes.FailedPrecondition, errors.New("应用已被数据引用，请先解除引用"))
+	// 内置 admin 角色绑定保护（ADR 0006 补充）：非 admin 禁绑，防经角色绑定提权
+	ErrRoleAdminBindForbidden = NewErrorWithCode("1001068", codes.PermissionDenied, errors.New("内置管理员角色仅限管理员绑定"))
 )

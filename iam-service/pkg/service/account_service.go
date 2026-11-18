@@ -142,41 +142,16 @@ func loadApplicationsByIds(ctx context.Context, db *gorm.DB, ids []int64) (map[i
 	return result, nil
 }
 
-// operatorScope 返回操作者的数据边界（ADR 0006）：admin 或系统调用（无认证上下文，
-// 内部/迁移场景）scoped=false 不隔离；非 admin scoped=true，homeId 为操作者所属应用
-// （0 = 未设置，调用方 fail-closed）。
+// operatorScope 返回操作者的数据边界（ADR 0006），统一委托包级 operatorHomeScope，
+// 避免账号域与角色/权限域各持一份隔离实现产生语义漂移。
 func (service *AccountService) operatorScope(ctx context.Context) (homeId int64, scoped bool, err error) {
-	if auth.IsAdminFromContext(ctx) || auth.GetAccountId(ctx) == 0 {
-		return 0, false, nil
-	}
-	var operator model.User
-	err = service.db.WithContext(ctx).
-		Select(model.UserColumnId, model.UserColumnHomeApplicationId).
-		Where(model.UserColumnId, auth.GetAccountId(ctx)).
-		First(&operator).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return 0, true, nil
-		}
-		return 0, true, err
-	}
-	return operator.HomeApplicationId, true, nil
+	return operatorHomeScope(ctx, service.db)
 }
 
 // requireAccountScope 数据边界校验：非 admin 操作者仅可查看/操作所属应用一致的用户，
 // 所属应用未设置一律拒绝（fail-closed）。
 func (service *AccountService) requireAccountScope(ctx context.Context, targetHomeId int64) error {
-	homeId, scoped, err := service.operatorScope(ctx)
-	if err != nil {
-		return err
-	}
-	if !scoped {
-		return nil
-	}
-	if homeId <= 0 || homeId != targetHomeId {
-		return ErrAccountOutOfScope
-	}
-	return nil
+	return requireHomeMatch(ctx, service.db, targetHomeId)
 }
 
 // UpdateAccountApplications 设置用户准入应用与所属应用（模型 A）：
@@ -472,9 +447,13 @@ func (service *AccountService) UpdateAccountRoles(ctx context.Context, request *
 	roleCodes = append(roleCodes, request.RemovedRoleCodeList...)
 	roleByCode := make(map[string]model.Role, len(roleCodes))
 	if len(roleCodes) > 0 {
+		// 码按目标用户 home 解析（000014 起角色码应用内唯一，跨应用可同名）：
+		// 非 admin 目标 home=操作者 home，语义不变；admin/系统调用同样收敛，
+		// 跨应用授予须走 CreateAccount role_ids 或先调整目标 home。
 		var roles []model.Role
 		err := service.db.WithContext(ctx).
 			Where(model.RoleColumnCode+" IN ?", roleCodes).
+			Where(model.RoleColumnApplicationId, user.HomeApplicationId).
 			Find(&roles).Error
 		if err != nil {
 			return nil, err
@@ -488,6 +467,15 @@ func (service *AccountService) UpdateAccountRoles(ctx context.Context, request *
 					"user_id", request.AccountId, "added_role_codes", request.AddedRoleCodeList)
 				return nil, ErrRoleNotFound
 			}
+		}
+		// 数据边界（ADR 0006 补充）：待绑定角色逐个校验归属 home；
+		// 非 admin 禁绑内置 admin 角色（登录按角色码计算 IsAdmin，绑定即提权）。
+		addedRoles := make([]model.Role, 0, len(request.AddedRoleCodeList))
+		for _, code := range request.AddedRoleCodeList {
+			addedRoles = append(addedRoles, roleByCode[code])
+		}
+		if err := requireRoleBindScope(ctx, service.db, addedRoles); err != nil {
+			return nil, err
 		}
 	}
 
@@ -785,6 +773,10 @@ func (service *AccountService) CreateAccount(ctx context.Context, request *iam_v
 				if len(roles) != len(roleIds) {
 					slog.Warn("create user rejected: some roles not found", "role_ids", request.RoleIds)
 					return ErrRoleNotFound
+				}
+				// 数据边界（ADR 0006 补充）：初始角色绑定与 UpdateAccountRoles 同门槛
+				if err := requireRoleBindScope(ctx, tx, roles); err != nil {
+					return err
 				}
 				// 绑定只写关联表（t_r_user_role）；Association.Append 会连带
 				// upsert 关联行，stub/零值时间对象将触发 MySQL 严格模式 0000-00-00 报错

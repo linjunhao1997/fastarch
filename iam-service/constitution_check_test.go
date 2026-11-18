@@ -68,7 +68,7 @@ func TestServiceQueriesDoNotUseSelectStar(t *testing.T) {
 	if err := db.Select(model.UserFields).Create(&user).Error; err != nil {
 		t.Fatal(err)
 	}
-	role := model.Role{Code: "test-role", Name: "Test Role", Status: model.StatusEnabled, Version: 1}
+	role := model.Role{Code: "test-role", Name: "Test Role", Status: model.StatusEnabled, ApplicationId: app.Id, Version: 1}
 	if err := db.Select(model.RoleFields).Create(&role).Error; err != nil {
 		t.Fatal(err)
 	}
