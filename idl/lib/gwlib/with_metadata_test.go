@@ -101,3 +101,20 @@ func TestWithMetadataMissingSignatureHeaders(t *testing.T) {
 		}
 	}
 }
+
+func TestWithMetadataPassthroughAppCode(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/sender/templates", nil)
+	req.Header.Set("X-Fa-App-Code", "order")
+	md := WithMetadata(context.Background(), req)
+	if got := md.Get(MetadataAppCode); len(got) != 1 || got[0] != "order" {
+		t.Fatalf("app code not passed through: %v", got)
+	}
+}
+
+func TestWithMetadataNoAppCodeWhenAbsent(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/sender/templates", nil)
+	md := WithMetadata(context.Background(), req)
+	if got := md.Get(MetadataAppCode); len(got) != 0 {
+		t.Fatalf("unexpected app code: %v", got)
+	}
+}

@@ -4,6 +4,7 @@
  * 字段名与后端 grpc-gateway（protojson，默认 camelCase JSON 名）实际下发格式一致，
  * 与既有 types/account.ts 等保持同一惯例；id/userId 等雪花 ID 一律 string 编码。
  */
+import type { ApplicationSummary } from '@/shared/types';
 
 /** 凭证状态：与账号状态取值一致 */
 export type AccessCredentialStatus = 'enabled' | 'disabled';
@@ -24,6 +25,8 @@ export interface AccessCredential {
   userId: string;
   /** 绑定账号名（服务端组装，只读） */
   userName: string;
+  /** 凭证归属应用摘要（服务端组装，只读）：决定该凭证产生的数据归属 */
+  application?: ApplicationSummary;
   remark: string;
   status: AccessCredentialStatus;
   /** 过期时间（ISO 字符串），null = 永不过期 */
@@ -41,6 +44,8 @@ export interface AccessCredential {
 export interface CreateAccessCredentialRequest {
   /** 绑定账号 id；账号必须存在且启用（FR-004） */
   userId: string;
+  /** 凭证归属应用 id：决定数据归属，必须在该用户的接入范围内（服务端校验） */
+  applicationId: string;
   /** 备注用途，最长 255 */
   remark: string;
   /** 过期时间（ISO 字符串）；不传/null = 永不过期 */

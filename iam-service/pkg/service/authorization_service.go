@@ -74,9 +74,12 @@ func loadAccountPermissionSnapshot(ctx context.Context, rdb *redis.Client, db *g
 }
 
 func (a *AuthorizationService) CheckPermission(ctx context.Context, request *iam_v1.CheckPermissionRequest) (*iam_v1.CheckPermissionResponse, error) {
+	// 数据归属应用：拦截器已校验 appCode ∈ 接入集合并注入 ctx；回传给下游服务
+	// （如 sender）作为数据隔离依据。未带 appCode 时为 0，下游按其默认应用回落。
+	dataAppId := auth.GetDataAppId(ctx)
 	// 权限码是唯一授权词汇（011 裁决）：直接按码匹配快照
 	if auth.IsAdminFromContext(ctx) {
-		return &iam_v1.CheckPermissionResponse{Ok: true}, nil
+		return &iam_v1.CheckPermissionResponse{Ok: true, DataAppId: dataAppId}, nil
 	}
 	accountId := auth.GetAccountId(ctx)
 	permKeys, err := loadAccountPermissionSnapshot(ctx, a.rdb, a.db, accountId)
@@ -86,16 +89,16 @@ func (a *AuthorizationService) CheckPermission(ctx context.Context, request *iam
 	for _, key := range permKeys {
 		if key == request.PermissionCode {
 			return &iam_v1.CheckPermissionResponse{
-				Ok: true,
+				Ok: true, DataAppId: dataAppId,
 			}, nil
 		}
 	}
 	return &iam_v1.CheckPermissionResponse{
-		Ok: false,
+		Ok: false, DataAppId: dataAppId,
 	}, nil
 }
 
-func permissionToPb(p model.Permission) *iam_v1.Permission {
+func permissionToPb(p model.Permission, app *common_v1.ApplicationSummary) *iam_v1.Permission {
 	return &iam_v1.Permission{
 		Id:             cast.ToString(p.Id),
 		Name:           p.Name,
@@ -107,16 +110,18 @@ func permissionToPb(p model.Permission) *iam_v1.Permission {
 		UpdatedBy:      p.UpdatedBy,
 		CreateTime:     timestamppb.New(p.CreateTime),
 		UpdateTime:     timestamppb.New(p.UpdateTime),
+		Application:    app,
 	}
 }
 
-func roleToPb(r model.Role) *iam_v1.Role {
+func roleToPb(r model.Role, app *common_v1.ApplicationSummary) *iam_v1.Role {
 	return &iam_v1.Role{
 		Id:            cast.ToString(r.Id),
 		Name:          r.Name,
 		RoleCode:      r.Code,
 		EnabledStatus: r.Status,
 		ApplicationId: r.ApplicationId,
+		Application:   app,
 		Version:       r.Version,
 		CreatedBy:     r.CreatedBy,
 		UpdatedBy:     r.UpdatedBy,
@@ -223,7 +228,11 @@ func (a *AuthorizationService) CreatePermission(ctx context.Context, request *ia
 		Where(model.PermissionColumnId, pkId).First(&created).Error; err != nil {
 		return nil, err
 	}
-	return permissionToPb(created), nil
+	app, err := loadApplicationSummary(ctx, a.db, created.ApplicationId)
+	if err != nil {
+		return nil, err
+	}
+	return permissionToPb(created, app), nil
 }
 
 func (a *AuthorizationService) GetPermission(ctx context.Context, request *common_v1.GetRequest) (*iam_v1.Permission, error) {
@@ -238,7 +247,11 @@ func (a *AuthorizationService) GetPermission(ctx context.Context, request *commo
 	if err := requirePermissionScope(ctx, a.db, permission.ApplicationId); err != nil {
 		return nil, err
 	}
-	return permissionToPb(permission), nil
+	app, err := loadApplicationSummary(ctx, a.db, permission.ApplicationId)
+	if err != nil {
+		return nil, err
+	}
+	return permissionToPb(permission, app), nil
 }
 
 func (a *AuthorizationService) ListPermissions(ctx context.Context, request *iam_v1.ListPermissionsRequest) (*iam_v1.ListPermissionsResponse, error) {
@@ -274,9 +287,17 @@ func (a *AuthorizationService) ListPermissions(ctx context.Context, request *iam
 	if err != nil {
 		return nil, err
 	}
+	appIds := make([]int64, 0, len(permissions))
+	for _, p := range permissions {
+		appIds = append(appIds, p.ApplicationId)
+	}
+	apps, err := loadApplicationSummaries(ctx, a.db, appIds)
+	if err != nil {
+		return nil, err
+	}
 	permList := make([]*iam_v1.Permission, 0, len(permissions))
 	for _, p := range permissions {
-		permList = append(permList, permissionToPb(p))
+		permList = append(permList, permissionToPb(p, apps[p.ApplicationId]))
 	}
 	return &iam_v1.ListPermissionsResponse{
 		Permissions: permList,
@@ -391,5 +412,9 @@ func (a *AuthorizationService) CreateRole(ctx context.Context, request *iam_v1.C
 		Where(model.RoleColumnId, pkId).First(&created).Error; err != nil {
 		return nil, err
 	}
-	return roleToPb(created), nil
+	app, err := loadApplicationSummary(ctx, a.db, created.ApplicationId)
+	if err != nil {
+		return nil, err
+	}
+	return roleToPb(created, app), nil
 }

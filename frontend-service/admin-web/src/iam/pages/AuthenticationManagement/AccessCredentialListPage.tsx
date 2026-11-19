@@ -96,6 +96,8 @@ function SecretRevealModal({ reveal, onClose }: { reveal: SecretRevealState | nu
 
 interface CreateCredentialFormValues {
   userId: string;
+  /** 凭证归属应用：决定该凭证产生的数据归属，取绑定用户的接入集合 */
+  applicationId: string;
   remark?: string;
   expireTime?: Dayjs | null;
 }
@@ -120,11 +122,34 @@ function CreateCredentialModal({
 }: CreateCredentialModalProps) {
   const [form] = Form.useForm<CreateCredentialFormValues>();
   const { isSubmitting, run } = useSubmitLock();
+  const selectedUserId = Form.useWatch('userId', form);
+
+  // 归属应用候选 = 绑定用户的 home + 显式接入应用（其接入集合），无需额外查询。
+  const selectedAccount = accounts.find((account) => account.id === selectedUserId);
+  const appOptions = useMemo(() => {
+    const options: { value: string; label: string }[] = [];
+    if (selectedAccount?.homeApplication && selectedAccount.homeApplicationId !== '0') {
+      options.push({
+        value: selectedAccount.homeApplicationId,
+        label: `${selectedAccount.homeApplication.name}（${selectedAccount.homeApplication.code}）· 所属应用`,
+      });
+    }
+    for (const app of selectedAccount?.applications ?? []) {
+      options.push({ value: app.id, label: `${app.name}（${app.code}）` });
+    }
+    return options;
+  }, [selectedAccount]);
+
+  // 切换绑定用户后清空归属应用，避免留着上一个人的接入应用导致越界提交。
+  useEffect(() => {
+    form.setFieldValue('applicationId', undefined);
+  }, [selectedUserId, form]);
 
   const handleFinish = (values: CreateCredentialFormValues) => {
     run(async () => {
       const response = await accessCredentialApi.create({
         userId: values.userId,
+        applicationId: values.applicationId,
         remark: values.remark ?? '',
         expireTime: values.expireTime ? values.expireTime.toISOString() : null,
       });
@@ -161,6 +186,18 @@ function CreateCredentialModal({
               value: account.id,
               label: `${account.username}（${account.nickname}）`,
             }))}
+          />
+        </Form.Item>
+        <Form.Item
+          label="归属应用"
+          name="applicationId"
+          rules={[{ required: true, message: '请选择凭证归属应用' }]}
+          extra="凭证产生的数据将归属该应用；仅限所选用户的接入范围"
+        >
+          <Select
+            placeholder={selectedUserId ? '请选择归属应用' : '请先选择绑定用户'}
+            disabled={!selectedUserId}
+            options={appOptions}
           />
         </Form.Item>
         <Form.Item
@@ -411,6 +448,14 @@ export default function AccessCredentialListPage() {
       ),
     },
     { title: '绑定用户', dataIndex: 'userName', key: 'userName', width: 140, ellipsis: true },
+    {
+      title: '归属应用',
+      key: 'application',
+      width: 160,
+      ellipsis: true,
+      render: (_value: unknown, record: AccessCredential) =>
+        record.application ? `${record.application.name}（${record.application.code}）` : '—',
+    },
     { title: '备注', dataIndex: 'remark', key: 'remark', ellipsis: true, render: (remark: string) => remark || '—' },
     {
       title: '状态',

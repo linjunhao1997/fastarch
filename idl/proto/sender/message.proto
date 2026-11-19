@@ -67,6 +67,8 @@ message MessageRecord {
   string updated_by = 9;
   google.protobuf.Timestamp create_time = 10;
   google.protobuf.Timestamp update_time = 11;
+  // 归属应用展示摘要（只读回传；sender 宿主应用 id 固定，值来自配置）
+  common.v1.ApplicationSummary application = 12;
 }
 
 message ListMessagesRequest {

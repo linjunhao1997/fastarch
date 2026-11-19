@@ -12,7 +12,7 @@ import (
 )
 
 // NewMenuService 构建通用菜单能力（contrib/pkg/menu，ADR 0001），注入 iam 宿主钩子：
-//   - 应用上下文/账号身份取自 auth ctx（token 承载，多应用裁决 #8）；
+//   - 应用上下文取宿主固定 appId（拦截器从配置注入 ctx），账号身份取自 auth ctx；
 //   - 菜单展示码校验走 iam 权限词汇规则（格式 + 服务段隔离裁决）。
 //
 // 菜单为纯展示配置（ADR 0002 + 纯码门槛裁决）：permission_code 是前端展示门槛，

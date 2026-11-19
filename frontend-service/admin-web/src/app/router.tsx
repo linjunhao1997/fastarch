@@ -18,6 +18,7 @@ import {
   UserSwitchOutlined,
 } from '@ant-design/icons';
 import AuthWrapper from '@/shared/components/AuthWrapper';
+import { CONSOLE_SELECT_PATH, LOGIN_PATH } from '@/app/routes';
 import { layoutTokens } from '@/shared/theme';
 import { PERMISSIONS } from '@/shared/types/permissions';
 import type { MenuTreeNode } from '@/shared/types';
@@ -25,7 +26,7 @@ import { senderRoutes } from '@/sender/router';
 
 const IndexPage = lazy(() => import('@/app/IndexPage'));
 const LoginPage = lazy(() => import('@/shared/pages/LoginPage'));
-const SenderLoginPage = lazy(() => import('@/sender/pages/SenderLoginPage'));
+const ConsoleSelectPage = lazy(() => import('@/app/ConsoleSelectPage'));
 const HomePage = lazy(() => import('@/app/HomePage'));
 const AccountListPage = lazy(() => import('@/iam/pages/AccountManagement/AccountListPage'));
 const CreateAccountPage = lazy(() => import('@/iam/pages/AccountManagement/CreateAccountPage'));
@@ -62,8 +63,9 @@ type MenuItem = NonNullable<MenuProps['items']>[number] & {
  * 菜单可见性另由前端按 my-menu-tree + 权限码门槛决定，路由表仅作兜底。
  */
 export const routes: RouteObject[] = [
-  { path: '/login', element: withSuspense(<LoginPage />) },
-  { path: '/sender/login', element: withSuspense(<SenderLoginPage />) },
+  // 统一登录：只有 IAM 登录页；sender 不再有登录入口，JWT 透传由拦截层完成。
+  { path: LOGIN_PATH, element: withSuspense(<LoginPage />) },
+  { path: CONSOLE_SELECT_PATH, element: withSuspense(<ConsoleSelectPage />) },
   {
     path: '/',
     element: withSuspense(<AuthWrapper consoleKind="iam"><IndexPage /></AuthWrapper>),
@@ -220,7 +222,7 @@ export const routes: RouteObject[] = [
       },
     ],
   },
-  // sender 控制台（ADR 0007 单工程双控制台）：独立登录页 + 独立子树
+  // sender 控制台（单工程双控制台）：与 IAM 共用登录入口，独立路由子树
   {
     path: '/sender',
     element: withSuspense(<AuthWrapper consoleKind="sender"><IndexPage /></AuthWrapper>),

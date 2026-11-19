@@ -17,6 +17,14 @@ type Config struct {
 	Http       config.Http     `mapstructure:"http"`
 	Jwt        config.Jwt      `mapstructure:"jwt"`
 	Credential Credential      `mapstructure:"credential"`
+	Iam        Iam             `mapstructure:"iam"`
+}
+
+// Iam 是 iam-service 的宿主配置。
+type Iam struct {
+	// ApplicationId 是 iam 应用在 t_application 注册表中的固定 id（迁移 000007 种子为 1）。
+	// 注入请求 ctx 供菜单/字典与管理域隔离使用；与登录用户的 home 及数据范围 appCode 正交。
+	ApplicationId int64 `mapstructure:"application_id"`
 }
 
 // Credential 是访问凭证（AK/SK 签名鉴权，specs/009-ak-sk-auth）的配置段。

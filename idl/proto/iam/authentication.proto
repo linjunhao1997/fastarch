@@ -6,6 +6,7 @@ option go_package = "github.com/linjunhao1997/idl/pb/iam;iam_v1";
 option java_multiple_files = true;
 option java_package = "com.iam.v1";
 
+import "common/common.proto";
 import "google/api/annotations.proto";
 import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
@@ -59,4 +60,7 @@ message GetMyProfileResponse {
   string home_application_id = 8;
   // 是否 admin 角色（只读回传，服务端派生）：前端据此锁定所属应用等数据边界 UI
   bool is_admin = 9;
+  // 用户可切换的数据归属应用清单（home + 准入绑定）：登录后应用选择页与左上角
+  // 数据范围下拉的唯一数据源。admin 返回全部启用应用。
+  repeated common.v1.ApplicationSummary applications = 10;
 }

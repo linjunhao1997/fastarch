@@ -493,6 +493,28 @@
         }
       }
     },
+    "v1ApplicationSummary": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "title": "t_application.id（string 编码，避免 JS 精度丢失）"
+        },
+        "code": {
+          "type": "string",
+          "title": "服务段命名空间（iam/sender…）"
+        },
+        "name": {
+          "type": "string",
+          "title": "展示名"
+        },
+        "status": {
+          "type": "string",
+          "title": "enabled / disabled"
+        }
+      },
+      "title": "应用展示摘要（跨服务通用，只读回传；仅含展示字段，不含 app_id/密钥等机器字段）。\n用于让列表/详情直接渲染\"归属应用\"，避免前端二次查询应用目录。"
+    },
     "v1CheckPermissionRequest": {
       "type": "object",
       "properties": {
@@ -507,6 +529,11 @@
       "properties": {
         "ok": {
           "type": "boolean"
+        },
+        "dataAppId": {
+          "type": "string",
+          "format": "int64",
+          "title": "data_app_id 是本次请求经拦截器校验后的数据归属应用 id（来自 appCode 或凭证归属）。\n供下游服务（如 sender）据此隔离数据，无需自持应用目录或信任未验签 claim。"
         }
       }
     },
@@ -649,6 +676,10 @@
           "type": "string",
           "format": "date-time",
           "title": "修改时间"
+        },
+        "application": {
+          "$ref": "#/definitions/v1ApplicationSummary",
+          "title": "归属应用展示摘要（只读回传，便于列表/详情直接渲染，免二次查询）。\n语义：码归属应用（管理数据边界，ADR 0006）；与全局授权词汇语义正交。"
         }
       },
       "title": "权限信息。权限码（permission_code）是唯一授权词汇，\n格式为 服务.模块.操作（如 iam.user.delete）。"
@@ -725,6 +756,10 @@
           "type": "string",
           "format": "int64",
           "title": "角色归属应用（数据边界，ADR 0006）"
+        },
+        "application": {
+          "$ref": "#/definitions/v1ApplicationSummary",
+          "title": "归属应用展示摘要（只读回传；与 application_id 同指一应用，供前端直接渲染）"
         }
       },
       "title": "角色信息"

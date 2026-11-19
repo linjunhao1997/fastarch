@@ -52,7 +52,7 @@ func Interceptor(client *Client, cfg Config) grpc.UnaryServerInterceptor {
 			return nil, status.Error(codes.PermissionDenied, "permission denied")
 		}
 
-		ok, err := client.CheckPermission(ctx, required[0])
+		ok, dataAppId, err := client.CheckPermission(ctx, required[0])
 		if err != nil {
 			slog.Error("iam check permission failed (fail-closed)",
 				"domain", cfg.ErrorDomain, "method", info.FullMethod, "error", err)
@@ -64,9 +64,20 @@ func Interceptor(client *Client, cfg Config) grpc.UnaryServerInterceptor {
 			return nil, status.Error(codes.PermissionDenied, "permission denied")
 		}
 
-		// IAM 已背书：解析身份仅供审计，注入后放行。
+		// IAM 已背书：解析身份仅供审计，注入后放行。dataAppId 为 IAM 校验后的
+		// 数据归属应用，注入 ctx 供业务服务隔离（menu/dict 仍用 cfg.ApplicationId）。
 		claims, _ := claimsFromContext(ctx)
-		return handler(withIdentitySafe(ctx, claims, cfg.ApplicationId), req)
+		newCtx := withIdentitySafe(ctx, claims, cfg.ApplicationId)
+		if dataAppId > 0 {
+			newCtx = WithDataAppId(newCtx, dataAppId)
+		}
+		// appCode 已随 metadata 透传由 IAM 校验通过，回读供展示摘要回填。
+		if md, ok := metadata.FromIncomingContext(ctx); ok {
+			if values := md.Get(MetadataAppCode); len(values) > 0 {
+				newCtx = WithDataAppCode(newCtx, values[0])
+			}
+		}
+		return handler(newCtx, req)
 	}
 }
 

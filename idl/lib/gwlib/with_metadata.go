@@ -32,6 +32,9 @@ const (
 	MetadataOriginalQuery = "x-fa-original-query"
 	// MetadataBodyDigest 透传请求体 SHA-256 小写十六进制摘要（网关侧计算）。
 	MetadataBodyDigest = "x-fa-body-digest"
+	// MetadataAppCode 透传请求选择的数据归属应用 code（网关 → gRPC）。
+	// 它只是选择信号，服务端拦截器校验 ∈ 用户接入集合后才作为数据归属。
+	MetadataAppCode = "x-fa-app-code"
 )
 
 // SignatureHeaders 是 AK/SK 签名鉴权请求头（specs/009-ak-sk-auth
@@ -55,6 +58,10 @@ func WithMetadata(ctx context.Context, req *http.Request) metadata.MD {
 		if values := req.Header.Values(header); len(values) > 0 {
 			md.Append(strings.ToLower(header), values[0])
 		}
+	}
+	// 数据归属应用选择头：透传给 IAM/sender 拦截器做接入集合校验。
+	if values := req.Header.Values("X-Fa-App-Code"); len(values) > 0 {
+		md.Append(MetadataAppCode, values[0])
 	}
 	if len(req.Header.Values("X-Fa-Access-Key")) > 0 {
 		// 签名请求：网关计算原始 HTTP 要素与请求体摘要供服务端重算规范化串

@@ -49,21 +49,23 @@ func NewAccessCredentialService(db *gorm.DB, rdb *redis.Client, aes *cipher.AESG
 }
 
 // accessCredentialToPb 模型转 pb；secret_key_cipher 永不出服务层。
-func accessCredentialToPb(c model.AccessCredential, accountName string) *iam_v1.AccessCredential {
+// app 为凭证归属应用摘要（由 c.ApplicationId 批量加载后传入），决定机机调用数据归属。
+func accessCredentialToPb(c model.AccessCredential, accountName string, app *common_v1.ApplicationSummary) *iam_v1.AccessCredential {
 	return &iam_v1.AccessCredential{
-		Id:           cast.ToString(c.Id),
-		AccessKey:    c.AccessKey,
-		UserId:       cast.ToString(c.UserId),
-		UserName:     accountName,
-		Remark:       c.Remark,
-		Status:       c.Status,
-		ExpireTime:   timeToTsPtr(c.ExpireTime),
+		Id:          cast.ToString(c.Id),
+		AccessKey:   c.AccessKey,
+		UserId:      cast.ToString(c.UserId),
+		UserName:    accountName,
+		Remark:      c.Remark,
+		Status:      c.Status,
+		ExpireTime:  timeToTsPtr(c.ExpireTime),
 		LastUsedTime: timeToTsPtr(c.LastUsedTime),
-		Version:      c.Version,
-		CreatedBy:    cast.ToString(c.CreatedBy),
-		UpdatedBy:    cast.ToString(c.UpdatedBy),
-		CreateTime:   timestamppb.New(c.CreateTime),
-		UpdateTime:   timestamppb.New(c.UpdateTime),
+		Version:     c.Version,
+		CreatedBy:   cast.ToString(c.CreatedBy),
+		UpdatedBy:   cast.ToString(c.UpdatedBy),
+		CreateTime:  timestamppb.New(c.CreateTime),
+		UpdateTime:  timestamppb.New(c.UpdateTime),
+		Application: app,
 	}
 }
 
@@ -119,13 +121,23 @@ func (service *AccessCredentialService) CreateAccessCredential(ctx context.Conte
 		if account.Status != constant.AccountStatusEnabled {
 			return ErrAccessCredentialAccountInvalid
 		}
-		// 数据边界（ADR 0006 补充）：凭证随所属用户 home 隔离（账号已行锁加载，不复查）
+		// 数据边界：凭证随所属用户 home 隔离（账号已行锁加载，不复查）
 		homeId, scoped, err := operatorHomeScope(ctx, tx)
 		if err != nil {
 			return err
 		}
 		if scoped && (homeId <= 0 || homeId != account.HomeApplicationId) {
 			return ErrAccountOutOfScope
+		}
+		// 凭证归属应用：显式指定则校验 ∈ 绑定用户接入集合；缺省回落到绑定用户 home
+		// （与迁移回填、"home 降级为默认落地应用"一致；API 契约仍要求必填，
+		// 此处仅对内部调用/历史客户端做防御性兼容）。
+		appId := request.ApplicationId
+		if appId <= 0 {
+			appId = account.HomeApplicationId
+		}
+		if err := requireCredentialAppAdmitted(ctx, tx, account, appId); err != nil {
+			return err
 		}
 		// 单账号凭证上限（FR-010）；行锁下计数，规避并发创建的 check-then-act 放大
 		var count int64
@@ -155,6 +167,7 @@ func (service *AccessCredentialService) CreateAccessCredential(ctx context.Conte
 				AccessKey:       generateAccessKey(),
 				SecretKeyCipher: cipherText,
 				UserId:          request.UserId,
+				ApplicationId:   appId,
 
 				Remark:     request.Remark,
 				Status:     constant.AccessCredentialStatusEnabled,
@@ -196,10 +209,40 @@ func (service *AccessCredentialService) CreateAccessCredential(ctx context.Conte
 		"credential_id", created.Id,
 		"access_key", created.AccessKey,
 		"account_id", created.UserId)
+	appSummary, err := loadApplicationSummary(ctx, service.db, created.ApplicationId)
+	if err != nil {
+		return nil, err
+	}
 	return &iam_v1.CreateAccessCredentialResponse{
-		Credential: accessCredentialToPb(created, accountNameById(ctx, service.db, created.UserId)),
+		Credential: accessCredentialToPb(created, accountNameById(ctx, service.db, created.UserId), appSummary),
 		SecretKey:  plainSecret, // 一次性明文 SK（FR-002）
 	}, nil
+}
+
+// requireCredentialAppAdmitted 校验凭证归属应用 ∈ 绑定用户的接入集合（home + 显式绑定）。
+// admin/系统调用（accountId=0）旁路；归属应用须存在且启用，否则拒绝（fail-closed）。
+func requireCredentialAppAdmitted(ctx context.Context, db *gorm.DB, account model.User, appId int64) error {
+	if auth.IsAdminFromContext(ctx) || auth.GetAccountId(ctx) == 0 {
+		// 旁路仍需确认应用存在且启用，避免写入悬空归属。
+		_, err := loadApplicationSummary(ctx, db, appId)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+	if appId <= 0 {
+		return ErrCredentialAppNotAdmitted
+	}
+	admitted, err := loadAdmittedAppIds(ctx, db, account.Id, account.HomeApplicationId)
+	if err != nil {
+		return err
+	}
+	for _, id := range admitted {
+		if id == appId {
+			return nil
+		}
+	}
+	return ErrCredentialAppNotAdmitted
 }
 
 // firstCredential 点查凭证，未命中统一映射 ErrAccessCredentialNotFound（1001040）。
@@ -247,7 +290,11 @@ func (service *AccessCredentialService) GetAccessCredential(ctx context.Context,
 	if err := service.requireCredentialScope(ctx, credential.UserId); err != nil {
 		return nil, err
 	}
-	return accessCredentialToPb(credential, accountNameById(ctx, service.db, credential.UserId)), nil
+	appSummary, err := loadApplicationSummary(ctx, service.db, credential.ApplicationId)
+	if err != nil {
+		return nil, err
+	}
+	return accessCredentialToPb(credential, accountNameById(ctx, service.db, credential.UserId), appSummary), nil
 }
 
 func (service *AccessCredentialService) ListAccessCredentials(ctx context.Context, request *iam_v1.ListAccessCredentialsRequest) (*iam_v1.ListAccessCredentialsResponse, error) {
@@ -269,10 +316,9 @@ func (service *AccessCredentialService) ListAccessCredentials(ctx context.Contex
 	buildQuery := func() *gorm.DB {
 		query := service.db.WithContext(ctx).Model(model.AccessCredential{})
 		if scoped {
-			// 联表按所属用户 home 过滤（凭证表无归属列，边界随账号域）
-			userTable := (&model.User{}).TableName()
-			query = query.Joins("JOIN "+userTable+" ON "+userTable+"."+model.UserColumnId+" = "+credentialTable+"."+model.AccessCredentialColumnUserId).
-				Where(userTable+"."+model.UserColumnHomeApplicationId+" = ?", homeId)
+			// 按凭证自身归属应用过滤（000015 起凭证有 application_id 列），
+			// 与账号/角色/权限共用同一数据边界（appCode 选中应用，回落 home）。
+			query = query.Where(credentialTable+"."+model.AccessCredentialColumnApplicationId+" = ?", homeId)
 		}
 		if request.UserId > 0 {
 			query = query.Where(credentialTable+"."+model.AccessCredentialColumnUserId, request.UserId)
@@ -305,9 +351,13 @@ func (service *AccessCredentialService) ListAccessCredentials(ctx context.Contex
 		}
 	}
 	nameById := accountNamesByIds(ctx, service.db, accountIds)
+	appByCredential, err := loadCredentialApplicationSummaries(ctx, service.db, res)
+	if err != nil {
+		return nil, err
+	}
 	list := make([]*iam_v1.AccessCredential, 0, len(res))
 	for _, c := range res {
-		list = append(list, accessCredentialToPb(c, nameById[c.UserId]))
+		list = append(list, accessCredentialToPb(c, nameById[c.UserId], appByCredential[c.Id]))
 	}
 	return &iam_v1.ListAccessCredentialsResponse{
 		Page:              helper.GetPage(request.CurrentPage, request.PageSize, count),
@@ -426,8 +476,12 @@ func (service *AccessCredentialService) ResetAccessCredentialSecret(ctx context.
 	}
 	slog.Info("access credential secret reset",
 		"operator", operator, "credential_id", request.Id, "access_key", credential.AccessKey)
+	appSummary, err := loadApplicationSummary(ctx, service.db, credential.ApplicationId)
+	if err != nil {
+		return nil, err
+	}
 	return &iam_v1.ResetAccessCredentialSecretResponse{
-		Credential: accessCredentialToPb(credential, accountNameById(ctx, service.db, credential.UserId)),
+		Credential: accessCredentialToPb(credential, accountNameById(ctx, service.db, credential.UserId), appSummary),
 		SecretKey:  plainSecret,
 	}, nil
 }

@@ -174,7 +174,7 @@ pnpm install
 pnpm dev           # :5173，代理 /account /application /authorization /authentication /iam → :8080，/sender → :8081
 ```
 
-浏览器打开 http://localhost:5173/login 进入 IAM 控制台，或 http://localhost:5173/sender/login 进入消息中心；用 `admin` / `admin123` 登录。登录即锁定应用（ADR-0007）：要进入另一个控制台须在其登录页重新登录，控制台内无应用切换入口。
+浏览器打开 http://localhost:5173/login 统一登录（`admin` / `admin123`），登录后先选控制台（IAM 或消息中心），进入后在左上角切换数据范围（appCode）。全平台只有一个登录入口，不再有 `/sender/login`（ADR-0008）。
 
 配置文件示例（`iam-service/conf/config.yaml`，sender 见 §7.3）：
 
@@ -230,14 +230,14 @@ proto 列表请求统一带 `current_page` / `page_size`，响应统一 `common.
 
 ## 七、新增一个微服务（以 sender-service 为例）
 
-> 以 sender-service 为实战蓝本，完整对照其落地结构。sender 是平台第二个宿主（code `sender`、服务段 `sender`、应用 id 固定 `2`），验证 ADR-0001~0005、0007 的「每应用自持、多应用隔离、登录锁定」。gRPC `:9091`、网关 `:8081`、独立库 `sender_dev`、HTTP 前缀 `/sender/`。
+> 以 sender-service 为实战蓝本，完整对照其落地结构。sender 是平台第二个宿主（code `sender`、服务段 `sender`、应用 id 固定 `2`），验证 ADR-0001~0005、0008 的「每应用自持、多应用隔离、统一登录 + 数据范围切换」。gRPC `:9091`、网关 `:8081`、独立库 `sender_dev`、HTTP 前缀 `/sender/`。
 
 ### 7.1 全局视角：接入一个宿主要做的四件事
 
 1. **注册应用与权限码（IAM 侧）**：应用是权限码服务段命名空间。在 IAM 迁移里登记应用与 `<service>.*` 权限码，并绑定管理员角色（见 `iam-service/pkg/migration/migrations/000010_sender.up.sql`）。**授权词汇归 IAM，业务数据归宿主自己的库**。角色归属单个应用（迁移 000013）：admin 可跨应用管理，非 admin 仅可见/可操作与自身所属应用一致的角色，越界返回 `1001064`（ADR-0006）。权限码管理同样按所属应用隔离：非 admin 的权限列表只含 home 应用的码，跨应用详情/增删改返回 `1001065`，admin 仍按当前应用上下文管理（ADR-0006）。
 2. **契约（idl 侧）**：新增 `<domain>.v1` proto，业务服务 + 菜单/字典服务（后者引用共享消息 `common.menu.v1`/`common.dict.v1`，service 自持），HTTP 路径统一带 `/<service>/` 前缀（ADR-0003）；buf 生成 pb/gateway/openapi，**禁止手改生成物**。
 3. **宿主服务（本服务）**：迁移建自己的库表与种子（golang-migrate）；模型 + 业务服务；由 contrib 嵌入菜单/字典能力（注入宿主钩子）；入站判权经 contrib 薄客户端透传 JWT 调 IAM `CheckPermission`（ADR-0005）；服务装配迁移 fail-fast。
-4. **前端（admin-web）**：在对应域目录加 api 与页面、挂路由子树；菜单/字典配置页走共享层，按登录锁定的 console 动态拼前缀，从哪个控制台登录即读写对应服务的库（无运行时切换，ADR-0007）。
+4. **前端（admin-web）**：在对应域目录加 api 与页面、挂路由子树；菜单/字典配置页走共享层，按所选 console 动态拼前缀（进入控制台后锁定，ADR-0008）；业务数据归属由左上角 appCode 决定，经 `X-Fa-App-Code` 下发，服务端在接入集合内校验。
 
 ### 7.2 第 1 步：契约 — `idl/proto/sender/`
 
@@ -295,7 +295,7 @@ go mod edit -replace github.com/linjunhao1997/idl=../idl
 go mod edit -replace github.com/linjunhao1997/contrib=../contrib
 ```
 
-`conf/config.yaml` 关键段——sender 有自己的库，`sender.iam_addr` 指向 IAM gRPC 供入站判权；代登录的机机账号 AK/SK 也在此配置（部署时填写，仓库示例留空）：
+`conf/config.yaml` 关键段——sender 有自己的库，`sender.iam_addr` 指向 IAM gRPC 供入站判权透传 JWT；`application_id` 由 `cmd/root.go` 默认设为 2（迁移 000010 固定），`application_code`/`application_name` 仅用于响应回填归属应用摘要：
 
 ```yaml
 database:
@@ -303,13 +303,12 @@ database:
 grpc: { addr: "127.0.0.1", port: 9091 }
 http: { addr: "127.0.0.1", port: 8081, endpoint: "127.0.0.1:9091" }
 sender:
-  application_id: 2                 # IAM 注册表中 sender 应用固定 id（数据分区键）
-  iam_addr: "127.0.0.1:9090"        # 入站判权透传 JWT 调 CheckPermission；代登录也走此连接
-  iam_access_key: "<绑定 sender 服务账号的 AK>"
-  iam_secret_key: "<对应 SK>"
+  application_code: "sender"        # 归属应用展示标识（回填摘要用，与 IAM 种子一致）
+  application_name: "消息中心"
+  iam_addr: "127.0.0.1:9090"        # 入站判权透传 JWT 调 CheckPermission
 ```
 
-两项凭证缺失时 sender 启动失败（fail-fast）。IAM 在 `PasswordAuth` 中验签后，从该服务账号的所属应用推导目标应用；调用方自报 `application_code` 已被忽略。用户密码与所属/准入应用仍由 IAM 校验。
+统一登录后 sender 不再代登录，无需 IAM 服务账号 AK/SK（ADR-0008）。sender 业务数据归属优先取 IAM 校验后的 `X-Fa-App-Code`，未带时回落宿主 `application_id`。
 
 ### 7.4 第 3 步：迁移建表与种子（非 AutoMigrate）
 
@@ -376,8 +375,9 @@ srv, _ := grpcserver.New(addr, grpcserver.WithDefaultInterceptors(),
 
 - **业务 api 与页面**：`src/sender/api/sender.ts`（`messageApi`/`templateApi`，路径 `/sender/...`）、`src/sender/types/sender.ts`、`pages/RecordListPage`（发送记录+发送表单）、`pages/TemplateManagementPage`（模板 CRUD）。
 - **路由子树**：`src/sender/router.tsx`，path 与菜单种子写死一致（`/sender/records`、`/sender/templates`）——菜单树按 `menu.path` 精确匹配路由，不能改；`handle.permission` 挂 `sender.*` 码。
-- **登录锁定控制台**：`/login`（IAM）与 `/sender/login`（sender）两个登录页，共用 `shared/pages/LoginPage` 生成器；sender 调 `POST /sender/authentication/password-auth`，由 sender 以 AK/SK 机机账号委托 IAM；IAM 从服务账号所属应用推导目标应用并校验用户准入后签发 token。登录后写入 `app_console`（iam/sender），无运行时切换（ADR-0007）。
-- **菜单/字典配置页**：放 `shared/pages`，`shared/api/app-context.ts` 读取登录锁定的 console，`menuApi`/`dictApi` 据此拼 `/iam` 或 `/sender` 前缀；React Query 缓存键带 console 隔离，避免跨控制台串数据。
+- **统一登录与控制台选择**：只有 `/login` 一个登录页（`shared/pages/LoginPage`），IAM 为唯一身份权威。登录成功跳 `/console-select`，由 `CONSOLE_REGISTRY` 选择进入哪个控制台并锁定 `app_console`（iam/sender）；控制台由路由子树确定，深链接直达也能正确设置前缀。sender 不再有登录端点与机机代登录链路（ADR-0008）。
+- **数据范围切换**：`shared/context/DataScopeContext.tsx` 从 `GetMyProfile.applications`（接入集合）渲染左上角下拉，选中 code 持久化到 `data_scope_app_code`，经请求层 `X-Fa-App-Code` 头下发；切换时 `queryClient.clear()` 防串数据。控制台（功能）与数据范围（归属）正交。
+- **菜单/字典配置页**：放 `shared/pages`，`shared/api/app-context.ts` 读取当前 console，`menuApi`/`dictApi` 据此拼 `/iam` 或 `/sender` 前缀；React Query 缓存键带 console 隔离，避免跨控制台串数据。
 - **Vite 代理**：`/sender/` → `:8081`；因路由 path 与 API 前缀重合，`bypass` 放过 `text/html` 导航请求给 SPA。
 
 ### 7.8 第 7 步：启动验证
@@ -390,14 +390,15 @@ cd sender-service && go run . grpc  # :9091（启动跑迁移）
 cd sender-service && go run . http  # :8081
 cd frontend-service/admin-web && pnpm dev   # :5173
 
-# 先登录 sender 控制台取锁定 sender 应用的 token（admin/admin123 仅示例）
-curl -X POST http://127.0.0.1:8081/sender/authentication/password-auth \
+# 统一登录：只有 IAM 登录端点（admin/admin123 仅示例）
+curl -X POST http://127.0.0.1:8080/authentication/password-auth \
   -H "Content-Type: application/json" \
   -d '{"identifier":"admin","password":"admin123"}'
+# 返回的 token 由前端保存；浏览器登录后到 /console-select 选「消息中心」进入 sender 控制台。
 
-# 发消息（需带登录态 JWT，经 sender 透传 IAM 判 sender.record.send 码）
+# 发消息（带登录态 JWT + 数据范围 appCode，经 sender 透传 IAM 判 sender.record.send 码并校验接入集合）
 curl -X POST http://127.0.0.1:8081/sender/messages \
-  -H "Content-Type: application/json" -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" -H "Authorization: Bearer <token>" -H "X-Fa-App-Code: sender" \
   -d '{"recipient":"a@b.com","content":"hello","channel":"email"}'
 ```
 
@@ -475,7 +476,7 @@ export const messageApi = {
 };
 ```
 
-**菜单/字典 api 例外**：`shared/api/menu-dict-api.ts` 的 `menuApi`/`dictApi` 前缀由登录锁定的 console 决定——`shared/api/app-context.ts` 存 `app_console`（iam/sender），登录页 `setConsole` 写入，React Query 缓存键一律带 console。因此同一套菜单/字典配置页，从 IAM 登录页进入读写 IAM 库，从 sender 登录页进入读写 sender 库；控制台内不提供切换（ADR-0007）。
+**菜单/字典 api 例外**：`shared/api/menu-dict-api.ts` 的 `menuApi`/`dictApi` 前缀由当前 console 决定——`shared/api/app-context.ts` 的 `app_console`（iam/sender）由控制台选择页/路由子树 `setConsole` 写入，React Query 缓存键一律带 console。因此同一套菜单/字典配置页，进入 IAM 控制台读写 IAM 库，进入 sender 控制台读写 sender 库；菜单/字典跟控制台走，与左上角的数据范围（appCode）正交（ADR-0008）。
 
 ### 9.2 页面模式
 
@@ -483,7 +484,7 @@ export const messageApi = {
 
 ### 9.3 路由与菜单（服务端下发 + 前端按码过滤）
 
-`app/router.tsx` 用 `createBrowserRouter`，`/`（IAM，`AuthWrapper consoleKind="iam"`）与 `/sender`（sender，`consoleKind="sender"`）是两棵独立受保护子树，共用 `IndexPage` 布局；各自登录页 `/login` 与 `/sender/login` 在外层。各服务业务子树独立成文件（如 `sender/router.tsx`）。
+`app/router.tsx` 用 `createBrowserRouter`，`/`（IAM，`AuthWrapper consoleKind="iam"`）与 `/sender`（sender，`consoleKind="sender"`）是两棵独立受保护子树，共用 `IndexPage` 布局；外层只有统一登录页 `/login` 与控制台选择页 `/console-select`（无 `/sender/login`）。各服务业务子树独立成文件（如 `sender/router.tsx`）。
 
 菜单数据来自服务端 `menuApi.listMyTree()`（纯码门槛，服务端返回当前应用全量启用菜单，不做角色过滤，ADR-0004）；前端按菜单 `permission_code` 与用户权限快照过滤可见性。菜单树按 `menu.path` **精确匹配**路由 path，故路由 path 必须与菜单种子写死一致（sender 即 `/sender/records`、`/sender/templates`，不可改）。
 

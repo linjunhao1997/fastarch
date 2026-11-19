@@ -43,27 +43,38 @@ func NewSignatureStore(db *gorm.DB, rdb *redis.Client, aes *cipher.AESGCM, windo
 	return &SignatureStore{db: db, rdb: rdb, aes: aes, windowSeconds: windowSeconds}
 }
 
+// AuthenticateIdentity 完成验签并返回 (绑定账号 id, 凭证归属应用 id)。
+// 归属应用供 AK/SK 机机调用决定数据归属；权限仍由绑定账号快照判定。
+func (s *SignatureStore) AuthenticateIdentity(ctx context.Context, md metadata.MD) (int64, int64, error) {
+	return s.authenticate(ctx, md)
+}
+
 // Authenticate 按规范第 4 节顺序完成验签（失败即拒绝 fail-closed），通过后返回绑定账号 id。
 // 返回的 *SignatureError 为语义化验签错误（Unauthenticated + ErrorInfo reason）；
 // 其余 error 为内部故障（Redis/DB/解密异常），由调用方统一按 fail-closed 处理。
 func (s *SignatureStore) Authenticate(ctx context.Context, md metadata.MD) (int64, error) {
+	accountId, _, err := s.authenticate(ctx, md)
+	return accountId, err
+}
+
+func (s *SignatureStore) authenticate(ctx context.Context, md metadata.MD) (int64, int64, error) {
 	// 1. 四要素头齐全（signature-method 可省，出现则必须为 HMAC-SHA256）
 	accessKey := firstMetadataValue(md, MetadataAccessKey)
 	timestamp := firstMetadataValue(md, MetadataTimestamp)
 	nonce := firstMetadataValue(md, MetadataNonce)
 	signature := firstMetadataValue(md, MetadataSignature)
 	if accessKey == "" || timestamp == "" || nonce == "" || signature == "" {
-		return 0, ErrSignatureMissing
+		return 0, 0, ErrSignatureMissing
 	}
 	if method := firstMetadataValue(md, MetadataSignatureMethod); method != "" && method != SignatureMethodHMACSHA256 {
-		return 0, ErrSignatureMissing
+		return 0, 0, ErrSignatureMissing
 	}
 	// 网关内部透传要素：规范化串所需（gRPC 侧无法还原 HTTP 原始请求）
 	originalMethod := firstMetadataValue(md, MetadataOriginalMethod)
 	originalURI := firstMetadataValue(md, MetadataOriginalURI)
 	bodyDigest := firstMetadataValue(md, MetadataBodyDigest)
 	if originalMethod == "" || originalURI == "" || bodyDigest == "" {
-		return 0, ErrSignatureMissing
+		return 0, 0, ErrSignatureMissing
 	}
 
 	// 2. AK 存在（唯一索引点查）
@@ -73,26 +84,26 @@ func (s *SignatureStore) Authenticate(ctx context.Context, md metadata.MD) (int6
 		Where(model.AccessCredentialColumnAccessKey, accessKey).
 		First(&credential).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return 0, ErrSignatureKeyUnknown
+		return 0, 0, ErrSignatureKeyUnknown
 	}
 	if err != nil {
 		slog.Error("load access credential failed", "access_key", accessKey, "error", err)
-		return 0, errors.New("load access credential failed")
+		return 0, 0, errors.New("load access credential failed")
 	}
 
 	// 3. 凭证启用
 	if credential.Status != constant.AccessCredentialStatusEnabled {
-		return 0, ErrSignatureKeyDisabled
+		return 0, 0, ErrSignatureKeyDisabled
 	}
 
 	// 4. 未过 expire_time
 	if credential.ExpireTime != nil && credential.ExpireTime.Before(time.Now()) {
-		return 0, ErrSignatureKeyExpired
+		return 0, 0, ErrSignatureKeyExpired
 	}
 
 	// 5. 时间戳窗口
 	if !IsTimestampInWindow(timestamp, time.Now(), s.windowSeconds) {
-		return 0, ErrSignatureTimestampExpired
+		return 0, 0, ErrSignatureTimestampExpired
 	}
 
 	// 6. nonce 防重放：SETNX 原子占位（多实例一致，R4）；Redis 故障 fail-closed
@@ -100,27 +111,27 @@ func (s *SignatureStore) Authenticate(ctx context.Context, md metadata.MD) (int6
 	ok, err := s.rdb.SetNX(ctx, nonceKey, "1", time.Duration(s.windowSeconds)*time.Second).Result()
 	if err != nil {
 		slog.Error("nonce replay check failed", "access_key", accessKey, "error", err)
-		return 0, errors.New("nonce replay check unavailable")
+		return 0, 0, errors.New("nonce replay check unavailable")
 	}
 	if !ok {
-		return 0, ErrSignatureNonceReplay
+		return 0, 0, ErrSignatureNonceReplay
 	}
 
 	// 7. HMAC 签名一致（常数时间比较）；解密失败为配置/数据异常，不透出细节
 	secretKey, err := s.aes.Decrypt(credential.SecretKeyCipher)
 	if err != nil {
 		slog.Error("decrypt secret key failed", "access_key", accessKey, "error", err)
-		return 0, errors.New("credential secret decrypt failed")
+		return 0, 0, errors.New("credential secret decrypt failed")
 	}
 	canonicalQuery := CanonicalizeQuery(firstMetadataValue(md, MetadataOriginalQuery))
 	stringToSign := BuildStringToSign(originalMethod, originalURI, canonicalQuery, accessKey, timestamp, nonce, bodyDigest)
 	if !VerifySignature(stringToSign, string(secretKey), signature) {
-		return 0, ErrSignatureMismatch
+		return 0, 0, ErrSignatureMismatch
 	}
 
 	s.touchLastUsed(credential)
 
-	return credential.UserId, nil
+	return credential.UserId, credential.ApplicationId, nil
 }
 
 // touchLastUsed 节流更新 last_used_time（R6）：Redis SETNX EX 60 控制每凭证每分钟

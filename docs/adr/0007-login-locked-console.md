@@ -1,4 +1,11 @@
+---
+status: superseded
+superseded_by: 0008-admitted-app-data-scope
+---
+
 # 登录即锁定应用：单工程双控制台，取消运行时切换
+
+> ⚠️ **已取代（2026-11-19）**：本文的「登录锁定应用」「无运行时切换」「双登录页 + 机机代登录」三条裁决已被 ADR-0008 推翻——改为统一 IAM 登录 → 选控制台 → 左上角切换数据范围；sender 登录端点与机机代登录链路整体删除。「单工程双控制台」的工程结构保留。以下保留原文作为历史记录。
 
 > 2026-11-18 用户裁决。取代 ADR-0006「功能边界零改动」一条：`ListMyApplications/SelectApplication` 及 Redis `app:ctx:{jti}` 运行时映射退役，应用上下文在登录时固化为签名 JWT claim。
 

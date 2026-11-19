@@ -102,6 +102,28 @@
         }
       }
     },
+    "v1ApplicationSummary": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "title": "t_application.id（string 编码，避免 JS 精度丢失）"
+        },
+        "code": {
+          "type": "string",
+          "title": "服务段命名空间（iam/sender…）"
+        },
+        "name": {
+          "type": "string",
+          "title": "展示名"
+        },
+        "status": {
+          "type": "string",
+          "title": "enabled / disabled"
+        }
+      },
+      "title": "应用展示摘要（跨服务通用，只读回传；仅含展示字段，不含 app_id/密钥等机器字段）。\n用于让列表/详情直接渲染\"归属应用\"，避免前端二次查询应用目录。"
+    },
     "v1GetMyProfileResponse": {
       "type": "object",
       "properties": {
@@ -142,6 +164,14 @@
         "isAdmin": {
           "type": "boolean",
           "title": "是否 admin 角色（只读回传，服务端派生）：前端据此锁定所属应用等数据边界 UI"
+        },
+        "applications": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1ApplicationSummary"
+          },
+          "title": "用户可切换的数据归属应用清单（home + 准入绑定）：登录后应用选择页与左上角\r\n数据范围下拉的唯一数据源。admin 返回全部启用应用。"
         }
       }
     },

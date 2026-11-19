@@ -152,7 +152,8 @@ export const applicationApi = {
     request<void>(`/application/applications/${id}`, { method: 'DELETE' }),
 };
 
-export const getMyPermissions = () => request<GetMyPermissionsResponse>('/authorization/my-permissions');
+export const getMyPermissions = () =>
+  request<GetMyPermissionsResponse>('/authorization/my-permissions', { skipDataScope: true });
 
 interface ListAccessCredentialsResponse {
   page: Page;
@@ -206,9 +207,13 @@ export const accessCredentialApi = {
     request<void>(`/authentication/access-credentials/${id}`, { method: 'DELETE' }),
 };
 
-/** 个人信息：当前登录用户基本信息 + 所属应用列表（US2，页面接入见 US3） */
+/**
+ * 个人信息：当前登录用户基本信息 + 可接入应用列表。
+ * skipDataScope：本接口按登录态返回接入集合，不按数据归属过滤；携带陈旧 appCode
+ * 会被入站接入校验拒绝，导致「先拿接入集合再校验 appCode」的启动死锁。
+ */
 export const profileApi = {
-  get: () => request<MyProfile>('/authentication/my-profile'),
+  get: () => request<MyProfile>('/authentication/my-profile', { skipDataScope: true }),
 };
 
 /**

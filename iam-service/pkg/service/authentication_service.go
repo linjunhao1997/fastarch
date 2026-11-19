@@ -26,66 +26,16 @@ import (
 	"gorm.io/gorm"
 )
 
-// defaultApplicationCode 是人机登录未携带 AK/SK 时的回退值：IAM 自有控制台。
-const defaultApplicationCode = "iam"
-
-// resolveLoginApplicationCode 解析登录目标应用 code（ADR 0007 补充裁决）：
-//   - 入站携带 AK/SK：验签通过后以机机账号所属应用为准，调用方自报的
-//     application_code 一律忽略（应用身份不能由调用方声明）；
-//   - 未携带 AK/SK：IAM 自有控制台登录，锁定 iam 应用。
-//
-// 机机账号只证明“谁在调”，不代替用户凭据；用户准入仍由 resolveLoginApplication 校验。
-func (a AuthenticationService) resolveLoginApplicationCode(ctx context.Context) (string, error) {
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok || len(md.Get(auth.MetadataAccessKey)) == 0 {
-		return defaultApplicationCode, nil
-	}
-	if a.signatures == nil {
-		return "", status.Error(codes.Unauthenticated, "service authentication unavailable")
-	}
-	serviceAccountId, err := a.signatures.Authenticate(ctx, md)
-	if err != nil {
-		slog.Warn("service authentication failed on password auth", "error", err)
-		return "", status.Error(codes.Unauthenticated, "service authentication failed")
-	}
-	var serviceAccount model.User
-	if err := a.db.WithContext(ctx).
-		Select(model.UserFields).
-		Where(model.UserColumnId, serviceAccountId).
-		First(&serviceAccount).Error; err != nil {
-		slog.Warn("service account lookup failed", "account_id", serviceAccountId, "error", err)
-		return "", status.Error(codes.Unauthenticated, "service account not found")
-	}
-	if serviceAccount.HomeApplicationId <= 0 {
-		return "", status.Error(codes.FailedPrecondition, "service account has no home application")
-	}
-	var application model.Application
-	if err := a.db.WithContext(ctx).
-		Select(model.ApplicationFields).
-		Where(model.ApplicationColumnId, serviceAccount.HomeApplicationId).
-		First(&application).Error; err != nil {
-		slog.Warn("service application lookup failed", "application_id", serviceAccount.HomeApplicationId, "error", err)
-		return "", status.Error(codes.FailedPrecondition, "service application not found")
-	}
-	return application.Code, nil
-}
-
 type AuthenticationService struct {
-	db         *gorm.DB
-	rdb        *redis.Client
-	signatures *auth.SignatureStore
+	db  *gorm.DB
+	rdb *redis.Client
 }
 
 var _ iam_v1.AuthenticationServiceServer = (*AuthenticationService)(nil)
 
-// NewAuthenticationService 构造认证服务（无 AK/SK 验签器，仅用于人机登录测试）。
+// NewAuthenticationService 构造统一登录认证服务。
 func NewAuthenticationService(db *gorm.DB, rdb *redis.Client) iam_v1.AuthenticationServiceServer {
 	return &AuthenticationService{db: db, rdb: rdb}
-}
-
-// NewAuthenticationServiceWithSignature 构造支持机机代登录的认证服务。
-func NewAuthenticationServiceWithSignature(db *gorm.DB, rdb *redis.Client, signatures *auth.SignatureStore) iam_v1.AuthenticationServiceServer {
-	return &AuthenticationService{db: db, rdb: rdb, signatures: signatures}
 }
 
 // PasswordAuth 密码登录（011 模型：t_user + bcrypt 摘要）。
@@ -139,16 +89,20 @@ func (a AuthenticationService) PasswordAuth(ctx context.Context, request *iam_v1
 	if err = a.rdb.Set(ctx, constant.GetAccountPermissionKey(user.Id), jsonData, constant.AccountPermissionSnapshotTTL).Err(); err != nil {
 		return nil, err
 	}
-	// 应用锁定（ADR 0007 补充裁决）：机机代登录时目标应用由 AK/SK 验签后的服务账号
-	// 所属应用决定；人机登录缺省 iam。调用方自报的 application_code 不参与决策。
-	// 随后仍按 code 查启用应用并校验用户准入（admin 旁路；非 admin 须所属或准入绑定）。
-	appCode, err := a.resolveLoginApplicationCode(ctx)
+	// 统一登录：令牌只承载身份与接入集合，不携带应用上下文。
+	// 菜单/字典归属宿主固定 appId（拦截器注入），数据归属由请求头 appCode 选择，
+	// 控制台由前端登录后选择；调用方自报的 application_code 一律忽略。
+	// 接入集合快照写入 JWT：运行时数据归属校验以此为准（授权来自签名，
+	// header appCode 仅是选择信号）。home 隐式准入 + 显式绑定，一次查库。
+	admittedAppIds, err := loadAdmittedAppIds(ctx, a.db, user.Id, user.HomeApplicationId)
 	if err != nil {
+		slog.Warn("load admitted apps for jwt failed", "account_id", user.Id, "error", err)
 		return nil, err
 	}
-	appId, err := resolveLoginApplication(ctx, a.db, user.Id, user.HomeApplicationId, isAdmin, appCode)
-	if err != nil {
-		return nil, err
+	// ADR 0008：非 admin 只需属于某应用即可登录——隐含必须至少接入一个应用。
+	// 令牌不再携带应用上下文，此处是唯一的登录期 fail-closed 门槛（admin 旁路）。
+	if !isAdmin && len(admittedAppIds) == 0 {
+		return nil, ErrApplicationAccessDenied
 	}
 	jti := cast.ToString(krand.NewID())
 	jwtStr, err := auth.GenerateJWT(auth.ClaimsParam{
@@ -157,7 +111,7 @@ func (a AuthenticationService) PasswordAuth(ctx context.Context, request *iam_v1
 		ExpirationTime: expirationTime,
 		IsAdmin:        isAdmin,
 		Jti:            jti,
-		ApplicationId:  appId,
+		AdmittedAppIds: admittedAppIds,
 	})
 
 	accessTokenCookie := http.Cookie{
@@ -196,6 +150,12 @@ func (a AuthenticationService) GetMyProfile(ctx context.Context, empty *emptypb.
 		slog.Warn("get my profile failed", "account_id", accountId, "error", err)
 		return nil, err
 	}
+	isAdmin := auth.IsAdminFromContext(ctx)
+	admittedApps, err := loadAdmittedApplicationSummaries(ctx, a.db, user.Id, user.HomeApplicationId, isAdmin)
+	if err != nil {
+		slog.Warn("load admitted applications for profile failed", "account_id", accountId, "error", err)
+		return nil, err
+	}
 	return &iam_v1.GetMyProfileResponse{
 		Id:                cast.ToString(user.Id),
 		Username:          user.Username,
@@ -205,6 +165,7 @@ func (a AuthenticationService) GetMyProfile(ctx context.Context, empty *emptypb.
 		CreatedBy:         user.CreatedBy,
 		CreateTime:        timestamppb.New(user.CreateTime),
 		HomeApplicationId: cast.ToString(user.HomeApplicationId),
-		IsAdmin:           auth.IsAdminFromContext(ctx),
+		IsAdmin:           isAdmin,
+		Applications:      admittedApps,
 	}, nil
 }

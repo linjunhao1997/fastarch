@@ -1,5 +1,3 @@
-import { getConsole } from './app-context';
-
 export class UnauthorizedError extends Error {
   constructor(message?: string) {
     super(message || '请重新登录');
@@ -22,6 +20,11 @@ export interface RequestOptions {
   body?: unknown;
   headers?: Record<string, string>;
   skipToken?: boolean;
+  /**
+   * 不带数据范围头。自描述接口（profile / my-permissions / my-menu-tree）按登录态
+   * 返回，不按数据归属过滤；若携带陈旧 appCode 会被接入校验拒绝，导致启动死锁。
+   */
+  skipDataScope?: boolean;
 }
 
 export function getCookie(name: string): string | null {
@@ -51,8 +54,35 @@ function extractErrorMessage(data: unknown): string {
   return '';
 }
 
+/** 当前数据范围应用 code（由 DataScopeProvider 设置，模块级避免循环依赖）。 */
+let currentDataScopeCode = '';
+const DATA_SCOPE_STORAGE_KEY = 'data_scope_app_code';
+
+export function setRequestDataScope(code: string): void {
+  currentDataScopeCode = code;
+}
+
+/** 登录/登出时清空范围：避免上一会话的 appCode 撞进新用户的接入集合。 */
+export function clearRequestDataScope(): void {
+  currentDataScopeCode = '';
+  try {
+    localStorage.removeItem(DATA_SCOPE_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+function resolveDataScopeCode(): string {
+  if (currentDataScopeCode) return currentDataScopeCode;
+  try {
+    return localStorage.getItem(DATA_SCOPE_STORAGE_KEY) ?? '';
+  } catch {
+    return '';
+  }
+}
+
 export async function request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
-  const { method = 'GET', body, headers = {}, skipToken = false } = options;
+  const { method = 'GET', body, headers = {}, skipToken = false, skipDataScope = false } = options;
 
   const token = getStoredToken();
 
@@ -62,6 +92,12 @@ export async function request<T>(endpoint: string, options: RequestOptions = {})
 
   if (!skipToken && token && typeof token === 'string' && token.trim().length > 0) {
     defaultHeaders['Authorization'] = `Bearer ${token}`;
+  }
+  // 数据范围选择信号：服务端校验 ∈ 接入集合后才作为数据归属。
+  // skipToken（登录）/ skipDataScope（自描述接口）不带，避免陈旧 appCode 撞接入集合。
+  const scopeCode = skipToken || skipDataScope ? '' : resolveDataScopeCode();
+  if (scopeCode) {
+    defaultHeaders['X-Fa-App-Code'] = scopeCode;
   }
 
   const response = await fetch(endpoint, {
@@ -85,10 +121,10 @@ export async function request<T>(endpoint: string, options: RequestOptions = {})
 
     if (response.status === 401) {
       if (!skipToken) {
+        // 统一登录：所有控制台的 401 都回 IAM 登录页，登录后再选控制台。
+        // redirect 保留站内原路径，便于登录后回到深链接（由控制台选择页转发）。
         const redirectPath = encodeURIComponent(window.location.pathname + window.location.search);
-        // 按当前控制台回各自登录页（ADR 0007：IAM 与 sender 各有独立登录页）
-        const loginPath = getConsole() === 'sender' ? '/sender/login' : '/login';
-        window.location.assign(`${loginPath}?redirect=${redirectPath}`);
+        window.location.assign(`/login?redirect=${redirectPath}`);
       }
       // 使用服务器返回的错误消息，如果没有则使用默认消息
       throw new UnauthorizedError(serverMessage || undefined);

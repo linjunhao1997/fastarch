@@ -15,7 +15,9 @@ func Execute() {
 			"grpc.port":            9091,
 			"http.addr":            "127.0.0.1",
 			"http.port":            8081,
-			"sender.application_id": 2,
+			"sender.application_id":   2,
+			"sender.application_code": "sender",
+			"sender.application_name": "消息中心",
 		}),
 	)
 	a.AddCommand("grpc", "启动gRPC服务器", server.RunGrpcServer)

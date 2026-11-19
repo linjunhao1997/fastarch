@@ -5,6 +5,8 @@
 
 // ============ 登录 ============
 export const LOGIN_PATH = '/login';
+/** 统一登录成功后选择进入哪个控制台（iam / sender） */
+export const CONSOLE_SELECT_PATH = '/console-select';
 
 // ============ 账号管理 ============
 export const ACCOUNT_LIST_PATH = '/account_management/account_list';
@@ -37,6 +39,7 @@ export const RESOURCE_MANAGEMENT_PATH = '/authorization_management/resource_mana
  */
 export const ROUTE_PATHS = {
   login: LOGIN_PATH,
+  consoleSelect: CONSOLE_SELECT_PATH,
   account: {
     list: ACCOUNT_LIST_PATH,
     create: CREATE_ACCOUNT_PATH,

@@ -532,3 +532,43 @@ func TestAccessCredentialHomeIsolation(t *testing.T) {
 		t.Fatalf("system list = %d items, want 2", len(all.AccessCredentials))
 	}
 }
+
+// TestCredentialApplicationOwnership 凭证归属应用语义：显式归属须 ∈ 绑定用户接入集合，
+// 且响应的 application 摘要取凭证自身归属（非绑定用户 home）。
+func TestCredentialApplicationOwnership(t *testing.T) {
+	service, _ := newTestCredentialService(t, 20)
+	// 操作者 42 与绑定用户 1 均为 home=testAppId；额外给绑定用户接入 order 应用。
+	createCredentialTestUser(t, service.db, 1, "cred-owner", 1)
+	createTestApp(t, service.db, testAppIdOrder, "order", model.StatusEnabled)
+	if err := service.db.Create(&model.RUserApplication{UserId: 1, ApplicationId: testAppIdOrder}).Error; err != nil {
+		t.Fatalf("bind order app: %v", err)
+	}
+
+	// 显式归属到已接入的 order：成功，响应摘要为 order 而非 home(iam)。
+	resp, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{
+		UserId: 1, ApplicationId: testAppIdOrder,
+	})
+	if err != nil {
+		t.Fatalf("create with admitted app: %v", err)
+	}
+	if resp.Credential.Application == nil || resp.Credential.Application.Code != "order" {
+		t.Fatalf("application summary = %+v, want code=order", resp.Credential.Application)
+	}
+	var row model.AccessCredential
+	if err := service.db.Where(model.AccessCredentialColumnId, parseCredentialID(t, resp.Credential.Id)).First(&row).Error; err != nil {
+		t.Fatalf("load row: %v", err)
+	}
+	if row.ApplicationId != testAppIdOrder {
+		t.Fatalf("stored application_id = %d, want %d", row.ApplicationId, testAppIdOrder)
+	}
+
+	// 归属到用户 1 未接入的第三应用：拒绝（越界）。
+	const unboundAppId = int64(903)
+	createTestApp(t, service.db, unboundAppId, "approval", model.StatusEnabled)
+	_, err = service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{
+		UserId: 1, ApplicationId: unboundAppId,
+	})
+	if !errors.Is(err, ErrCredentialAppNotAdmitted) {
+		t.Fatalf("create with un-admitted app error = %v, want %v", err, ErrCredentialAppNotAdmitted)
+	}
+}

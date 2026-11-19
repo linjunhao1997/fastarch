@@ -6,6 +6,7 @@ package model
 const (
 	AccessCredentialColumnId           = "id"
 	AccessCredentialColumnUserId       = "user_id"
+	AccessCredentialColumnApplicationId = "application_id"
 	AccessCredentialColumnExpireTime   = "expire_time"
 	AccessCredentialColumnLastUsedTime = "last_used_time"
 	AccessCredentialColumnCreateTime   = "create_time"

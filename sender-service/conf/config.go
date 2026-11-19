@@ -1,8 +1,6 @@
 package conf
 
 import (
-	"fmt"
-
 	"github.com/linjunhao1997/contrib/pkg/config"
 )
 
@@ -21,18 +19,11 @@ type Config struct {
 type Sender struct {
 	// ApplicationId 是 sender 应用在 IAM 注册表中的固定 id（迁移 000010 为 2）。
 	ApplicationId int64 `mapstructure:"application_id"`
+	// ApplicationCode / ApplicationName 是 sender 应用的展示标识（与 IAM 种子 000010 一致），
+	// 用于消息模板/发送记录响应回填"归属应用"摘要，避免跨服务查询。
+	ApplicationCode string `mapstructure:"application_code"`
+	ApplicationName string `mapstructure:"application_name"`
 	// IamAddr 是 IAM gRPC 地址，供入站判权薄客户端透传 JWT 调 CheckPermission。
+	// 统一登录后 sender 不再代登录，无需 IAM 服务账号 AK/SK。
 	IamAddr string `mapstructure:"iam_addr"`
-	// IAMAccessKey / IAMSecretKey 是代登录用的机机账号凭证。
-	// IAM 验签后从该账号所属应用推导目标应用，调用方不再自报应用编码。
-	IAMAccessKey string `mapstructure:"iam_access_key"`
-	IAMSecretKey string `mapstructure:"iam_secret_key"`
-}
-
-// ResolveIAMServiceAuth 校验并返回配置中的机机账号凭证，缺失则 fail-fast。
-func (s *Sender) ResolveIAMServiceAuth() (accessKey, secretKey string, err error) {
-	if s.IAMAccessKey == "" || s.IAMSecretKey == "" {
-		return "", "", fmt.Errorf("sender.iam_access_key and sender.iam_secret_key are required for login delegation")
-	}
-	return s.IAMAccessKey, s.IAMSecretKey, nil
 }

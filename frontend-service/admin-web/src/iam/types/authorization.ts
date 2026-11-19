@@ -1,3 +1,5 @@
+import type { ApplicationSummary } from '@/shared/types';
+
 /** 权限类型：菜单 / HTTP 接口 / gRPC 接口（创建后不可变） */
 export type PermissionKind = 'menu' | 'http_api' | 'grpc';
 
@@ -23,14 +25,6 @@ export interface Resource {
   version: number;
   displayOrder: number;
   application?: ApplicationSummary;
-}
-
-export interface ApplicationSummary {
-  id: string;
-  name: string;
-  code: string;
-  enabledStatus: string;
-  description: string;
 }
 
 export interface ResourceTreeNode {
@@ -66,9 +60,9 @@ export interface UpdateResourceRequest {
 export interface Permission {
   id: string;
   name: string;
-  applicationId: string;
   permissionCode: string;
   enabledStatus: string;
+  description: string;
   version: number;
   kind: PermissionKind;
   resourceList: Resource[];
@@ -76,6 +70,8 @@ export interface Permission {
   updatedBy: string;
   createTime: string;
   updateTime: string;
+  /** 归属应用展示摘要（后端只读回填） */
+  application?: ApplicationSummary;
 }
 
 export interface CreatePermissionRequest {

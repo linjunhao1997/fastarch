@@ -57,7 +57,9 @@ const contextIsAdmin = "auth.is_admin"
 // 双执行域判定（specs/005-typed-permission-model research.md D3）：
 //   - metadata 携带网关标记（gwlib 注入 x-gateway-origin: http）→ 校验 "http:<full_method>" 键；
 //   - 无标记（服务间直连 gRPC）→ 校验 "rpc:<full_method>" 键。
-func Interceptor(rdb *redis.Client, load PermissionLoader, store *SignatureStore) grpc.UnaryServerInterceptor {
+// hostAppId 是宿主固定 appId（iam=1），注入 ctx 供菜单/字典与管理域隔离使用；
+// 与令牌无关，不随用户 home 或请求 appCode 变化。
+func Interceptor(rdb *redis.Client, load PermissionLoader, store *SignatureStore, resolver AppResolver, hostAppId int64) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
 		if _, ok := notAuthMethod[info.FullMethod]; ok {
 			return handler(ctx, req)
@@ -70,7 +72,7 @@ func Interceptor(rdb *redis.Client, load PermissionLoader, store *SignatureStore
 
 		// 签名验签分支（specs/009-ak-sk-auth）：请求携带 AK 头即走 AK/SK 轨道
 		if len(md.Get(MetadataAccessKey)) > 0 {
-			return authenticateBySignature(ctx, rdb, load, store, md, info, handler, req)
+			return authenticateBySignature(ctx, rdb, load, store, md, info, handler, req, hostAppId)
 		}
 
 		// JWT 轨道（既有逻辑，FR-010a 双轨之另一轨）
@@ -86,8 +88,19 @@ func Interceptor(rdb *redis.Client, load PermissionLoader, store *SignatureStore
 		newCtx := context.WithValue(ctx, contextAccountId, accountId)
 		newCtx = context.WithValue(newCtx, contextIsAdmin, isAdmin)
 		newCtx = WithTokenJti(newCtx, claims.ID)
-		// 应用上下文（ADR 0007）：登录已锁定，appId 直接取签名 claim，可靠不可变。
-		newCtx = WithApplicationId(newCtx, claims.ApplicationId)
+		// 宿主固定 appId（菜单/字典与管理域隔离用）：来自服务配置，不取令牌 claim。
+		newCtx = WithApplicationId(newCtx, hostAppId)
+
+		// 数据归属应用：请求头 appCode 是选择信号，须校验 ∈ 签名 claim 的接入集合。
+		// 未带 appCode 时不注入，服务层按 home（默认落地应用）回落，兼容内部调用。
+		appCode := AppCodeFromMetadata(md)
+		if appCode != "" {
+			dataAppId, err := resolveAppCode(appCode, claims, resolver)
+			if err != nil {
+				return nil, err
+			}
+			newCtx = WithDataAppId(newCtx, dataAppId)
+		}
 
 		if isAdmin {
 			return handler(newCtx, req)
@@ -108,12 +121,12 @@ func Interceptor(rdb *redis.Client, load PermissionLoader, store *SignatureStore
 }
 
 // authenticateBySignature 签名验签分支：验签通过后以绑定用户身份复用统一权限判定。
-func authenticateBySignature(ctx context.Context, rdb *redis.Client, load PermissionLoader, store *SignatureStore, md metadata.MD, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler, req any) (any, error) {
+func authenticateBySignature(ctx context.Context, rdb *redis.Client, load PermissionLoader, store *SignatureStore, md metadata.MD, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler, req any, hostAppId int64) (any, error) {
 	if store == nil {
 		return nil, status.Error(codes.Unauthenticated, "signature authentication is not configured")
 	}
 
-	accountId, err := store.Authenticate(ctx, md)
+	accountId, credentialAppId, err := store.AuthenticateIdentity(ctx, md)
 	if err != nil {
 		var sigErr *SignatureError
 		if errors.As(err, &sigErr) {
@@ -135,6 +148,12 @@ func authenticateBySignature(ctx context.Context, rdb *redis.Client, load Permis
 	}
 
 	newCtx := WithAccountId(ctx, accountId)
+	// 宿主固定 appId（菜单/字典与管理域隔离用）：来自服务配置，与令牌无关。
+	newCtx = WithApplicationId(newCtx, hostAppId)
+	// 机机调用的数据归属来自凭证自身的归属应用（AK/SK 签名可信，非 header 自报）。
+	if credentialAppId > 0 {
+		newCtx = WithDataAppId(newCtx, credentialAppId)
+	}
 
 	// 仅需认证的 self-scoped 方法：不加载快照、不做权限判定
 	if _, ok := authOnlyMethods[info.FullMethod]; ok {

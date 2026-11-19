@@ -103,7 +103,7 @@ func TestCheckPermissionForwardsJWT(t *testing.T) {
 	token := jwtFor(`{"userId":"7"}`)
 	ctx := ctxWithJWT(token)
 
-	ok, err := c.CheckPermission(ctx, "sender.record.send")
+	ok, _, err := c.CheckPermission(ctx, "sender.record.send")
 	if err != nil || !ok {
 		t.Fatalf("check: ok=%v err=%v", ok, err)
 	}

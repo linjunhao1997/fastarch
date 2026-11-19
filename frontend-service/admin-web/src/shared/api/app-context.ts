@@ -1,11 +1,9 @@
 /**
- * 当前控制台的读取点（登录即锁定，ADR 0007）。
+ * 当前控制台的读取点。
  *
- * 背景：管理员经各自应用的登录页登录后，应用上下文（application_code）即锁定，
- * 无运行时切换。菜单/字典 API 前缀由此决定：iam 应用走 /iam/...，sender 应用走
- * /sender/...。
- *
- * 时序约束：登录成功后由登录页调用 setConsole，控制台内所有请求据此拼前缀。
+ * 统一登录后由「控制台选择页」或受保护路由子树锁定 console（iam/sender），
+ * 控制台内不再切换。菜单/字典 API 前缀由此决定：iam 走 /iam/...，sender 走
+ * /sender/...。数据范围（appCode）与控制台正交，见 DataScopeContext。
  */
 export type ConsoleKinds = 'iam' | 'sender';
 
@@ -15,6 +13,24 @@ export const CONSOLE_LABELS: Record<ConsoleKinds, string> = {
   iam: '身份认证平台',
   sender: '消息中心',
 };
+
+export interface ConsoleDefinition {
+  code: ConsoleKinds;
+  label: string;
+  /** 控制台根路由（登录后选择控制面板时跳转） */
+  path: string;
+  description: string;
+}
+
+/**
+ * 可进入的控制台清单。控制台是编译期概念（路由子树 + 前缀），新增控制台必须同时
+ * 登记路由与本表；因此此处作为单一事实源，供「登录后选择控制台」页渲染。
+ * IAM 中注册的应用决定的是「数据范围」，不是「控制台」，两者不要混用。
+ */
+export const CONSOLE_REGISTRY: readonly ConsoleDefinition[] = [
+  { code: 'iam', label: CONSOLE_LABELS.iam, path: '/', description: '用户、应用、认证与权限管理' },
+  { code: 'sender', label: CONSOLE_LABELS.sender, path: '/sender', description: '消息模板与发送记录' },
+] as const;
 
 let currentConsole: ConsoleKinds;
 

@@ -183,6 +183,9 @@ message Permission {
   google.protobuf.Timestamp create_time = 9;  // 创建时间
   google.protobuf.Timestamp update_time = 10; // 修改时间
   reserved 11, 12, 13;  // application_id / kind / resource_list 已废除
+  // 归属应用展示摘要（只读回传，便于列表/详情直接渲染，免二次查询）。
+  // 语义：码归属应用（管理数据边界，ADR 0006）；与全局授权词汇语义正交。
+  common.v1.ApplicationSummary application = 14;
 }
 
 // 角色信息
@@ -201,6 +204,8 @@ message Role {
   repeated PermissionSummary permission_list = 11;
   reserved 12;  // 历史字段号，不复用
   int64 application_id = 13;  // 角色归属应用（数据边界，ADR 0006）
+  // 归属应用展示摘要（只读回传；与 application_id 同指一应用，供前端直接渲染）
+  common.v1.ApplicationSummary application = 14;
 }
 
 message PermissionSummary {
@@ -218,6 +223,9 @@ message CheckPermissionRequest {
 
 message CheckPermissionResponse {
   bool ok = 1;
+  // data_app_id 是本次请求经拦截器校验后的数据归属应用 id（来自 appCode 或凭证归属）。
+  // 供下游服务（如 sender）据此隔离数据，无需自持应用目录或信任未验签 claim。
+  int64 data_app_id = 2;
 }
 
 message GetMyPermissionsResponse {

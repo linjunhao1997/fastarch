@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Avatar, Button, Dropdown, Empty, Flex, Layout, Menu, Spin, message } from 'antd';
-import { MenuFoldOutlined, MenuUnfoldOutlined, UserOutlined } from '@ant-design/icons';
+import { Avatar, Button, Dropdown, Empty, Flex, Layout, Menu, Select, Spin, Tooltip, message } from 'antd';
+import { AppstoreOutlined, MenuFoldOutlined, MenuUnfoldOutlined, UserOutlined } from '@ant-design/icons';
 import { Navigate, Outlet, useLocation, useMatches, useNavigate } from 'react-router';
 import AutoBreadcrumb from '@/shared/components/AutoBreadcrumb';
 import {
@@ -12,8 +12,10 @@ import {
 } from '@/app/router';
 import { usePermissions } from '@/shared/hooks/permission-context';
 import { menuApi } from '@/shared/api/menu-dict-api';
-import { getConsole, setConsole } from '@/shared/api/app-context';
+import { clearRequestDataScope } from '@/shared/api/request';
+import { clearConsole, getConsole } from '@/shared/api/app-context';
 import { useConsole } from '@/shared/context/ConsoleContext';
+import { useDataScope } from '@/shared/context/DataScopeContext';
 import { layoutTokens, themeTokens } from '@/shared/theme';
 
 const { Header, Sider, Content } = Layout;
@@ -25,8 +27,8 @@ function clearCookie(name: string): void {
 function handleLogout(navigate: ReturnType<typeof useNavigate>) {
   clearCookie('access_token');
   localStorage.removeItem('access_token');
-  localStorage.removeItem('current_application_id');
-  setConsole('iam'); // 登出回 IAM 登录页（sender 登录页由 AuthWrapper 按控制台路由决定）
+  clearConsole();
+  clearRequestDataScope();
   navigate('/login');
 }
 
@@ -66,11 +68,16 @@ export default function IndexPage() {
   const navigate = useNavigate();
   const { label: consoleLabel } = useConsole();
   const { permissionCodes } = usePermissions();
+  const { appCode, current, applications, loading: scopeLoading, setAppCode } = useDataScope();
+  const enabledScopes = useMemo(
+    () => applications.filter((app) => app.status === 'enabled'),
+    [applications],
+  );
 
-  // 菜单树：服务端按登录锁定应用返回全量启用菜单（纯码门槛裁决）；
+  // 菜单树：服务端按宿主固定 appId 返回全量启用菜单（纯码门槛裁决）；
   // 可见性由前端按菜单 permission_code 与用户快照码过滤。
   const menuTreeQuery = useQuery({
-    // 应用上下文登录即锁定（ADR 0007），queryKey 带 console 仅为按控制台隔离缓存
+    // queryKey 带 console 仅为按控制台隔离缓存（菜单/字典前缀由当前控制台决定）
     queryKey: ['my-menu-tree', getConsole()],
     queryFn: () => menuApi.listMyTree(),
     placeholderData: (previous) => previous,
@@ -132,7 +139,7 @@ export default function IndexPage() {
           // 叶子菜单 key = menu.path（绝对路径），目录节点 key 以 dir- 前缀不可跳转
           if (typeof key === 'string' && key.startsWith('/')) navigate(key);
         }}
-        style={{ height: `calc(100vh - ${layoutTokens.headerHeight}px)`, borderRight: 0 }}
+        style={{ height: `calc(100vh - ${layoutTokens.headerHeight + 72}px)`, borderRight: 0 }}
       />
     );
   };
@@ -178,6 +185,46 @@ export default function IndexPage() {
           }}
         >
           {collapsed ? 'FA' : consoleLabel}
+        </div>
+        {/* 数据范围切换：与控制台正交。选中项作为 X-Fa-App-Code 下发，决定列表/详情过滤哪个应用的数据。 */}
+        <div
+          style={{
+            padding: collapsed ? layoutTokens.sectionGap : `${layoutTokens.sectionGap}px ${layoutTokens.sectionGap * 2}px`,
+            borderBottom: `1px solid ${themeTokens.colorBorder}`,
+          }}
+        >
+          {collapsed ? (
+            <Dropdown
+              trigger={['click']}
+              placement="bottomLeft"
+              menu={{
+                selectedKeys: appCode ? [appCode] : [],
+                items: enabledScopes.map((app) => ({
+                  key: app.code,
+                  label: app.name,
+                  onClick: () => setAppCode(app.code),
+                })),
+              }}
+            >
+              <Tooltip title={`数据范围：${current?.name ?? '未选择'}`} placement="right">
+                <Button type="text" icon={<AppstoreOutlined />} block />
+              </Tooltip>
+            </Dropdown>
+          ) : (
+            <>
+              <div style={{ fontSize: 12, color: 'rgba(0, 0, 0, 0.45)', marginBottom: 6 }}>
+                数据范围
+              </div>
+              <Select
+                value={appCode || undefined}
+                onChange={setAppCode}
+                loading={scopeLoading}
+                placeholder="请选择数据范围"
+                style={{ width: '100%' }}
+                options={enabledScopes.map((app) => ({ value: app.code, label: app.name }))}
+              />
+            </>
+          )}
         </div>
         {renderSiderBody()}
         {menuTreeQuery.isFetching && !!menuTreeQuery.data ? (

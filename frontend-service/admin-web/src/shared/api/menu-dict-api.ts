@@ -35,7 +35,9 @@ const buildListUrl = (base: string, currentPage: number, pageSize: number, keywo
 
 /** 菜单（t_menu 语义，纯展示配置）：服务端下发结构与展示，前端按码门槛过滤可见性。 */
 export const menuApi = {
-  listMyTree: () => request<ListMenuTreeResponse>(`${appApiPrefix()}/menu/my-menu-tree`),
+  // 自描述接口：菜单按当前控制台 + 角色返回，不按数据归属过滤，故不携带 appCode。
+  listMyTree: () =>
+    request<ListMenuTreeResponse>(`${appApiPrefix()}/menu/my-menu-tree`, { skipDataScope: true }),
   /** 全量菜单树（管理员视角，含停用） */
   listTree: () => request<ListMenuTreeResponse>(`${appApiPrefix()}/menu/menu-tree`),
   create: (data: CreateMenuRequest) =>

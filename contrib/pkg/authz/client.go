@@ -44,19 +44,20 @@ func newWithIamClient(c iamAuthClient) *Client {
 	return &Client{iam: c}
 }
 
-// CheckPermission 透传入站 metadata（含用户 JWT）调 IAM，判定当前用户是否持有 code。
+// CheckPermission 透传入站 metadata（含用户 JWT 与 appCode）调 IAM，判定当前用户是否持有 code。
 // 必须在持有入站 metadata 的 gRPC handler ctx 中调用；若 ctx 无入站 metadata，
 // IAM 侧会因缺少 token 而拒绝（fail-closed），不会误放行。
 //
-// 返回的 bool 是 IAM 的判定结果；error 非 nil 表示 IAM 不可达或调用失败，
+// 返回 (是否持有权限码, IAM 校验后的数据归属应用 id)。dataAppId 来自 IAM 对
+// appCode 的接入集合校验，权威可信；error 非 nil 表示 IAM 不可达或调用失败，
 // 调用方应 fail-closed（拒绝），不得把 error 当作"放行"。
-func (c *Client) CheckPermission(ctx context.Context, code string) (bool, error) {
+func (c *Client) CheckPermission(ctx context.Context, code string) (bool, int64, error) {
 	out := forwardIncomingMetadata(ctx)
 	resp, err := c.iam.CheckPermission(out, &iam_v1.CheckPermissionRequest{PermissionCode: code})
 	if err != nil {
-		return false, err
+		return false, 0, err
 	}
-	return resp.GetOk(), nil
+	return resp.GetOk(), resp.GetDataAppId(), nil
 }
 
 // forwardIncomingMetadata 把入站 metadata 原样转为出站，使 IAM 收到同一 JWT。

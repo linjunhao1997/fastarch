@@ -15,9 +15,10 @@ type CustomClaims struct {
 	Username string `json:"username"`
 	Roles    string `json:"roles"`
 	IsAdmin  bool   `json:"isAdmin"`
-	// ApplicationId 为令牌签发时锁定的目标应用（登录即锁定，ADR 0007）；
-	// 所有会话（人用/机器）签发时即带入，拦截器直接取 claim，不可变。
-	ApplicationId int64 `json:"applicationId"`
+	// AdmittedAppIds 为签发时快照的用户接入应用集合（home + t_r_user_application）。
+	// 运行时校验 x-fa-app-code 是否为其中之一：授权来自签名 claim，header 仅为选择信号。
+	// 复制切片入 claim，避免调用方后续修改影响令牌。
+	AdmittedAppIds []int64 `json:"admittedAppIds"`
 	jwt.RegisteredClaims
 }
 
@@ -28,16 +29,18 @@ type ClaimsParam struct {
 	IsAdmin        bool      `json:"isAdmin"`
 	// Jti 令牌唯一标识：作为服务端 app 上下文映射（app:ctx:{jti}）的键。
 	Jti string `json:"jti"`
-	// ApplicationId 签发即锁定的应用（人用/机器令牌皆须填写，ADR 0007）。
-	ApplicationId int64 `json:"applicationId"`
+	// AdmittedAppIds 用户可切换的数据归属应用集合；admin 可为空（旁路校验）。
+	AdmittedAppIds []int64 `json:"admittedAppIds"`
 }
 
 func GenerateJWT(param ClaimsParam) (string, error) {
+	admitted := make([]int64, len(param.AdmittedAppIds))
+	copy(admitted, param.AdmittedAppIds)
 	claims := &CustomClaims{
-		UserId:        param.UserId,
-		Username:      param.Username,
-		IsAdmin:       param.IsAdmin,
-		ApplicationId: param.ApplicationId,
+		UserId:         param.UserId,
+		Username:       param.Username,
+		IsAdmin:        param.IsAdmin,
+		AdmittedAppIds: admitted,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        param.Jti,
 			ExpiresAt: jwt.NewNumericDate(param.ExpirationTime),
@@ -57,7 +60,7 @@ func GenerateJWT(param ClaimsParam) (string, error) {
 }
 
 // ParseClaims 单次解析并校验令牌，返回完整 claims。拦截器据此一次取全
-// accountId/isAdmin/jti/applicationId，避免多次解析。
+// accountId/isAdmin/jti/admittedAppIds，避免多次解析。
 func ParseClaims(tokenString string) (*CustomClaims, error) {
 	if len(tokenString) == 0 {
 		return nil, errors.New("invalid token")

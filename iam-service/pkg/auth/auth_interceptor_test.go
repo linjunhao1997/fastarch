@@ -76,7 +76,7 @@ func TestInterceptorSnapshotCodeGranted(t *testing.T) {
 	_, err := Interceptor(rdb, func(ctx context.Context, accountId int64) ([]string, error) {
 		t.Fatal("snapshot should hit cache, loader must not be called")
 		return nil, nil
-	}, nil)(ctx, nil, info, handlerOK)
+	}, nil, nil, 1)(ctx, nil, info, handlerOK)
 	if err != nil {
 		t.Fatalf("request with required permission code denied: %v", err)
 	}
@@ -91,7 +91,7 @@ func TestInterceptorCodeNotHeldDenied(t *testing.T) {
 	_, err := Interceptor(rdb, func(ctx context.Context, accountId int64) ([]string, error) {
 		t.Fatal("snapshot should hit cache, loader must not be called")
 		return nil, nil
-	}, nil)(ctx, nil, info, handlerOK)
+	}, nil, nil, 1)(ctx, nil, info, handlerOK)
 	if status.Code(err) != codes.PermissionDenied {
 		t.Fatalf("missing required code: got %v, want PermissionDenied", err)
 	}
@@ -105,7 +105,7 @@ func TestInterceptorDirectGRPCSameCodeRule(t *testing.T) {
 	ctx, info := testInterceptorContext(t, "2", false)
 	_, err := Interceptor(rdb, func(ctx context.Context, accountId int64) ([]string, error) {
 		return nil, nil
-	}, nil)(ctx, nil, info, handlerOK)
+	}, nil, nil, 1)(ctx, nil, info, handlerOK)
 	if err != nil {
 		t.Fatalf("direct gRPC request with required code denied: %v", err)
 	}
@@ -116,7 +116,7 @@ func TestInterceptorPasswordAuthBypassesAuth(t *testing.T) {
 	_, rdb := newTestSnapshotEnv(t, nil)
 	ctx := context.Background()
 	info := &grpc.UnaryServerInfo{FullMethod: iam_v1.AuthenticationService_PasswordAuth_FullMethodName}
-	if _, err := Interceptor(rdb, nil, nil)(ctx, nil, info, handlerOK); err != nil {
+	if _, err := Interceptor(rdb, nil, nil, nil, 1)(ctx, nil, info, handlerOK); err != nil {
 		t.Fatalf("PasswordAuth should bypass auth: %v", err)
 	}
 }
@@ -132,7 +132,7 @@ func TestInterceptorAuthOnlyMethodsRequireNoPermission(t *testing.T) {
 		info := &grpc.UnaryServerInfo{FullMethod: method}
 		if _, err := Interceptor(rdb, func(ctx context.Context, accountId int64) ([]string, error) {
 			return []string{}, nil
-		}, nil)(ctx, nil, info, handlerOK); err != nil {
+		}, nil, nil, 1)(ctx, nil, info, handlerOK); err != nil {
 			t.Fatalf("%s should only require auth: %v", method, err)
 		}
 	}
@@ -143,7 +143,7 @@ func TestInterceptorMissingTokenRejected(t *testing.T) {
 	_, rdb := newTestSnapshotEnv(t, nil)
 	ctx := context.Background()
 	info := &grpc.UnaryServerInfo{FullMethod: "/iam.v1.AuthorizationService/ListPermissions"}
-	_, err := Interceptor(rdb, nil, nil)(ctx, nil, info, handlerOK)
+	_, err := Interceptor(rdb, nil, nil, nil, 1)(ctx, nil, info, handlerOK)
 	if status.Code(err) != codes.Unauthenticated {
 		t.Fatalf("missing token: got %v, want Unauthenticated", err)
 	}
@@ -158,7 +158,7 @@ func TestInterceptorFailClosedOnUnknownMethod(t *testing.T) {
 	info := &grpc.UnaryServerInfo{FullMethod: "/iam.v1.UnregisteredService/DoSomething"}
 	_, err := Interceptor(rdb, func(ctx context.Context, accountId int64) ([]string, error) {
 		return nil, nil
-	}, nil)(ctx, nil, info, handlerOK)
+	}, nil, nil, 1)(ctx, nil, info, handlerOK)
 	if status.Code(err) != codes.PermissionDenied {
 		t.Fatalf("unregistered method: got %v, want PermissionDenied", err)
 	}
@@ -172,7 +172,7 @@ func TestInterceptorFailClosedOnRedisFailure(t *testing.T) {
 	_, err := Interceptor(rdb, func(ctx context.Context, accountId int64) ([]string, error) {
 		t.Fatal("loader should not be called when redis errors")
 		return nil, nil
-	}, nil)(ctx, nil, info, handlerOK)
+	}, nil, nil, 1)(ctx, nil, info, handlerOK)
 	if status.Code(err) != codes.FailedPrecondition {
 		t.Fatalf("redis failure: got %v, want FailedPrecondition", err)
 	}
@@ -184,7 +184,7 @@ func TestInterceptorCacheMissRebuildsSnapshot(t *testing.T) {
 	ctx, info := testInterceptorContext(t, "2", false)
 	_, err := Interceptor(rdb, func(ctx context.Context, accountId int64) ([]string, error) {
 		return []string{"iam.permission.list"}, nil
-	}, nil)(ctx, nil, info, handlerOK)
+	}, nil, nil, 1)(ctx, nil, info, handlerOK)
 	if err != nil {
 		t.Fatalf("cache miss with loader grant should pass: %v", err)
 	}
@@ -290,7 +290,7 @@ func TestInterceptorSignatureTrackAuthorized(t *testing.T) {
 	_, err := Interceptor(store.rdb, func(ctx context.Context, accountId int64) ([]string, error) {
 		gotAccountId = accountId
 		return []string{"iam.permission.list"}, nil
-	}, store)(ctx, nil, info, handlerOK)
+	}, store, nil, 1)(ctx, nil, info, handlerOK)
 	if err != nil {
 		t.Fatalf("signature track request denied: %v", err)
 	}
@@ -310,7 +310,7 @@ func TestInterceptorSignatureTrackPermissionDenied(t *testing.T) {
 
 	_, err := Interceptor(store.rdb, func(ctx context.Context, accountId int64) ([]string, error) {
 		return []string{}, nil // 零权限
-	}, store)(ctx, nil, info, handlerOK)
+	}, store, nil, 1)(ctx, nil, info, handlerOK)
 	if status.Code(err) != codes.PermissionDenied {
 		t.Fatalf("unauthorized interface: got %v, want PermissionDenied", err)
 	}
@@ -416,7 +416,7 @@ func TestInterceptorSignatureTrackFailureSemantics(t *testing.T) {
 			_, err := Interceptor(store.rdb, func(ctx context.Context, accountId int64) ([]string, error) {
 				t.Fatal("verify-failed request must not reach handler")
 				return nil, nil
-			}, store)(ctx, nil, info, handlerOK)
+			}, store, nil, 1)(ctx, nil, info, handlerOK)
 
 			if status.Code(err) != test.wantCode {
 				t.Fatalf("code = %v, want %v", status.Code(err), test.wantCode)
@@ -443,18 +443,18 @@ func TestInterceptorSignatureTrackReplayRealFlow(t *testing.T) {
 
 	// 首次请求放行
 	ctx1, info := build("nonce-first")
-	if _, err := Interceptor(store.rdb, loader, store)(ctx1, nil, info, handlerOK); err != nil {
+	if _, err := Interceptor(store.rdb, loader, store, nil, 1)(ctx1, nil, info, handlerOK); err != nil {
 		t.Fatalf("first request should pass: %v", err)
 	}
 	// 原样重放被拒
 	ctx2, info := build("nonce-first")
-	_, err := Interceptor(store.rdb, loader, store)(ctx2, nil, info, handlerOK)
+	_, err := Interceptor(store.rdb, loader, store, nil, 1)(ctx2, nil, info, handlerOK)
 	if reason := signatureReason(t, err); reason != "NONCE_REPLAY" {
 		t.Fatalf("replayed request reason = %q, want NONCE_REPLAY", reason)
 	}
 	// 换新 nonce 放行
 	ctx3, info := build("nonce-second")
-	if _, err := Interceptor(store.rdb, loader, store)(ctx3, nil, info, handlerOK); err != nil {
+	if _, err := Interceptor(store.rdb, loader, store, nil, 1)(ctx3, nil, info, handlerOK); err != nil {
 		t.Fatalf("new nonce request should pass: %v", err)
 	}
 }
@@ -467,7 +467,7 @@ func TestInterceptorSignatureNilStoreFailClosed(t *testing.T) {
 	})
 	ctx := metadata.NewIncomingContext(context.Background(), md)
 	info := &grpc.UnaryServerInfo{FullMethod: "/iam.v1.AuthorizationService/ListPermissions"}
-	_, err := Interceptor(rdb, nil, nil)(ctx, nil, info, handlerOK)
+	_, err := Interceptor(rdb, nil, nil, nil, 1)(ctx, nil, info, handlerOK)
 	if status.Code(err) != codes.Unauthenticated {
 		t.Fatalf("signature request with nil store: got %v, want Unauthenticated", err)
 	}

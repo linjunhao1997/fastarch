@@ -103,4 +103,6 @@ var (
 	ErrApplicationReferenced = NewErrorWithCode("1001067", codes.FailedPrecondition, errors.New("应用已被数据引用，请先解除引用"))
 	// 内置 admin 角色绑定保护（ADR 0006 补充）：非 admin 禁绑，防经角色绑定提权
 	ErrRoleAdminBindForbidden = NewErrorWithCode("1001068", codes.PermissionDenied, errors.New("内置管理员角色仅限管理员绑定"))
+	// 凭证归属应用越界：归属应用不在绑定用户的接入集合内（或不存在/停用）
+	ErrCredentialAppNotAdmitted = NewErrorWithCode("1001069", codes.PermissionDenied, errors.New("凭证归属应用不在该用户的接入范围内"))
 )

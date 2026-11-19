@@ -24,3 +24,16 @@ export interface MyProfileApplication {
   name: string;
   status: string;
 }
+
+/**
+ * 归属应用展示摘要（后端只读回填，对应 common.v1.ApplicationSummary）。
+ * 用于角色/权限/凭证/模板/记录等列表与详情直接渲染"所属应用"，免前端二次查询应用目录。
+ */
+export interface ApplicationSummary {
+  id: string;
+  /** 服务段命名空间（iam/sender…） */
+  code: string;
+  name: string;
+  /** enabled 启用 / disabled 禁用 */
+  status: string;
+}

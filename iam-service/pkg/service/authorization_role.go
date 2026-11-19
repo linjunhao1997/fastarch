@@ -32,7 +32,11 @@ func (a *AuthorizationService) GetRole(ctx context.Context, request *common_v1.G
 	if err := loadRolePermissions(ctx, a.db, &role); err != nil {
 		return nil, err
 	}
-	return roleToPb(role), nil
+	app, err := loadApplicationSummary(ctx, a.db, role.ApplicationId)
+	if err != nil {
+		return nil, err
+	}
+	return roleToPb(role, app), nil
 }
 
 func (a *AuthorizationService) ListRoles(ctx context.Context, request *iam_v1.ListRolesRequest) (*iam_v1.ListRolesResponse, error) {
@@ -73,9 +77,17 @@ func (a *AuthorizationService) ListRoles(ctx context.Context, request *iam_v1.Li
 	if err := loadRolePermissionsForRoles(ctx, a.db, roles); err != nil {
 		return nil, err
 	}
+	appIds := make([]int64, 0, len(roles))
+	for _, r := range roles {
+		appIds = append(appIds, r.ApplicationId)
+	}
+	apps, err := loadApplicationSummaries(ctx, a.db, appIds)
+	if err != nil {
+		return nil, err
+	}
 	roleList := make([]*iam_v1.Role, 0, len(roles))
 	for _, r := range roles {
-		roleList = append(roleList, roleToPb(r))
+		roleList = append(roleList, roleToPb(r, apps[r.ApplicationId]))
 	}
 	return &iam_v1.ListRolesResponse{
 		Roles: roleList,

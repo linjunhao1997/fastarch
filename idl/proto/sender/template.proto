@@ -91,4 +91,6 @@ message MessageTemplate {
   string updated_by = 8;
   google.protobuf.Timestamp create_time = 9;
   google.protobuf.Timestamp update_time = 10;
+  // 归属应用展示摘要（只读回传；sender 宿主应用 id 固定，值来自配置）
+  common.v1.ApplicationSummary application = 11;
 }

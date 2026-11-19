@@ -2,6 +2,7 @@
  * sender 业务类型（对齐 sender.v1 proto，grpc-gateway JSON camelCase）。
  * 发送记录 = 落库实体；消息模板 = 应用内可复用内容定义。
  */
+import type { ApplicationSummary } from '@/shared/types';
 
 /** 发送记录（MessageRecord） */
 export interface MessageRecord {
@@ -12,6 +13,8 @@ export interface MessageRecord {
   channel: string;
   /** pending / sent / failed（字典 send_status） */
   sendStatus: string;
+  /** 归属应用摘要（服务端配置回填，sender 应用） */
+  application?: ApplicationSummary;
   version: string;
   createdBy: string;
   updatedBy: string;
@@ -45,6 +48,8 @@ export interface MessageTemplate {
   name: string;
   content: string;
   remark: string;
+  /** 归属应用摘要（服务端配置回填，sender 应用） */
+  application?: ApplicationSummary;
   version: string;
   createdBy: string;
   updatedBy: string;

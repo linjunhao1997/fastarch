@@ -49,8 +49,9 @@ func RunGrpcServer(ctx context.Context, cfg *conf.Config) error {
 		grpcserver.WithGormErrorMapping(),
 		grpcserver.WithServerOptions(
 			// 权限快照读穿回源函数注入鉴权拦截器（research.md D6-②）；
-			// 签名验签器注入 AK/SK 双轨分支（specs/009-ak-sk-auth T017）
-			grpc.ChainUnaryInterceptor(auth.Interceptor(rdb, service.NewPermissionSnapshotLoader(db), signatureStore)),
+			// 签名验签器注入 AK/SK 双轨分支（specs/009-ak-sk-auth T017）；
+			// appCode 解析器注入数据归属校验（appCode→appId + 接入集合校验）
+			grpc.ChainUnaryInterceptor(auth.Interceptor(rdb, service.NewPermissionSnapshotLoader(db), signatureStore, service.ResolveDataAppByCode(db), cfg.Iam.ApplicationId)),
 			grpc.StatsHandler(otelgrpc.NewClientHandler()),
 		),
 	)
@@ -59,7 +60,7 @@ func RunGrpcServer(ctx context.Context, cfg *conf.Config) error {
 	}
 
 	s := srv.Grpc()
-	iam_v1.RegisterAuthenticationServiceServer(s, service.NewAuthenticationServiceWithSignature(db, rdb, signatureStore))
+	iam_v1.RegisterAuthenticationServiceServer(s, service.NewAuthenticationService(db, rdb))
 	iam_v1.RegisterAccountServiceServer(s, service.NewAccountService(db, rdb))
 	iam_v1.RegisterAuthorizationServiceServer(s, service.NewAuthorizationService(db, rdb))
 	iam_v1.RegisterApplicationServiceServer(s, service.NewApplicationService(db))

@@ -20,3 +20,12 @@ message Page {
 message GetRequest {
   int64 id = 1 [(buf.validate.field).required = true];
 }
+
+// 应用展示摘要（跨服务通用，只读回传；仅含展示字段，不含 app_id/密钥等机器字段）。
+// 用于让列表/详情直接渲染"归属应用"，避免前端二次查询应用目录。
+message ApplicationSummary {
+  string id = 1;      // t_application.id（string 编码，避免 JS 精度丢失）
+  string code = 2;    // 服务段命名空间（iam/sender…）
+  string name = 3;    // 展示名
+  string status = 4;  // enabled / disabled
+}

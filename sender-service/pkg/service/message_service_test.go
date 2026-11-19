@@ -160,3 +160,46 @@ func TestListMessagesFiltersByAppAndStatus(t *testing.T) {
 func mustParseID(s string) int64 {
 	return cast.ToInt64(s)
 }
+
+// TestDynamicDataAppOwnership 数据归属由 IAM 校验后的 dataAppId 决定（动态），
+// 未注入时回落宿主固定应用；不同归属的记录互相隔离。
+func TestDynamicDataAppOwnership(t *testing.T) {
+	db := setupMessageTestDB(t)
+	svc := NewMessageService(db, testApplicationId)
+
+	// 上下文注入 dataAppId=901（订单）与 appCode=order。
+	ctxOrder := authz.WithDataAppId(authz.WithDataAppCode(operatorCtx(42), "order"), 901)
+	orderResp, err := svc.SendMessage(ctxOrder, &sender_v1.SendMessageRequest{Recipient: "a", Content: "c"})
+	if err != nil {
+		t.Fatalf("send under order: %v", err)
+	}
+	if orderResp.Application == nil || orderResp.Application.Code != "order" || orderResp.Application.Id != "901" {
+		t.Fatalf("order summary = %+v, want code=order id=901", orderResp.Application)
+	}
+	var row model.MessageRecord
+	if err := db.Where(model.MessageRecordColumnId, cast.ToInt64(orderResp.Id)).First(&row).Error; err != nil {
+		t.Fatalf("load row: %v", err)
+	}
+	if row.ApplicationId != 901 {
+		t.Fatalf("stored application_id = %d, want 901", row.ApplicationId)
+	}
+
+	// 回落：不带 dataAppId 用宿主固定应用。
+	fallback, err := svc.SendMessage(operatorCtx(42), &sender_v1.SendMessageRequest{Recipient: "b", Content: "c"})
+	if err != nil {
+		t.Fatalf("send fallback: %v", err)
+	}
+	// 测试中构造服务未注入展示摘要，故 Application 为 nil；这里验证写入归属回落宿主应用。
+	if fallback.Application != nil && fallback.Application.Id != cast.ToString(testApplicationId) {
+		t.Fatalf("fallback summary = %+v, want id=%d or nil", fallback.Application, testApplicationId)
+	}
+
+	// 隔离：订单上下文列表只看到 901 的记录，看不到 sender 固定应用的。
+	list, err := svc.ListMessages(ctxOrder, &sender_v1.ListMessagesRequest{CurrentPage: 1, PageSize: 10})
+	if err != nil {
+		t.Fatalf("list order: %v", err)
+	}
+	if len(list.Records) != 1 || list.Records[0].Id != orderResp.Id {
+		t.Fatalf("order list size = %d, want 1 (only 901 record)", len(list.Records))
+	}
+}

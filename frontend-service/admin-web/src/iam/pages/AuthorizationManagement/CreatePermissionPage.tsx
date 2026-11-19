@@ -20,7 +20,7 @@ export default function CreatePermissionPage() {
   const showNotification = useApiErrorNotification();
 
   // 资源模型已废弃（重构 #4）：绑定资源选择器移除，resourceIdList 不再提交。
-  // 权限归属应用由登录锁定（ADR 0007），服务端从认证上下文取，前端不提交。
+  // 权限归属应用由服务端判定（admin 取宿主 iam，非 admin 取数据范围），前端不提交。
   const onFinish = async (values: { name: string; code: string; kind: PermissionKind; value?: string; description?: string }) => {
     run(async () => {
       await permissionApi.create({

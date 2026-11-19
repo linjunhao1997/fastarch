@@ -11,7 +11,9 @@ type AccessCredential struct {
 	AccessKey       string     `gorm:"column:access_key;size:64;uniqueIndex"`
 	SecretKeyCipher string     `gorm:"column:secret_key_cipher;size:256"`
 	UserId          int64      `gorm:"column:user_id;index"`
-	Remark          string     `gorm:"column:remark;size:255"`
+	// ApplicationId 是凭证归属应用（机机调用产生的数据归它）；权限来源仍是 UserId。
+	ApplicationId int64  `gorm:"column:application_id;index"`
+	Remark        string `gorm:"column:remark;size:255"`
 	Status          string     `gorm:"column:status;size:16"`
 	ExpireTime      *time.Time `gorm:"column:expire_time"`
 	LastUsedTime    *time.Time `gorm:"column:last_used_time"`
@@ -28,7 +30,8 @@ func (a *AccessCredential) TableName() string {
 
 var AccessCredentialFields = []string{
 	AccessCredentialColumnId, AccessCredentialColumnAccessKey, AccessCredentialColumnSecretKeyCipher,
-	AccessCredentialColumnUserId, AccessCredentialColumnRemark, AccessCredentialColumnStatus,
+	AccessCredentialColumnUserId, AccessCredentialColumnApplicationId,
+	AccessCredentialColumnRemark, AccessCredentialColumnStatus,
 	AccessCredentialColumnExpireTime, AccessCredentialColumnLastUsedTime,
 	AccessCredentialColumnCreateTime, AccessCredentialColumnUpdateTime,
 	AccessCredentialColumnCreatedBy, AccessCredentialColumnUpdatedBy, AccessCredentialColumnVersion,

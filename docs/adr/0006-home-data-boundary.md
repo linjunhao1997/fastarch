@@ -1,4 +1,11 @@
+---
+status: superseded
+superseded_by: 0008-admitted-app-data-scope
+---
+
 # 所属应用 = 数据边界，准入应用 = 功能边界
+
+> ⚠️ **已取代（2026-11-19）**：本文的「home 单值数据边界」已被 ADR-0008 的「接入集合 + appCode 数据范围」取代——数据归属改为请求时按 `x-fa-app-code` 在接入集合（home + 绑定）内选择，home 降级为默认落地应用。本文关于角色/权限/凭证/绑定隔离、角色码应用内唯一、超管标志的具体裁决仍然有效，只是隔离口径统一改由 `operatorDataScope`（优先 dataAppId、回落 home）取应用。以下保留原文作为历史记录。
 
 > 模型 A（#8 多应用裁决）的细化：home 单值必填落地到创建契约，账号域按 home 隔离。
 

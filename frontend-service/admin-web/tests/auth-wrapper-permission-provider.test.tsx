@@ -7,6 +7,15 @@ import { usePermissions } from '@/shared/hooks/permission-context';
 
 vi.mock('@/iam/api/iam', () => ({
   getMyPermissions: vi.fn().mockResolvedValue({ permissionCodeList: [] }),
+  // AuthWrapper 现在挂载 DataScopeProvider，首屏会拉取接入应用清单。
+  profileApi: {
+    get: vi.fn().mockResolvedValue({
+      id: '1',
+      username: 'tester',
+      isAdmin: false,
+      applications: [{ id: '2', code: 'sender', name: '消息中心', status: 'enabled' }],
+    }),
+  },
 }));
 
 function PermissionConsumer() {

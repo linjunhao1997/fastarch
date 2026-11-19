@@ -22,10 +22,18 @@ var _ sender_v1.TemplateServiceServer = (*TemplateService)(nil)
 type TemplateService struct {
 	db            *gorm.DB
 	applicationId int64
+	// application 归属应用展示摘要（宿主固定应用的配置值，只读回填）。
+	application *common_v1.ApplicationSummary
 }
 
-func NewTemplateService(db *gorm.DB, applicationId int64) *TemplateService {
-	return &TemplateService{db: db, applicationId: applicationId}
+// NewTemplateService 构建模板服务。application 为可选展示摘要：生产由 server 注入配置，
+// 省略时响应不回填摘要（测试等场景保持向后兼容）。
+func NewTemplateService(db *gorm.DB, applicationId int64, application ...*common_v1.ApplicationSummary) *TemplateService {
+	s := &TemplateService{db: db, applicationId: applicationId}
+	if len(application) > 0 {
+		s.application = application[0]
+	}
+	return s
 }
 
 func (s *TemplateService) CreateTemplate(ctx context.Context, req *sender_v1.CreateTemplateRequest) (*sender_v1.MessageTemplate, error) {
@@ -62,7 +70,7 @@ func (s *TemplateService) CreateTemplate(ctx context.Context, req *sender_v1.Cre
 		slog.Warn("create template failed", "code", req.Code, "error", err)
 		return nil, err
 	}
-	return templateToPb(tpl), nil
+	return s.templateToPb(ctx, tpl), nil
 }
 
 func (s *TemplateService) GetTemplate(ctx context.Context, req *common_v1.GetRequest) (*sender_v1.MessageTemplate, error) {
@@ -76,7 +84,7 @@ func (s *TemplateService) GetTemplate(ctx context.Context, req *common_v1.GetReq
 	if err != nil {
 		return nil, translateNotFound(err, ErrTemplateNotFound)
 	}
-	return templateToPb(tpl), nil
+	return s.templateToPb(ctx, tpl), nil
 }
 
 func (s *TemplateService) ListTemplates(ctx context.Context, req *sender_v1.ListTemplatesRequest) (*sender_v1.ListTemplatesResponse, error) {
@@ -105,7 +113,7 @@ func (s *TemplateService) ListTemplates(ctx context.Context, req *sender_v1.List
 	}
 	out := make([]*sender_v1.MessageTemplate, 0, len(list))
 	for _, m := range list {
-		out = append(out, templateToPb(m))
+		out = append(out, s.templateToPb(ctx, m))
 	}
 	return &sender_v1.ListTemplatesResponse{
 		Page:      pageOf(req.CurrentPage, req.PageSize, total),
@@ -198,17 +206,18 @@ func (s *TemplateService) DeleteTemplate(ctx context.Context, req *common_v1.Get
 	return &emptypb.Empty{}, nil
 }
 
-func templateToPb(m model.MessageTemplate) *sender_v1.MessageTemplate {
+func (s *TemplateService) templateToPb(ctx context.Context, m model.MessageTemplate) *sender_v1.MessageTemplate {
 	return &sender_v1.MessageTemplate{
-		Id:         toString(m.Id),
-		Code:       m.Code,
-		Name:       m.Name,
-		Content:    m.Content,
-		Remark:     m.Remark,
-		Version:    m.Version,
-		CreatedBy:  m.CreatedBy,
-		UpdatedBy:  m.UpdatedBy,
-		CreateTime: timestamppb.New(m.CreateTime),
-		UpdateTime: timestamppb.New(m.UpdateTime),
+		Id:          toString(m.Id),
+		Code:        m.Code,
+		Name:        m.Name,
+		Content:     m.Content,
+		Remark:      m.Remark,
+		Version:     m.Version,
+		CreatedBy:   m.CreatedBy,
+		UpdatedBy:   m.UpdatedBy,
+		CreateTime:  timestamppb.New(m.CreateTime),
+		UpdateTime:  timestamppb.New(m.UpdateTime),
+		Application: dataApplicationSummary(ctx, s.application),
 	}
 }

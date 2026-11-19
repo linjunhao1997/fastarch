@@ -8,10 +8,10 @@ import (
 	"github.com/linjunhao1997/contrib/pkg/authz"
 	"github.com/linjunhao1997/contrib/pkg/database"
 	"github.com/linjunhao1997/contrib/pkg/server/grpcserver"
-	iam_v1 "github.com/linjunhao1997/idl/pb/iam"
+	common_v1 "github.com/linjunhao1997/idl/pb/common"
 	sender_v1 "github.com/linjunhao1997/idl/pb/sender"
+	"github.com/spf13/cast"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	"gorm.io/gorm"
 
 	"sender-service/conf"
@@ -40,22 +40,16 @@ func RunGrpcServer(ctx context.Context, cfg *conf.Config) error {
 	if cfg.Sender.IamAddr == "" {
 		return fmt.Errorf("sender.iam_addr is required for inbound authorization")
 	}
-	iamAccessKey, iamSecretKey, err := cfg.Sender.ResolveIAMServiceAuth()
-	if err != nil {
-		return fmt.Errorf("resolve iam service credentials: %w", err)
+	// 归属应用摘要（宿主固定值，来自配置；与 IAM 种子 000010 一致）。
+	// 只读回填到模板/记录响应，避免为每条记录跨服务查应用目录。
+	appSummary := &common_v1.ApplicationSummary{
+		Id:     cast.ToString(appId),
+		Code:   cfg.Sender.ApplicationCode,
+		Name:   cfg.Sender.ApplicationName,
+		Status: "enabled",
 	}
-
-	// 登录委托 IAM 的 gRPC 连接（凭据校验唯一权威，ADR 0007）。
-	iamAuthConn, err := grpc.NewClient(cfg.Sender.IamAddr,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
-	if err != nil {
-		return fmt.Errorf("dial iam for authentication: %w", err)
-	}
-	defer func() { _ = iamAuthConn.Close() }()
-	iamAuth := iam_v1.NewAuthenticationServiceClient(iamAuthConn)
-
 	// 入站判权薄客户端：透传 JWT 调 IAM CheckPermission（ADR 0005）。
+	// 统一登录后 sender 不再有登录端点，也不需要 IAM 服务账号 AK/SK。
 	authzClient, err := authz.New(cfg.Sender.IamAddr)
 	if err != nil {
 		return fmt.Errorf("init authz client: %w", err)
@@ -79,20 +73,19 @@ func RunGrpcServer(ctx context.Context, cfg *conf.Config) error {
 		return fmt.Errorf("init grpc server: %w", err)
 	}
 
-	if err := registerServices(srv.Grpc(), db, appId, service.NewSenderAuthenticationService(iamAuth, iamAccessKey, iamSecretKey)); err != nil {
+	if err := registerServices(srv.Grpc(), db, appId, appSummary); err != nil {
 		return err
 	}
 	slog.Info("sender-service grpc ready", "addr", cfg.GRpc.AddrWithPort(), "application_id", appId)
 	return srv.Run(ctx)
 }
 
-// registerServices 注册认证/消息/模板服务与 contrib 菜单/字典能力。
+// registerServices 注册消息/模板服务与 contrib 菜单/字典能力。
 // contrib 实现的方法签名与 sender.v1 接口一致（require_unimplemented_servers=false），
 // 可直接注册为 sender.v1 的服务（ADR 0003）。
-func registerServices(s *grpc.Server, db *gorm.DB, appId int64, authSvc *service.AuthenticationService) error {
-	sender_v1.RegisterAuthenticationServiceServer(s, authSvc)
-	sender_v1.RegisterMessageServiceServer(s, service.NewMessageService(db, appId))
-	sender_v1.RegisterTemplateServiceServer(s, service.NewTemplateService(db, appId))
+func registerServices(s *grpc.Server, db *gorm.DB, appId int64, appSummary *common_v1.ApplicationSummary) error {
+	sender_v1.RegisterMessageServiceServer(s, service.NewMessageService(db, appId, appSummary))
+	sender_v1.RegisterTemplateServiceServer(s, service.NewTemplateService(db, appId, appSummary))
 
 	menuSvc, err := service.NewMenuService(db, appId)
 	if err != nil {
