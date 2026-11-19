@@ -35,8 +35,8 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type AccountServiceClient interface {
-	// 创建用户：初始密码必填（bcrypt 落库），所属应用必填（数据边界 ADR 0006），
-	// 返回创建出的用户（含 id、所属应用与准入应用回填）
+	// 创建用户：初始密码必填（bcrypt 落库），接入应用必填（数据边界 ADR 0008），
+	// 返回创建出的用户（含 id 与准入应用回填）
 	CreateAccount(ctx context.Context, in *CreateAccountRequest, opts ...grpc.CallOption) (*Account, error)
 	// 获取用户信息
 	GetAccount(ctx context.Context, in *common.GetRequest, opts ...grpc.CallOption) (*Account, error)
@@ -46,10 +46,7 @@ type AccountServiceClient interface {
 	UpdateAccount(ctx context.Context, in *UpdateAccountRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	DeleteAccount(ctx context.Context, in *DeleteAccountRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	UpdateAccountRoles(ctx context.Context, in *UpdateAccountRolesRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	// 设置用户准入应用与所属应用（多应用裁决 #8 + 模型 A）：
-	// application_ids 全量覆盖语义，空数组 = 清空准入；
-	// home_application_id 为默认所属应用（隐式可进入，无需重复放进准入集合），必须已启用；
-	// 空串 = 保留仍有效旧值或清空。
+	// 设置用户准入应用（ADR 0008）：application_ids 全量覆盖语义，空数组 = 清空接入集合。
 	UpdateAccountApplications(ctx context.Context, in *UpdateAccountApplicationsRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// 管理员重置用户密码：新密码 bcrypt 落库，不要求提供旧密码
 	ResetAccountPassword(ctx context.Context, in *ResetAccountPasswordRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
@@ -139,8 +136,8 @@ func (c *accountServiceClient) ResetAccountPassword(ctx context.Context, in *Res
 // All implementations should embed UnimplementedAccountServiceServer
 // for forward compatibility
 type AccountServiceServer interface {
-	// 创建用户：初始密码必填（bcrypt 落库），所属应用必填（数据边界 ADR 0006），
-	// 返回创建出的用户（含 id、所属应用与准入应用回填）
+	// 创建用户：初始密码必填（bcrypt 落库），接入应用必填（数据边界 ADR 0008），
+	// 返回创建出的用户（含 id 与准入应用回填）
 	CreateAccount(context.Context, *CreateAccountRequest) (*Account, error)
 	// 获取用户信息
 	GetAccount(context.Context, *common.GetRequest) (*Account, error)
@@ -150,10 +147,7 @@ type AccountServiceServer interface {
 	UpdateAccount(context.Context, *UpdateAccountRequest) (*emptypb.Empty, error)
 	DeleteAccount(context.Context, *DeleteAccountRequest) (*emptypb.Empty, error)
 	UpdateAccountRoles(context.Context, *UpdateAccountRolesRequest) (*emptypb.Empty, error)
-	// 设置用户准入应用与所属应用（多应用裁决 #8 + 模型 A）：
-	// application_ids 全量覆盖语义，空数组 = 清空准入；
-	// home_application_id 为默认所属应用（隐式可进入，无需重复放进准入集合），必须已启用；
-	// 空串 = 保留仍有效旧值或清空。
+	// 设置用户准入应用（ADR 0008）：application_ids 全量覆盖语义，空数组 = 清空接入集合。
 	UpdateAccountApplications(context.Context, *UpdateAccountApplicationsRequest) (*emptypb.Empty, error)
 	// 管理员重置用户密码：新密码 bcrypt 落库，不要求提供旧密码
 	ResetAccountPassword(context.Context, *ResetAccountPasswordRequest) (*emptypb.Empty, error)

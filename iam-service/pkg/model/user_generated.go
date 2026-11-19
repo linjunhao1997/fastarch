@@ -17,7 +17,6 @@ const (
 	UserColumnNickname          = "nickname"
 	UserColumnEmail             = "email"
 	UserColumnStatus            = "status"
-	UserColumnHomeApplicationId = "home_application_id"
 	UserColumnCreatedBy         = "created_by"
 	UserColumnUpdatedBy         = "updated_by"
 )

@@ -18,12 +18,14 @@ import type { MyProfileApplication } from '@/shared/types';
 const DATA_SCOPE_STORAGE_KEY = 'data_scope_app_code';
 
 export interface DataScopeContextValue {
-  /** 当前选中的数据归属应用 code */
+  /** 当前选中的数据归属应用 code（admin 恒为空，不参与数据隔离） */
   appCode: string;
   /** 当前选中的应用摘要 */
   current: MyProfileApplication | undefined;
   /** 用户可切换的应用清单（来自 GetMyProfile.applications） */
   applications: MyProfileApplication[];
+  /** 是否平台超管：admin 旁路数据范围，左上角不展示切换器、请求不发 X-Fa-App-Code（ADR-0009） */
+  isAdmin: boolean;
   loading: boolean;
   setAppCode: (code: string) => void;
 }
@@ -50,6 +52,7 @@ export function DataScopeProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const [applications, setApplications] = useState<MyProfileApplication[]>([]);
   const [appCode, setAppCodeState] = useState<string>(readStoredCode);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   // 只在挂载时读取一次初始选中值；切换范围不重新拉取接入集合（集合由权限分配决定）。
   const initialAppCode = useRef(appCode);
@@ -62,6 +65,16 @@ export function DataScopeProvider({ children }: { children: ReactNode }) {
         const apps = profile.applications ?? [];
         setApplications(apps);
         setLoading(false);
+        // 超管（ADR-0009）：旁路数据范围——清空范围选择态与请求层范围头，
+        // 左上角不展示切换器。后端 resolveAppCode 在 isAdmin 旁路之前执行，
+        // admin 若带陈旧 appCode 会被接入校验拒绝，故必须从源头不发。
+        if (profile.isAdmin) {
+          setIsAdmin(true);
+          setAppCodeState('');
+          writeStoredCode('');
+          setRequestDataScope('');
+          return;
+        }
         // 选中态校验：已存 code 不在接入集合（换账号/权限变更）则回落到第一个。
         const valid = apps.find((app) => app.code === initialAppCode.current && app.status === 'enabled');
         if (!valid) {
@@ -101,8 +114,8 @@ export function DataScopeProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo<DataScopeContextValue>(
-    () => ({ appCode, current, applications, loading, setAppCode }),
-    [appCode, current, applications, loading, setAppCode],
+    () => ({ appCode, current, applications, isAdmin, loading, setAppCode }),
+    [appCode, current, applications, isAdmin, loading, setAppCode],
   );
 
   return <DataScopeContext.Provider value={value}>{children}</DataScopeContext.Provider>;

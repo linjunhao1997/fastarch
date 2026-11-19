@@ -14,10 +14,10 @@ import (
 	"iam-service/pkg/model"
 )
 
-// TestRoleHomeApplicationIsolation 验证角色归属应用成为数据边界（推翻 ADR 0006 的「角色全局」）：
-// 非 admin 只能列出/查看/修改/删除 home 一致的角色，创建时强制归属 home；
-// home 未设置 fail-closed；admin 旁路。
-func TestRoleHomeApplicationIsolation(t *testing.T) {
+// TestRoleDataScopeIsolation 验证角色归属应用成为数据边界：
+// 非 admin 只能列出/查看/修改/删除数据范围应用一致的角色，创建时强制归属数据范围应用；
+// 数据范围未注入 fail-closed；admin 旁路。
+func TestRoleDataScopeIsolation(t *testing.T) {
 	db := setupAuthorizationTestDB(t)
 	setupTestApplication(t, db)
 	const otherAppId = int64(901)
@@ -28,12 +28,9 @@ func TestRoleHomeApplicationIsolation(t *testing.T) {
 		t.Fatalf("create other application: %v", err)
 	}
 
-	for _, spec := range []struct{ id, home int64 }{{1, testAppId}, {2, otherAppId}, {3, 0}} {
-		operator := createTestUser(t, db, spec.id, "operator-"+cast.ToString(spec.id), 1)
-		operator.HomeApplicationId = spec.home
-		if err := db.Save(&operator).Error; err != nil {
-			t.Fatalf("set operator home: %v", err)
-		}
+	// 数据范围由请求头 dataAppId 注入 ctx（删除 home 后不再从用户行读取）。
+	for _, spec := range []struct{ id, scope int64 }{{1, testAppId}, {2, otherAppId}, {3, 0}} {
+		createTestUser(t, db, spec.id, "operator-"+cast.ToString(spec.id), 1)
 	}
 
 	iamRole := createTestRole(t, db, 11, "iam-role", 1)
@@ -48,9 +45,9 @@ func TestRoleHomeApplicationIsolation(t *testing.T) {
 	}
 
 	svc := NewAuthorizationService(db, nil)
-	ctxIam := auth.WithAccountId(context.Background(), 1)
-	ctxSender := auth.WithAccountId(context.Background(), 2)
-	ctxNoHome := auth.WithAccountId(context.Background(), 3)
+	ctxIam := auth.WithDataAppId(auth.WithAccountId(context.Background(), 1), testAppId)
+	ctxSender := auth.WithDataAppId(auth.WithAccountId(context.Background(), 2), otherAppId)
+	ctxNoScope := auth.WithAccountId(context.Background(), 3)
 	page := &iam_v1.ListRolesRequest{CurrentPage: 1, PageSize: 10}
 
 	roleIds := func(ctx context.Context) map[int64]bool {
@@ -72,8 +69,8 @@ func TestRoleHomeApplicationIsolation(t *testing.T) {
 	if ids := roleIds(ctxSender); !ids[otherRole.Id] || ids[iamRole.Id] {
 		t.Fatalf("sender operator roles = %v, want only sender role", ids)
 	}
-	if ids := roleIds(ctxNoHome); len(ids) != 0 {
-		t.Fatalf("no-home operator roles = %v, want empty", ids)
+	if ids := roleIds(ctxNoScope); len(ids) != 0 {
+		t.Fatalf("no-scope operator roles = %v, want empty", ids)
 	}
 	if ids := roleIds(auth.WithAdmin(auth.WithAccountId(context.Background(), 99))); !ids[iamRole.Id] || !ids[otherRole.Id] {
 		t.Fatalf("admin roles = %v, want both", ids)
@@ -96,9 +93,9 @@ func TestRoleHomeApplicationIsolation(t *testing.T) {
 		t.Fatalf("CreateRole() error = %v", err)
 	}
 	if created.ApplicationId != testAppId {
-		t.Fatalf("created role applicationId = %d, want %d (operator home)", created.ApplicationId, testAppId)
+		t.Fatalf("created role applicationId = %d, want %d (operator data scope)", created.ApplicationId, testAppId)
 	}
-	if _, err := svc.CreateRole(ctxNoHome, &iam_v1.CreateRoleRequest{Name: "x", RoleCode: "x-role"}); !errors.Is(err, ErrHomeApplicationRequired) {
-		t.Fatalf("CreateRole(no home) error = %v, want %v", err, ErrHomeApplicationRequired)
+	if _, err := svc.CreateRole(ctxNoScope, &iam_v1.CreateRoleRequest{Name: "x", RoleCode: "x-role"}); !errors.Is(err, ErrDataScopeRequired) {
+		t.Fatalf("CreateRole(no data scope) error = %v, want %v", err, ErrDataScopeRequired)
 	}
 }

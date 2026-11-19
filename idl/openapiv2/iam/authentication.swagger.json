@@ -157,13 +157,9 @@
           "format": "date-time",
           "title": "创建时间"
         },
-        "homeApplicationId": {
-          "type": "string",
-          "title": "所属应用 id（string 编码，ADR 0006 数据边界）：非 admin 创建用户时锁定为\r\n操作者所属应用。admin/未设置为 \"0\"。注意与\"可进入应用清单\"无关——\r\n登录已锁定应用（ADR 0007），profile 不再返回可切换清单。"
-        },
         "isAdmin": {
           "type": "boolean",
-          "title": "是否 admin 角色（只读回传，服务端派生）：前端据此锁定所属应用等数据边界 UI"
+          "title": "是否 admin 角色（只读回传，服务端派生）：前端据此决定是否放开数据边界 UI"
         },
         "applications": {
           "type": "array",
@@ -171,7 +167,7 @@
             "type": "object",
             "$ref": "#/definitions/v1ApplicationSummary"
           },
-          "title": "用户可切换的数据归属应用清单（home + 准入绑定）：登录后应用选择页与左上角\r\n数据范围下拉的唯一数据源。admin 返回全部启用应用。"
+          "title": "用户可切换的数据归属应用清单（接入集合）：登录后应用选择页与左上角\r\n数据范围下拉的唯一数据源。admin 返回全部启用应用。"
         }
       }
     },

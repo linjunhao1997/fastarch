@@ -59,13 +59,16 @@ func TestServiceQueriesDoNotUseSelectStar(t *testing.T) {
 	if err := db.Select(model.ApplicationFields).Create(&app).Error; err != nil {
 		t.Fatal(err)
 	}
-	// 用户种子（bcrypt 密码摘要）；数据边界 ADR 0006：用户须有所属应用
+	// 用户种子（bcrypt 密码摘要）
 	hash, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.DefaultCost)
 	if err != nil {
 		t.Fatal(err)
 	}
-	user := model.User{Username: "test-user", Nickname: "Test User", PasswordHash: string(hash), Status: model.StatusEnabled, Version: 1, HomeApplicationId: app.Id}
+	user := model.User{Username: "test-user", Nickname: "Test User", PasswordHash: string(hash), Status: model.StatusEnabled, Version: 1}
 	if err := db.Select(model.UserFields).Create(&user).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&model.RUserApplication{UserId: user.Id, ApplicationId: app.Id}).Error; err != nil {
 		t.Fatal(err)
 	}
 	role := model.Role{Code: "test-role", Name: "Test Role", Status: model.StatusEnabled, ApplicationId: app.Id, Version: 1}
@@ -79,7 +82,7 @@ func TestServiceQueriesDoNotUseSelectStar(t *testing.T) {
 
 	capture := &sqlCapture{}
 	db.Logger = capture
-	ctx := auth.WithApplicationId(auth.WithAccountId(context.Background(), user.Id), app.Id)
+	ctx := auth.WithDataAppId(auth.WithApplicationId(auth.WithAccountId(context.Background(), user.Id), app.Id), app.Id)
 	services := service.NewAuthorizationService(db, redisClient)
 	if _, err := services.GetRole(ctx, &commonv1.GetRequest{Id: role.Id}); err != nil {
 		t.Fatal(err)

@@ -288,24 +288,14 @@ func TestDeleteApplicationReferenced(t *testing.T) {
 		t.Fatalf("cleanup dict type: %v", err)
 	}
 
-	// 用户 home 引用
-	user := createTestUser(t, db, 15, "ref-user", 1)
-	user.HomeApplicationId = 1
-	if err := db.Save(&user).Error; err != nil {
-		t.Fatalf("set user home: %v", err)
-	}
-	assertReferenced("user home")
-	// home 清零后仅剩准入绑定引用
-	if err := db.Model(&model.User{}).Where(model.UserColumnId, user.Id).
-		Update(model.UserColumnHomeApplicationId, 0).Error; err != nil {
-		t.Fatalf("clear user home: %v", err)
-	}
-	binding := model.RUserApplication{UserId: user.Id, ApplicationId: 1}
+	// 用户接入绑定引用（ADR 0008：删除 home 后接入关系由 t_r_user_application 表达）
+	createTestUser(t, db, 15, "ref-user", 1)
+	binding := model.RUserApplication{UserId: int64(15), ApplicationId: 1}
 	if err := db.Create(&binding).Error; err != nil {
 		t.Fatalf("create admission binding: %v", err)
 	}
 	assertReferenced("admission binding")
-	if err := db.Where("user_id", user.Id).Delete(&model.RUserApplication{}).Error; err != nil {
+	if err := db.Where("user_id", 15).Delete(&model.RUserApplication{}).Error; err != nil {
 		t.Fatalf("cleanup binding: %v", err)
 	}
 

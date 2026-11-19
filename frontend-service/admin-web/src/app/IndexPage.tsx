@@ -11,6 +11,7 @@ import {
   routes,
 } from '@/app/router';
 import { usePermissions } from '@/shared/hooks/permission-context';
+import { profileApi } from '@/iam/api/iam';
 import { menuApi } from '@/shared/api/menu-dict-api';
 import { clearRequestDataScope } from '@/shared/api/request';
 import { clearConsole, getConsole } from '@/shared/api/app-context';
@@ -68,7 +69,10 @@ export default function IndexPage() {
   const navigate = useNavigate();
   const { label: consoleLabel } = useConsole();
   const { permissionCodes } = usePermissions();
-  const { appCode, current, applications, loading: scopeLoading, setAppCode } = useDataScope();
+  const { appCode, current, applications, isAdmin, loading: scopeLoading, setAppCode } = useDataScope();
+  // 右上角显示当前登录用户的昵称（缺失时回落用户名），与登录缓存同源。
+  const { data: profile } = useQuery({ queryKey: ['profile', 'my'], queryFn: profileApi.get });
+  const displayName = profile?.nickname || profile?.username || '用户';
   const enabledScopes = useMemo(
     () => applications.filter((app) => app.status === 'enabled'),
     [applications],
@@ -186,46 +190,50 @@ export default function IndexPage() {
         >
           {collapsed ? 'FA' : consoleLabel}
         </div>
-        {/* 数据范围切换：与控制台正交。选中项作为 X-Fa-App-Code 下发，决定列表/详情过滤哪个应用的数据。 */}
-        <div
-          style={{
-            padding: collapsed ? layoutTokens.sectionGap : `${layoutTokens.sectionGap}px ${layoutTokens.sectionGap * 2}px`,
-            borderBottom: `1px solid ${themeTokens.colorBorder}`,
-          }}
-        >
-          {collapsed ? (
-            <Dropdown
-              trigger={['click']}
-              placement="bottomLeft"
-              menu={{
-                selectedKeys: appCode ? [appCode] : [],
-                items: enabledScopes.map((app) => ({
-                  key: app.code,
-                  label: app.name,
-                  onClick: () => setAppCode(app.code),
-                })),
-              }}
-            >
-              <Tooltip title={`数据范围：${current?.name ?? '未选择'}`} placement="right">
-                <Button type="text" icon={<AppstoreOutlined />} block />
-              </Tooltip>
-            </Dropdown>
-          ) : (
-            <>
-              <div style={{ fontSize: 12, color: 'rgba(0, 0, 0, 0.45)', marginBottom: 6 }}>
-                数据范围
-              </div>
-              <Select
-                value={appCode || undefined}
-                onChange={setAppCode}
-                loading={scopeLoading}
-                placeholder="请选择数据范围"
-                style={{ width: '100%' }}
-                options={enabledScopes.map((app) => ({ value: app.code, label: app.name }))}
-              />
-            </>
-          )}
-        </div>
+        {/* 数据范围切换：与控制台正交。选中项作为 X-Fa-App-Code 下发，决定列表/详情过滤哪个应用的数据。
+            超管（ADR-0009）旁路数据范围，不展示切换器、也不发范围头——后端 resolveAppCode
+            在 isAdmin 旁路前执行，admin 带陈旧 appCode 会被接入校验误拒。 */}
+        {!isAdmin && (
+          <div
+            style={{
+              padding: collapsed ? layoutTokens.sectionGap : `${layoutTokens.sectionGap}px ${layoutTokens.sectionGap * 2}px`,
+              borderBottom: `1px solid ${themeTokens.colorBorder}`,
+            }}
+          >
+            {collapsed ? (
+              <Dropdown
+                trigger={['click']}
+                placement="bottomLeft"
+                menu={{
+                  selectedKeys: appCode ? [appCode] : [],
+                  items: enabledScopes.map((app) => ({
+                    key: app.code,
+                    label: app.name,
+                    onClick: () => setAppCode(app.code),
+                  })),
+                }}
+              >
+                <Tooltip title={`数据范围：${current?.name ?? '未选择'}`} placement="right">
+                  <Button type="text" icon={<AppstoreOutlined />} block />
+                </Tooltip>
+              </Dropdown>
+            ) : (
+              <>
+                <div style={{ fontSize: 12, color: 'rgba(0, 0, 0, 0.45)', marginBottom: 6 }}>
+                  数据范围
+                </div>
+                <Select
+                  value={appCode || undefined}
+                  onChange={setAppCode}
+                  loading={scopeLoading}
+                  placeholder="请选择数据范围"
+                  style={{ width: '100%' }}
+                  options={enabledScopes.map((app) => ({ value: app.code, label: app.name }))}
+                />
+              </>
+            )}
+          </div>
+        )}
         {renderSiderBody()}
         {menuTreeQuery.isFetching && !!menuTreeQuery.data ? (
           <Spin size="small" style={{ position: 'absolute', right: 12, bottom: 12 }} />
@@ -246,7 +254,7 @@ export default function IndexPage() {
           >
             <Flex align="center" gap={12}>
               <Avatar style={{ backgroundColor: themeTokens.colorPrimary }} icon={<UserOutlined />} />
-              <span>管理员</span>
+              <span>{displayName}</span>
             </Flex>
           </Dropdown>
         </Header>

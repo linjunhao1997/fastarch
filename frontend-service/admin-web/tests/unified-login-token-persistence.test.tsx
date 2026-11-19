@@ -35,7 +35,6 @@ describe('统一登录态持久化与范围清理', () => {
         id: '1',
         username: 'admin',
         isAdmin: false,
-        homeApplicationId: '2',
         applications: [{ id: '2', code: 'sender', name: '消息中心', status: 'enabled' }],
       });
     }

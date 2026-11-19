@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	common_v1 "github.com/linjunhao1997/idl/pb/common"
 	iam_v1 "github.com/linjunhao1997/idl/pb/iam"
 	"github.com/spf13/cast"
 	"google.golang.org/grpc"
@@ -15,9 +16,9 @@ import (
 	"iam-service/pkg/model"
 )
 
-// bindScopeFixture 绑定隔离夹具：iam/sender 两应用、四个操作者（home=iam、
-// home=sender、home=iam 非 admin、无 home）、两目标用户（home=iam id=10、
-// home=sender id=20）、四个角色：iam-role/sender-role、内置超管 admin（归 IAM、
+// bindScopeFixture 绑定隔离夹具：iam/sender 两应用、四个操作者（data scope=iam、
+// data scope=sender、data scope=iam 非 admin、无 data scope）、两目标用户（接入 iam id=10、
+// 接入 sender id=20）、四个角色：iam-role/sender-role、内置超管 admin（归 IAM、
 // is_super_admin=1）、sender 应用级 admin（同名码、非超管）。
 type bindScopeFixture struct {
 	db              *gorm.DB
@@ -26,7 +27,7 @@ type bindScopeFixture struct {
 	ctxIam          context.Context
 	ctxSender       context.Context
 	ctxIamNonAdmin  context.Context
-	ctxNoHome       context.Context
+	ctxNoScope      context.Context
 	ctxAdmin        context.Context
 	iamRole         model.Role
 	otherRole       model.Role
@@ -45,32 +46,33 @@ func setupBindScopeFixture(t *testing.T) bindScopeFixture {
 	}).Error; err != nil {
 		t.Fatalf("create other application: %v", err)
 	}
-	for _, spec := range []struct{ id, home int64 }{{1, testAppId}, {2, otherAppId}, {3, testAppId}, {4, 0}} {
-		operator := createTestUser(t, db, spec.id, "bind-operator-"+cast.ToString(spec.id), 1)
-		operator.HomeApplicationId = spec.home
-		if err := db.Save(&operator).Error; err != nil {
-			t.Fatalf("set operator home: %v", err)
+	// 数据范围由 dataAppId 注入 ctx（删除 home 后不再从用户行读取）。
+	for _, spec := range []struct{ id, scope int64 }{{1, testAppId}, {2, otherAppId}, {3, testAppId}, {4, 0}} {
+		createTestUser(t, db, spec.id, "bind-operator-"+cast.ToString(spec.id), 1)
+	}
+	// 目标用户归属由接入集合表达：10 接入 iam，20 接入 sender。
+	createTestUser(t, db, 10, "bind-target", 1)
+	createTestUser(t, db, 20, "bind-target-sender", 1)
+	for _, spec := range []struct{ userId, appId int64 }{{10, testAppId}, {20, otherAppId}} {
+		if err := db.Create(&model.RUserApplication{UserId: spec.userId, ApplicationId: spec.appId}).Error; err != nil {
+			t.Fatalf("bind target application: %v", err)
 		}
 	}
-	target := createTestUser(t, db, 10, "bind-target", 1)
-	target.HomeApplicationId = testAppId
-	if err := db.Save(&target).Error; err != nil {
-		t.Fatalf("set target home: %v", err)
-	}
-	target2 := createTestUser(t, db, 20, "bind-target-sender", 1)
-	target2.HomeApplicationId = otherAppId
-	if err := db.Save(&target2).Error; err != nil {
-		t.Fatalf("set sender target home: %v", err)
+	withScope := func(ctx context.Context, scope int64) context.Context {
+		if scope > 0 {
+			return appCtx(auth.WithDataAppId(ctx, scope))
+		}
+		return appCtx(ctx)
 	}
 	f := bindScopeFixture{
 		db:             db,
 		accounts:       NewAccountService(db, nil),
 		authz:          NewAuthorizationService(db, nil),
-		ctxIam:         auth.WithAccountId(context.Background(), 1),
-		ctxSender:      auth.WithAccountId(context.Background(), 2),
-		ctxIamNonAdmin: auth.WithAccountId(context.Background(), 3),
-		ctxNoHome:      auth.WithAccountId(context.Background(), 4),
-		ctxAdmin:       auth.WithAdmin(auth.WithAccountId(context.Background(), 99)),
+		ctxIam:         withScope(auth.WithAccountId(context.Background(), 1), testAppId),
+		ctxSender:      withScope(auth.WithAccountId(context.Background(), 2), otherAppId),
+		ctxIamNonAdmin: withScope(auth.WithAccountId(context.Background(), 3), testAppId),
+		ctxNoScope:     withScope(auth.WithAccountId(context.Background(), 4), 0),
+		ctxAdmin:       appCtx(auth.WithAdmin(auth.WithAccountId(context.Background(), 99))),
 	}
 	f.iamRole = createTestRole(t, db, 11, "iam-role", 1)
 	f.iamRole.ApplicationId = testAppId
@@ -97,78 +99,84 @@ func setupBindScopeFixture(t *testing.T) bindScopeFixture {
 	return f
 }
 
-// TestRoleBindHomeIsolation 验证绑定操作纳入数据边界（ADR 0006 补充裁决）：
-// UpdateAccountRoles 待绑定角色逐个校验归属 home；非 admin 一律禁绑内置 admin
-// 角色（登录按角色码计算 IsAdmin，绑定即提权），即使操作者 home 与 admin 角色
-// 归属一致也拒绝；admin/系统调用旁路。
-func TestRoleBindHomeIsolation(t *testing.T) {
+// TestRoleBindScopeIsolation 验证绑定操作纳入数据边界（ADR 0006 补充、ADR-0009 改按 roleId）：
+// UpdateAccountRoles 按全局唯一 roleId 加载角色，非 admin 逐个校验归属数据范围；
+// 非 admin 一律禁绑内置超管角色（is_super_admin 标志，绑定即提权），admin/系统调用
+// 旁路且可跨应用分配（ADR-0009 核心新能力）。
+func TestRoleBindScopeIsolation(t *testing.T) {
 	f := setupBindScopeFixture(t)
 
-	// 跨 home 绑定 → 码按目标 home 解析不可达（000014 起应用内唯一）
+	// 非 admin 跨应用 roleId → ErrRoleOutOfScope（ADR-0009：不再按码解析，改按归属校验）
 	if _, err := f.accounts.UpdateAccountRoles(f.ctxIam, &iam_v1.UpdateAccountRolesRequest{
-		AccountId: 10, AddedRoleCodeList: []string{f.otherRole.Code},
-	}); !errors.Is(err, ErrRoleNotFound) {
-		t.Fatalf("bind cross-home role error = %v, want %v", err, ErrRoleNotFound)
+		AccountId: 10, AddedRoleIds: []string{cast.ToString(f.otherRole.Id)},
+	}); !errors.Is(err, ErrRoleOutOfScope) {
+		t.Fatalf("bind cross-scope role error = %v, want %v", err, ErrRoleOutOfScope)
 	}
-	// 同 home 绑定 → 成功
+	// 同应用 roleId → 成功
 	if _, err := f.accounts.UpdateAccountRoles(f.ctxIam, &iam_v1.UpdateAccountRolesRequest{
-		AccountId: 10, AddedRoleCodeList: []string{f.iamRole.Code},
+		AccountId: 10, AddedRoleIds: []string{cast.ToString(f.iamRole.Id)},
 	}); err != nil {
-		t.Fatalf("bind same-home role: %v", err)
+		t.Fatalf("bind same-scope role: %v", err)
 	}
-	// 非 admin 禁绑 admin 角色（home=IAM 与 admin 角色归属一致也拒绝）
+	// 非 admin 禁绑内置超管角色（归属一致也拒绝）
 	if _, err := f.accounts.UpdateAccountRoles(f.ctxIamNonAdmin, &iam_v1.UpdateAccountRolesRequest{
-		AccountId: 10, AddedRoleCodeList: []string{model.RoleAdmin},
+		AccountId: 10, AddedRoleIds: []string{cast.ToString(f.adminRole.Id)},
 	}); !errors.Is(err, ErrRoleAdminBindForbidden) {
-		t.Fatalf("bind admin role error = %v, want %v", err, ErrRoleAdminBindForbidden)
+		t.Fatalf("bind super admin role error = %v, want %v", err, ErrRoleAdminBindForbidden)
 	}
-	// home 未设置 → fail-closed（目标用户边界先行拒绝）
-	if _, err := f.accounts.UpdateAccountRoles(f.ctxNoHome, &iam_v1.UpdateAccountRolesRequest{
-		AccountId: 10, AddedRoleCodeList: []string{f.iamRole.Code},
+	// 数据范围未注入 → fail-closed（目标用户边界先行拒绝）
+	if _, err := f.accounts.UpdateAccountRoles(f.ctxNoScope, &iam_v1.UpdateAccountRolesRequest{
+		AccountId: 10, AddedRoleIds: []string{cast.ToString(f.iamRole.Id)},
 	}); !errors.Is(err, ErrAccountOutOfScope) {
-		t.Fatalf("bind no-home error = %v, want %v", err, ErrAccountOutOfScope)
+		t.Fatalf("bind no-scope error = %v, want %v", err, ErrAccountOutOfScope)
 	}
-	// admin 绑内置超管角色 → 成功（目标 home=IAM，码解析到内置角色）
+	// 不存在的 roleId → ErrRoleNotFound（fail-closed，不静默忽略）
+	if _, err := f.accounts.UpdateAccountRoles(f.ctxIam, &iam_v1.UpdateAccountRolesRequest{
+		AccountId: 10, AddedRoleIds: []string{"999999"},
+	}); !errors.Is(err, ErrRoleNotFound) {
+		t.Fatalf("bind missing role error = %v, want %v", err, ErrRoleNotFound)
+	}
+	// admin 绑内置超管角色 → 成功
 	if _, err := f.accounts.UpdateAccountRoles(f.ctxAdmin, &iam_v1.UpdateAccountRolesRequest{
-		AccountId: 10, AddedRoleCodeList: []string{model.RoleAdmin},
+		AccountId: 10, AddedRoleIds: []string{cast.ToString(f.adminRole.Id)},
 	}); err != nil {
-		t.Fatalf("admin bind admin role: %v", err)
+		t.Fatalf("admin bind super admin role: %v", err)
+	}
+	// admin 跨应用绑定 sender 角色 → 成功（ADR-0009 核心能力：超管不切数据范围亦可跨应用分配）
+	if _, err := f.accounts.UpdateAccountRoles(f.ctxAdmin, &iam_v1.UpdateAccountRolesRequest{
+		AccountId: 20, AddedRoleIds: []string{cast.ToString(f.otherRole.Id)},
+	}); err != nil {
+		t.Fatalf("admin cross-app bind sender role: %v", err)
 	}
 	// sender 非 admin 绑 sender 应用级 'admin' 角色（同名码、非超管）→ 成功
 	if _, err := f.accounts.UpdateAccountRoles(f.ctxSender, &iam_v1.UpdateAccountRolesRequest{
-		AccountId: 20, AddedRoleCodeList: []string{f.senderAdminRole.Code},
+		AccountId: 20, AddedRoleIds: []string{cast.ToString(f.senderAdminRole.Id)},
 	}); err != nil {
 		t.Fatalf("bind app-level admin role: %v", err)
 	}
-	// 系统调用（无认证上下文）→ 隔离旁路，但码同样按目标 home 解析：
-	// 同 home 码可绑，跨 home 码不可达
-	if _, err := f.accounts.UpdateAccountRoles(context.Background(), &iam_v1.UpdateAccountRolesRequest{
-		AccountId: 10, AddedRoleCodeList: []string{f.iamRole.Code},
+	// 系统调用（accountId=0）→ 隔离旁路，按 roleId 可绑任意应用角色
+	if _, err := f.accounts.UpdateAccountRoles(appCtx(context.Background()), &iam_v1.UpdateAccountRolesRequest{
+		AccountId: 10, AddedRoleIds: []string{cast.ToString(f.iamRole.Id)},
 	}); err != nil {
-		t.Fatalf("system bind same-home role: %v", err)
-	}
-	if _, err := f.accounts.UpdateAccountRoles(context.Background(), &iam_v1.UpdateAccountRolesRequest{
-		AccountId: 10, AddedRoleCodeList: []string{f.otherRole.Code},
-	}); !errors.Is(err, ErrRoleNotFound) {
-		t.Fatalf("system bind cross-home role error = %v, want %v", err, ErrRoleNotFound)
+		t.Fatalf("system bind role: %v", err)
 	}
 }
 
 // TestCreateAccountRoleBindIsolation 验证 CreateAccount 初始角色绑定与
-// UpdateAccountRoles 同门槛（ADR 0006 补充）：跨 home 角色与 admin 角色均拒绝。
+// UpdateAccountRoles 同门槛（ADR 0006 补充）：跨应用 角色与 admin 角色均拒绝。
 func TestCreateAccountRoleBindIsolation(t *testing.T) {
 	f := setupBindScopeFixture(t)
 
 	if _, err := f.accounts.CreateAccount(f.ctxIam, &iam_v1.CreateAccountRequest{
 		Username: "cross-home", Password: "password123",
-		HomeApplicationId: cast.ToString(testAppId),
+		ApplicationIds:   []string{cast.ToString(testAppId)},
 		RoleIds:           []string{cast.ToString(f.otherRole.Id)},
 	}); !errors.Is(err, ErrRoleOutOfScope) {
 		t.Fatalf("create with cross-home role error = %v, want %v", err, ErrRoleOutOfScope)
 	}
 	if _, err := f.accounts.CreateAccount(f.ctxIamNonAdmin, &iam_v1.CreateAccountRequest{
 		Username: "admin-bound", Password: "password123",
-		HomeApplicationId: cast.ToString(testAppId),
+		ApplicationIds:   []string{cast.ToString(testAppId)},
 		RoleIds:           []string{cast.ToString(f.adminRole.Id)},
 	}); !errors.Is(err, ErrRoleAdminBindForbidden) {
 		t.Fatalf("create with admin role error = %v, want %v", err, ErrRoleAdminBindForbidden)
@@ -176,17 +184,17 @@ func TestCreateAccountRoleBindIsolation(t *testing.T) {
 	// admin 创建带 admin 角色的用户 → 成功
 	if _, err := f.accounts.CreateAccount(f.ctxAdmin, &iam_v1.CreateAccountRequest{
 		Username: "admin-created", Password: "password123",
-		HomeApplicationId: cast.ToString(testAppId),
+		ApplicationIds:   []string{cast.ToString(testAppId)},
 		RoleIds:           []string{cast.ToString(f.adminRole.Id)},
 	}); err != nil {
 		t.Fatalf("admin create with admin role: %v", err)
 	}
 }
 
-// TestUpdateRolePermissionBindIsolation 验证角色挂码纳入数据边界（ADR 0006 补充）：
-// 非 admin 仅可把 home 一致的码挂到角色上，防止经挂码自授跨应用能力；
-// home 未设置 fail-closed；admin 旁路。
-func TestUpdateRolePermissionBindIsolation(t *testing.T) {
+// TestUpdateRolePermissionBindScopeIsolation 验证角色挂码纳入数据边界（ADR 0006 补充）：
+// 非 admin 仅可把 数据范围一致的码挂到角色上，防止经挂码自授跨应用能力；
+// 数据范围未注入 fail-closed；admin 旁路。
+func TestUpdateRolePermissionBindScopeIsolation(t *testing.T) {
 	f := setupBindScopeFixture(t)
 	homePerm := createTestPermission(t, f.db, 21, "iam.role.bind", 1)
 	otherPerm := createTestPermission(t, f.db, 22, "sender.record.send", 1)
@@ -195,28 +203,28 @@ func TestUpdateRolePermissionBindIsolation(t *testing.T) {
 		t.Fatalf("set other permission app: %v", err)
 	}
 
-	// 跨 home 挂码 → ErrPermissionOutOfScope（角色本身 home 一致）
+	// 跨应用 挂码 → ErrPermissionOutOfScope（角色本身 home 一致）
 	if _, err := f.authz.UpdateRole(f.ctxIam, &iam_v1.UpdateRoleRequest{
 		Id: f.iamRole.Id, Version: f.iamRole.Version,
 		AddedPermissionCodeList: []string{otherPerm.Code},
 	}); !errors.Is(err, ErrPermissionOutOfScope) {
 		t.Fatalf("bind cross-home permission error = %v, want %v", err, ErrPermissionOutOfScope)
 	}
-	// home 码 → 成功，版本推进
+	// 数据范围码 → 成功，版本推进
 	if _, err := f.authz.UpdateRole(f.ctxIam, &iam_v1.UpdateRoleRequest{
 		Id: f.iamRole.Id, Version: f.iamRole.Version,
 		AddedPermissionCodeList: []string{homePerm.Code},
 	}); err != nil {
 		t.Fatalf("bind same-home permission: %v", err)
 	}
-	// home 未设置 → fail-closed（角色自身边界先行拒绝，挂码校验不可达）
-	if _, err := f.authz.UpdateRole(f.ctxNoHome, &iam_v1.UpdateRoleRequest{
+	// 数据范围未注入 → fail-closed（角色自身边界先行拒绝，挂码校验不可达）
+	if _, err := f.authz.UpdateRole(f.ctxNoScope, &iam_v1.UpdateRoleRequest{
 		Id: f.iamRole.Id, Version: f.iamRole.Version + 1,
 		AddedPermissionCodeList: []string{homePerm.Code},
 	}); !errors.Is(err, ErrRoleOutOfScope) {
 		t.Fatalf("bind no-home error = %v, want %v", err, ErrRoleOutOfScope)
 	}
-	// admin 挂跨 home 码 → 成功
+	// admin 挂跨应用 码 → 成功
 	if _, err := f.authz.UpdateRole(f.ctxAdmin, &iam_v1.UpdateRoleRequest{
 		Id: f.iamRole.Id, Version: f.iamRole.Version + 1,
 		AddedPermissionCodeList: []string{otherPerm.Code},
@@ -226,7 +234,7 @@ func TestUpdateRolePermissionBindIsolation(t *testing.T) {
 }
 
 // TestRoleCodeAppScopedUniqueness 验证角色码应用内唯一（000014）：
-// 跨应用同名码可各自创建（复合唯一索引），同应用重复拒绝；非 admin 创建强制归属 home。
+// 跨应用同名码可各自创建（复合唯一索引），同应用重复拒绝；非 admin 创建强制归属数据范围。
 func TestRoleCodeAppScopedUniqueness(t *testing.T) {
 	f := setupBindScopeFixture(t)
 
@@ -241,7 +249,7 @@ func TestRoleCodeAppScopedUniqueness(t *testing.T) {
 	if first.ApplicationId != testAppId || second.ApplicationId != f.otherRole.ApplicationId {
 		t.Fatalf("application ids = %d/%d, want %d/%d", first.ApplicationId, second.ApplicationId, testAppId, f.otherRole.ApplicationId)
 	}
-	// 非 admin 同应用重复 → 拒绝（归属强制 home）
+	// 非 admin 同应用重复 → 拒绝（归属强制数据范围）
 	if _, err := f.authz.CreateRole(f.ctxIam, &iam_v1.CreateRoleRequest{Name: "ops", RoleCode: "ops"}); !errors.Is(err, ErrRoleCodeDuplicated) {
 		t.Fatalf("duplicate in home error = %v, want %v", err, ErrRoleCodeDuplicated)
 	}
@@ -251,9 +259,10 @@ func TestRoleCodeAppScopedUniqueness(t *testing.T) {
 	}
 }
 
-// TestUpdateAccountRolesCodeResolution 验证同名码按目标用户 home 解析（000014）：
-// 两应用各有 'ops' 角色时，绑定落库指向目标 home 应用的角色，无歧义。
-func TestUpdateAccountRolesCodeResolution(t *testing.T) {
+// TestUpdateAccountRolesByIdResolution 验证绑定按全局唯一 roleId 精确落库（ADR-0009）：
+// 两应用各有同名 'ops' 角色，按 id 绑定各自精确命中，无同名歧义；超管可跨应用
+// 给 sender 用户绑 sender 角色，而非 admin 只能绑本数据范围角色。
+func TestUpdateAccountRolesByIdResolution(t *testing.T) {
 	f := setupBindScopeFixture(t)
 	iamOps := createTestRole(t, f.db, 15, "ops", 1)
 	iamOps.ApplicationId = testAppId
@@ -266,11 +275,11 @@ func TestUpdateAccountRolesCodeResolution(t *testing.T) {
 		t.Fatalf("set sender ops app: %v", err)
 	}
 
-	// iam 操作者给 iam 用户绑 'ops' → 解析 iam 的 ops
+	// iam 操作者按 id 给 iam 用户绑 iam ops → 精确命中 iam ops
 	if _, err := f.accounts.UpdateAccountRoles(f.ctxIam, &iam_v1.UpdateAccountRolesRequest{
-		AccountId: 10, AddedRoleCodeList: []string{"ops"},
+		AccountId: 10, AddedRoleIds: []string{cast.ToString(iamOps.Id)},
 	}); err != nil {
-		t.Fatalf("bind ops for iam target: %v", err)
+		t.Fatalf("bind iam ops by id: %v", err)
 	}
 	var count int64
 	if err := f.db.Model(&model.RUserRole{}).
@@ -289,11 +298,11 @@ func TestUpdateAccountRolesCodeResolution(t *testing.T) {
 	if count != 0 {
 		t.Fatalf("sender ops must not be bound to iam target, count = %d", count)
 	}
-	// sender 操作者给 sender 用户绑 'ops' → 解析 sender 的 ops
+	// sender 非 admin 按 id 给 sender 用户绑 sender ops → 精确命中 sender ops
 	if _, err := f.accounts.UpdateAccountRoles(f.ctxSender, &iam_v1.UpdateAccountRolesRequest{
-		AccountId: 20, AddedRoleCodeList: []string{"ops"},
+		AccountId: 20, AddedRoleIds: []string{cast.ToString(senderOps.Id)},
 	}); err != nil {
-		t.Fatalf("bind ops for sender target: %v", err)
+		t.Fatalf("bind sender ops by id: %v", err)
 	}
 	if err := f.db.Model(&model.RUserRole{}).
 		Where(model.RUserRoleColumnUserId+" = ? AND "+model.RUserRoleColumnRoleId+" = ?", 20, senderOps.Id).
@@ -302,6 +311,20 @@ func TestUpdateAccountRolesCodeResolution(t *testing.T) {
 	}
 	if count != 1 {
 		t.Fatalf("sender ops binding count = %d, want 1", count)
+	}
+	// 超管跨应用按 id 给 sender 用户绑 iam ops（同名另一应用）→ 成功且精确命中 iam ops
+	if _, err := f.accounts.UpdateAccountRoles(f.ctxAdmin, &iam_v1.UpdateAccountRolesRequest{
+		AccountId: 20, AddedRoleIds: []string{cast.ToString(iamOps.Id)},
+	}); err != nil {
+		t.Fatalf("admin cross-app bind iam ops to sender user: %v", err)
+	}
+	if err := f.db.Model(&model.RUserRole{}).
+		Where(model.RUserRoleColumnUserId+" = ? AND "+model.RUserRoleColumnRoleId+" = ?", 20, iamOps.Id).
+		Count(&count).Error; err != nil {
+		t.Fatalf("count cross-app binding: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("admin cross-app iam ops binding count = %d, want 1", count)
 	}
 }
 
@@ -329,10 +352,10 @@ func TestLoginIsAdminBySuperFlag(t *testing.T) {
 		{31, "super-admin-user", f.adminRole.Id, true},
 		{32, "flag-role-user", flagRole.Id, true},
 	} {
-		user := createTestUserWithPassword(t, f.db, spec.userId, spec.username, "password123", model.StatusEnabled)
-		user.HomeApplicationId = testAppId
-		if err := f.db.Save(&user).Error; err != nil {
-			t.Fatalf("set login user home: %v", err)
+		createTestUserWithPassword(t, f.db, spec.userId, spec.username, "password123", model.StatusEnabled)
+		// 接入集合：登录 fail-closed 门槛要求非 admin 至少接入一个应用
+		if err := f.db.Create(&model.RUserApplication{UserId: spec.userId, ApplicationId: testAppId}).Error; err != nil {
+			t.Fatalf("bind admitted app for login: %v", err)
 		}
 		// 夹具级直接写关联表（绕过服务层绑定校验，聚焦登录判定本身）
 		if err := f.db.Create(&model.RUserRole{UserId: spec.userId, RoleId: spec.roleId}).Error; err != nil {
@@ -365,5 +388,75 @@ func TestDeleteRoleAppLevelAdmin(t *testing.T) {
 	}
 	if _, err := f.authz.DeleteRole(f.ctxAdmin, &iam_v1.DeleteRoleRequest{Id: f.adminRole.Id}); !errors.Is(err, ErrRoleAdminProtected) {
 		t.Fatalf("delete super admin role error = %v, want %v", err, ErrRoleAdminProtected)
+	}
+}
+
+// TestRoleBindingRemovedScopeAndReadIsolation 验证 ADR-0009 读写两侧对称隔离：
+// ① 写侧 fail-closed：sender 操作者解绑 iam 角色（越界 roleId）被拒，旧实现的
+//    removed 裸码越权删 iam 角色路径被堵死；
+// ② 读侧隔离：账号详情返回的角色列表按操作者数据范围过滤——sender 操作者看不到
+//    目标账号的 iam 角色，超管可见全部。
+func TestRoleBindingRemovedScopeAndReadIsolation(t *testing.T) {
+	f := setupBindScopeFixture(t)
+	// 夹具：目标用户 20（sender）已绑 sender role + iam role（模拟超管配的跨应用角色）
+	for _, roleId := range []int64{f.otherRole.Id, f.iamRole.Id} {
+		if err := f.db.Create(&model.RUserRole{UserId: 20, RoleId: roleId}).Error; err != nil {
+			t.Fatalf("seed user role binding: %v", err)
+		}
+	}
+
+	// ① sender 操作者解绑 iam 角色（越界 roleId）→ ErrRoleOutOfScope，绑定仍在
+	if _, err := f.accounts.UpdateAccountRoles(f.ctxSender, &iam_v1.UpdateAccountRolesRequest{
+		AccountId: 20, RemovedRoleIds: []string{cast.ToString(f.iamRole.Id)},
+	}); !errors.Is(err, ErrRoleOutOfScope) {
+		t.Fatalf("sender remove iam role error = %v, want %v", err, ErrRoleOutOfScope)
+	}
+	var count int64
+	if err := f.db.Model(&model.RUserRole{}).
+		Where(model.RUserRoleColumnUserId+" = ? AND "+model.RUserRoleColumnRoleId+" = ?", 20, f.iamRole.Id).
+		Count(&count).Error; err != nil {
+		t.Fatalf("count iam binding after rejected remove: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("iam role must remain bound after rejected remove, count = %d", count)
+	}
+
+	// sender 操作者解绑本应用角色 → 成功
+	if _, err := f.accounts.UpdateAccountRoles(f.ctxSender, &iam_v1.UpdateAccountRolesRequest{
+		AccountId: 20, RemovedRoleIds: []string{cast.ToString(f.otherRole.Id)},
+	}); err != nil {
+		t.Fatalf("sender remove sender role: %v", err)
+	}
+
+	// ② 读侧：重新补回两条绑定后分别以 sender / 超管视角读取
+	if err := f.db.Create(&model.RUserRole{UserId: 20, RoleId: f.otherRole.Id}).Error; err != nil {
+		t.Fatalf("reseed sender binding: %v", err)
+	}
+	senderView, err := f.accounts.GetAccount(f.ctxSender, &common_v1.GetRequest{Id: 20})
+	if err != nil {
+		t.Fatalf("sender GetAccount: %v", err)
+	}
+	for _, id := range senderView.RoleIds {
+		if id == cast.ToString(f.iamRole.Id) {
+			t.Fatalf("sender view must not expose iam role id in RoleIds: %v", senderView.RoleIds)
+		}
+	}
+	for _, code := range senderView.RoleCodeList {
+		if code == f.iamRole.Code {
+			t.Fatalf("sender view must not expose iam role code: %v", senderView.RoleCodeList)
+		}
+	}
+	adminView, err := f.accounts.GetAccount(f.ctxAdmin, &common_v1.GetRequest{Id: 20})
+	if err != nil {
+		t.Fatalf("admin GetAccount: %v", err)
+	}
+	foundIam := false
+	for _, id := range adminView.RoleIds {
+		if id == cast.ToString(f.iamRole.Id) {
+			foundIam = true
+		}
+	}
+	if !foundIam {
+		t.Fatalf("admin view must expose iam role id, got %v", adminView.RoleIds)
 	}
 }

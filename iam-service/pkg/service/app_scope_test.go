@@ -40,7 +40,8 @@ func createTestApp(t *testing.T, db *gorm.DB, id int64, code string, status stri
 }
 
 func ctxWithApp(appId int64) context.Context {
-	return auth.WithApplicationId(auth.WithAccountId(context.Background(), 1), appId)
+	ctx := auth.WithApplicationId(auth.WithAccountId(context.Background(), 1), appId)
+	return auth.WithDataAppId(ctx, appId)
 }
 
 func createTestMenu(t *testing.T, db *gorm.DB, id int64, appId int64, name string, code string) {
@@ -185,11 +186,7 @@ func TestListPermissionsScopedByApplication(t *testing.T) {
 	db := setupAuthorizationTestDB(t)
 	createTestApp(t, db, testAppIdIam, "iam", model.StatusEnabled)
 	createTestApp(t, db, testAppIdOrder, "order", model.StatusEnabled)
-	operator := createTestUser(t, db, 1, "permission-list-operator", 1)
-	operator.HomeApplicationId = testAppIdIam
-	if err := db.Save(&operator).Error; err != nil {
-		t.Fatalf("set operator home: %v", err)
-	}
+	createTestUser(t, db, 1, "permission-list-operator", 1)
 	iamPerm := createTestPermission(t, db, 1, "iam.user.list", 1)
 	orderPerm := model.Permission{
 		Id: 2, Name: "order", Code: "order.list.all", ApplicationId: testAppIdOrder,
@@ -256,39 +253,18 @@ func TestUpdateAccountApplications(t *testing.T) {
 	if len(got.Applications) != 2 {
 		t.Fatalf("Applications = %v, want 2 apps", got.Applications)
 	}
-	// 所属应用必须属于准入集合
+	// 全量覆盖：从两个收缩为一个
 	_, err = svc.UpdateAccountApplications(ctx, &iam_v1.UpdateAccountApplicationsRequest{
-		AccountId: user.Id, ApplicationIds: []string{"900", "901"}, HomeApplicationId: "900",
+		AccountId: user.Id, ApplicationIds: []string{"901"},
 	})
 	if err != nil {
-		t.Fatalf("UpdateAccountApplications(home) error = %v", err)
-	}
-	got, _ = svc.GetAccount(ctx, &common_v1.GetRequest{Id: user.Id})
-	if got.HomeApplicationId != "900" {
-		t.Fatalf("HomeApplicationId = %q, want 900", got.HomeApplicationId)
-	}
-	// 非准入应用不能设为所属应用
-	_, err = svc.UpdateAccountApplications(ctx, &iam_v1.UpdateAccountApplicationsRequest{
-		AccountId: user.Id, ApplicationIds: []string{"900", "901"}, HomeApplicationId: "999",
-	})
-	if err != ErrHomeApplicationInvalid {
-		t.Fatalf("UpdateAccountApplications(bad home) error = %v, want %v", err, ErrHomeApplicationInvalid)
-	}
-	// 所属应用无需出现在准入集合（隐式准入）
-	_, err = svc.UpdateAccountApplications(ctx, &iam_v1.UpdateAccountApplicationsRequest{
-		AccountId: user.Id, ApplicationIds: []string{"901"}, HomeApplicationId: "900",
-	})
-	if err != nil {
-		t.Fatalf("UpdateAccountApplications(implicit home) error = %v", err)
+		t.Fatalf("UpdateAccountApplications(shrink) error = %v", err)
 	}
 	got, _ = svc.GetAccount(ctx, &common_v1.GetRequest{Id: user.Id})
 	if len(got.Applications) != 1 || got.Applications[0].Id != "901" {
 		t.Fatalf("Applications = %v, want [901]", got.Applications)
 	}
-	if got.HomeApplicationId != "900" {
-		t.Fatalf("HomeApplicationId = %q, want 900 (implicit)", got.HomeApplicationId)
-	}
-	// 清空准入不影响所属应用
+	// 清空接入集合
 	_, err = svc.UpdateAccountApplications(ctx, &iam_v1.UpdateAccountApplicationsRequest{
 		AccountId: user.Id, ApplicationIds: []string{},
 	})
@@ -310,7 +286,7 @@ func TestUpdateAccountApplications(t *testing.T) {
 
 // ── 数据边界（ADR 0006）：所属应用 = 数据边界 ─────────────────────────────
 
-func TestCreateAccountHomeRequired(t *testing.T) {
+func TestCreateAccountApplicationsRequired(t *testing.T) {
 	db := setupAuthorizationTestDB(t)
 	createTestApp(t, db, testAppIdIam, "iam", model.StatusEnabled)
 	createTestApp(t, db, testAppIdOrder, "order", model.StatusEnabled)
@@ -318,124 +294,104 @@ func TestCreateAccountHomeRequired(t *testing.T) {
 	svc := &AccountService{db: db}
 	ctx := auth.WithAdmin(auth.WithAccountId(context.Background(), 1))
 
-	// 缺 home 拒绝
+	// 缺接入应用拒绝
 	if _, err := svc.CreateAccount(ctx, &iam_v1.CreateAccountRequest{
 		Username: "u1", Password: "password123",
-	}); err != ErrHomeApplicationRequired {
-		t.Fatalf("CreateAccount(no home) error = %v, want %v", err, ErrHomeApplicationRequired)
+	}); err != ErrDataScopeRequired {
+		t.Fatalf("CreateAccount(no applications) error = %v, want %v", err, ErrDataScopeRequired)
 	}
-	// 停用 home 拒绝
+	// 停用应用拒绝
 	if _, err := svc.CreateAccount(ctx, &iam_v1.CreateAccountRequest{
-		Username: "u1", Password: "password123", HomeApplicationId: cast.ToString(disabled.Id),
-	}); err != ErrHomeApplicationInvalid {
-		t.Fatalf("CreateAccount(disabled home) error = %v, want %v", err, ErrHomeApplicationInvalid)
+		Username: "u1", Password: "password123", ApplicationIds: []string{cast.ToString(disabled.Id)},
+	}); err != ErrApplicationInvalid {
+		t.Fatalf("CreateAccount(disabled app) error = %v, want %v", err, ErrApplicationInvalid)
 	}
-	// 不存在 home 拒绝
+	// 不存在应用拒绝
 	if _, err := svc.CreateAccount(ctx, &iam_v1.CreateAccountRequest{
-		Username: "u1", Password: "password123", HomeApplicationId: "999",
-	}); err != ErrHomeApplicationInvalid {
-		t.Fatalf("CreateAccount(missing home) error = %v, want %v", err, ErrHomeApplicationInvalid)
+		Username: "u1", Password: "password123", ApplicationIds: []string{"999"},
+	}); err != ErrApplicationInvalid {
+		t.Fatalf("CreateAccount(missing app) error = %v, want %v", err, ErrApplicationInvalid)
 	}
-	// 不存在准入应用拒绝
-	if _, err := svc.CreateAccount(ctx, &iam_v1.CreateAccountRequest{
-		Username: "u2", Password: "password123", HomeApplicationId: "900", ApplicationIds: []string{"12345"},
-	}); err != ErrApplicationNotFoundForScope {
-		t.Fatalf("CreateAccount(missing admitted) error = %v, want %v", err, ErrApplicationNotFoundForScope)
-	}
-	// 成功：application_ids 含 home 自动剔除（隐式准入）+ 去重，响应回填 home+准入
+	// 成功：去重，全部落接入绑定，响应回填
 	created, err := svc.CreateAccount(ctx, &iam_v1.CreateAccountRequest{
-		Username: "u1", Password: "password123", HomeApplicationId: "900",
+		Username: "u1", Password: "password123",
 		ApplicationIds: []string{"900", "901", "901"},
 	})
 	if err != nil {
 		t.Fatalf("CreateAccount() error = %v", err)
 	}
-	if created.HomeApplicationId != "900" {
-		t.Fatalf("HomeApplicationId = %q, want 900", created.HomeApplicationId)
-	}
-	if created.HomeApplication == nil || created.HomeApplication.Code != "iam" {
-		t.Fatalf("HomeApplication = %v, want iam summary", created.HomeApplication)
-	}
-	if len(created.Applications) != 1 || created.Applications[0].Id != "901" {
-		t.Fatalf("Applications = %v, want [901] (home excluded)", created.Applications)
+	if len(created.Applications) != 2 {
+		t.Fatalf("Applications = %v, want 2 apps", created.Applications)
 	}
 	var bindings []model.RUserApplication
 	if err := db.Where(model.RUserApplicationColumnUserId, cast.ToInt64(created.Id)).Find(&bindings).Error; err != nil {
 		t.Fatalf("query bindings: %v", err)
 	}
-	if len(bindings) != 1 || bindings[0].ApplicationId != testAppIdOrder {
-		t.Fatalf("bindings = %v, want single order binding (home implicit)", bindings)
+	if len(bindings) != 2 {
+		t.Fatalf("bindings = %v, want 2 (iam + order)", bindings)
 	}
 }
 
-func TestCreateAccountNonAdminHomeLocked(t *testing.T) {
+// 非 admin 创建账号：接入集合须包含操作者数据范围应用（ADR 0008）。
+func TestCreateAccountNonAdminScopeBound(t *testing.T) {
 	db := setupAuthorizationTestDB(t)
 	createTestApp(t, db, testAppIdIam, "iam", model.StatusEnabled)
 	createTestApp(t, db, testAppIdOrder, "order", model.StatusEnabled)
-	operator := createTestUser(t, db, 1, "op", 1)
-	operator.HomeApplicationId = testAppIdIam
-	if err := db.Save(&operator).Error; err != nil {
-		t.Fatalf("save operator home: %v", err)
-	}
-	createTestUser(t, db, 2, "op-nohome", 1)
+	createTestUser(t, db, 1, "op", 1)
+	createTestUser(t, db, 2, "op-no-scope", 1)
 	svc := &AccountService{db: db}
 
-	// 跨 home 创建拒绝
-	ctx := auth.WithAccountId(context.Background(), 1)
-	if _, err := svc.CreateAccount(ctx, &iam_v1.CreateAccountRequest{
-		Username: "x1", Password: "password123", HomeApplicationId: "901",
+	// 不含数据范围应用（order-only）→ 拒绝
+	ctxIam := auth.WithDataAppId(auth.WithAccountId(context.Background(), 1), testAppIdIam)
+	if _, err := svc.CreateAccount(ctxIam, &iam_v1.CreateAccountRequest{
+		Username: "x1", Password: "password123", ApplicationIds: []string{"901"},
 	}); err != ErrAccountOutOfScope {
-		t.Fatalf("CreateAccount(cross home) error = %v, want %v", err, ErrAccountOutOfScope)
+		t.Fatalf("CreateAccount(cross scope) error = %v, want %v", err, ErrAccountOutOfScope)
 	}
-	// 同 home 创建放行
-	if _, err := svc.CreateAccount(ctx, &iam_v1.CreateAccountRequest{
-		Username: "x2", Password: "password123", HomeApplicationId: "900",
+	// 含数据范围应用 → 放行
+	if _, err := svc.CreateAccount(ctxIam, &iam_v1.CreateAccountRequest{
+		Username: "x2", Password: "password123", ApplicationIds: []string{"900"},
 	}); err != nil {
-		t.Fatalf("CreateAccount(own home) error = %v", err)
+		t.Fatalf("CreateAccount(own scope) error = %v", err)
 	}
-	// 操作者未设置 home 拒绝（fail-closed）
+	// 操作者未注入数据范围应用 → fail-closed
 	ctx0 := auth.WithAccountId(context.Background(), 2)
 	if _, err := svc.CreateAccount(ctx0, &iam_v1.CreateAccountRequest{
-		Username: "x3", Password: "password123", HomeApplicationId: "900",
+		Username: "x3", Password: "password123", ApplicationIds: []string{"900"},
 	}); err != ErrAccountOutOfScope {
-		t.Fatalf("CreateAccount(operator no home) error = %v, want %v", err, ErrAccountOutOfScope)
+		t.Fatalf("CreateAccount(operator no scope) error = %v, want %v", err, ErrAccountOutOfScope)
 	}
 }
 
-func TestListAccountsHomeScoped(t *testing.T) {
+// 列表按数据范围过滤：仅见接入了当前 dataAppId 的用户（ADR 0008）。
+func TestListAccountsDataScopeScoped(t *testing.T) {
 	db := setupAuthorizationTestDB(t)
 	createTestApp(t, db, testAppIdIam, "iam", model.StatusEnabled)
 	createTestApp(t, db, testAppIdOrder, "order", model.StatusEnabled)
-	operator := createTestUser(t, db, 1, "op", 1)
-	operator.HomeApplicationId = testAppIdIam
-	if err := db.Save(&operator).Error; err != nil {
-		t.Fatalf("save operator home: %v", err)
-	}
-	createTestUser(t, db, 2, "op-nohome", 1)
-	for _, spec := range []struct {
-		id   int64
-		name string
-		home int64
-	}{
-		{3, "iam-a", testAppIdIam},
-		{4, "iam-b", testAppIdIam},
-		{5, "order-a", testAppIdOrder},
-	} {
-		u := createTestUser(t, db, spec.id, spec.name, 1)
-		u.HomeApplicationId = spec.home
-		if err := db.Save(&u).Error; err != nil {
-			t.Fatalf("save user home: %v", err)
+	createTestUser(t, db, 1, "op", 1)
+	createTestUser(t, db, 2, "op-no-scope", 1)
+	// 用户 1/3/4 接入 iam；用户 5 接入 order
+	for _, id := range []int64{1, 3, 4} {
+		if err := db.Create(&model.RUserApplication{UserId: id, ApplicationId: testAppIdIam}).Error; err != nil {
+			t.Fatalf("bind iam app: %v", err)
 		}
+	}
+	createTestUser(t, db, 3, "iam-a", 1)
+	createTestUser(t, db, 4, "iam-b", 1)
+	createTestUser(t, db, 5, "order-a", 1)
+	if err := db.Create(&model.RUserApplication{UserId: 5, ApplicationId: testAppIdOrder}).Error; err != nil {
+		t.Fatalf("bind order app: %v", err)
 	}
 	svc := &AccountService{db: db}
 
-	// 非 admin 仅见所属应用的用户（含操作者自身）
-	resp, err := svc.ListAccounts(auth.WithAccountId(context.Background(), 1), &iam_v1.ListAccountsRequest{})
+	// 非 admin 仅见接入 iam 的用户（1/3/4）
+	ctxIam := auth.WithDataAppId(auth.WithAccountId(context.Background(), 1), testAppIdIam)
+	resp, err := svc.ListAccounts(ctxIam, &iam_v1.ListAccountsRequest{})
 	if err != nil {
 		t.Fatalf("ListAccounts(scoped) error = %v", err)
 	}
 	if len(resp.Accounts) != 3 {
-		t.Fatalf("ListAccounts(scoped) = %d accounts, want 3 (home=iam)", len(resp.Accounts))
+		t.Fatalf("ListAccounts(scoped) = %d accounts, want 3 (scope=iam)", len(resp.Accounts))
 	}
 	// admin 全量
 	adminResp, err := svc.ListAccounts(auth.WithAdmin(auth.WithAccountId(context.Background(), 1)), &iam_v1.ListAccountsRequest{})
@@ -445,104 +401,58 @@ func TestListAccountsHomeScoped(t *testing.T) {
 	if len(adminResp.Accounts) != 5 {
 		t.Fatalf("ListAccounts(admin) = %d accounts, want 5", len(adminResp.Accounts))
 	}
-	// 未设置 home 的非 admin fail-closed 空列表
+	// 未注入数据范围应用 → fail-closed 空列表
 	emptyResp, err := svc.ListAccounts(auth.WithAccountId(context.Background(), 2), &iam_v1.ListAccountsRequest{})
 	if err != nil {
-		t.Fatalf("ListAccounts(no home) error = %v", err)
+		t.Fatalf("ListAccounts(no scope) error = %v", err)
 	}
 	if len(emptyResp.Accounts) != 0 {
-		t.Fatalf("ListAccounts(no home) = %d accounts, want 0", len(emptyResp.Accounts))
+		t.Fatalf("ListAccounts(no scope) = %d accounts, want 0", len(emptyResp.Accounts))
 	}
 }
 
-func TestAccountOperationsCrossHomeRejected(t *testing.T) {
+// 账号操作边界：目标用户须接入操作者数据范围应用（ADR 0008）。
+func TestAccountOperationsCrossScopeRejected(t *testing.T) {
 	db := setupAuthorizationTestDB(t)
 	createTestApp(t, db, testAppIdIam, "iam", model.StatusEnabled)
 	createTestApp(t, db, testAppIdOrder, "order", model.StatusEnabled)
-	operator := createTestUser(t, db, 1, "op", 1)
-	operator.HomeApplicationId = testAppIdIam
-	if err := db.Save(&operator).Error; err != nil {
-		t.Fatalf("save operator home: %v", err)
+	createTestUser(t, db, 1, "op", 1)
+	createTestUser(t, db, 5, "foreign", 1)
+	createTestUser(t, db, 6, "same", 1)
+	// 操作者接入 iam；foreign 仅接入 order；same 接入 iam
+	for _, id := range []int64{1, 6} {
+		if err := db.Create(&model.RUserApplication{UserId: id, ApplicationId: testAppIdIam}).Error; err != nil {
+			t.Fatalf("bind iam: %v", err)
+		}
 	}
-	foreign := createTestUser(t, db, 5, "foreign", 1)
-	foreign.HomeApplicationId = testAppIdOrder
-	if err := db.Save(&foreign).Error; err != nil {
-		t.Fatalf("save foreign home: %v", err)
-	}
-	same := createTestUser(t, db, 6, "same", 1)
-	same.HomeApplicationId = testAppIdIam
-	if err := db.Save(&same).Error; err != nil {
-		t.Fatalf("save same home: %v", err)
+	if err := db.Create(&model.RUserApplication{UserId: 5, ApplicationId: testAppIdOrder}).Error; err != nil {
+		t.Fatalf("bind order: %v", err)
 	}
 	svc := &AccountService{db: db}
-	ctx := auth.WithAccountId(context.Background(), 1)
+	ctx := auth.WithDataAppId(auth.WithAccountId(context.Background(), 1), testAppIdIam)
 
-	if _, err := svc.GetAccount(ctx, &common_v1.GetRequest{Id: foreign.Id}); err != ErrAccountOutOfScope {
-		t.Fatalf("GetAccount(cross home) error = %v, want %v", err, ErrAccountOutOfScope)
+	if _, err := svc.GetAccount(ctx, &common_v1.GetRequest{Id: 5}); err != ErrAccountOutOfScope {
+		t.Fatalf("GetAccount(cross scope) error = %v, want %v", err, ErrAccountOutOfScope)
 	}
-	if _, err := svc.UpdateAccount(ctx, &iam_v1.UpdateAccountRequest{Id: foreign.Id, Nickname: "x", Version: 1}); err != ErrAccountOutOfScope {
-		t.Fatalf("UpdateAccount(cross home) error = %v, want %v", err, ErrAccountOutOfScope)
+	if _, err := svc.UpdateAccount(ctx, &iam_v1.UpdateAccountRequest{Id: 5, Nickname: "x", Version: 1}); err != ErrAccountOutOfScope {
+		t.Fatalf("UpdateAccount(cross scope) error = %v, want %v", err, ErrAccountOutOfScope)
 	}
-	if _, err := svc.DeleteAccount(ctx, &iam_v1.DeleteAccountRequest{Id: foreign.Id}); err != ErrAccountOutOfScope {
-		t.Fatalf("DeleteAccount(cross home) error = %v, want %v", err, ErrAccountOutOfScope)
+	if _, err := svc.DeleteAccount(ctx, &iam_v1.DeleteAccountRequest{Id: 5}); err != ErrAccountOutOfScope {
+		t.Fatalf("DeleteAccount(cross scope) error = %v, want %v", err, ErrAccountOutOfScope)
 	}
-	if _, err := svc.ResetAccountPassword(ctx, &iam_v1.ResetAccountPasswordRequest{Id: foreign.Id, NewPassword: "password123"}); err != ErrAccountOutOfScope {
-		t.Fatalf("ResetAccountPassword(cross home) error = %v, want %v", err, ErrAccountOutOfScope)
+	if _, err := svc.ResetAccountPassword(ctx, &iam_v1.ResetAccountPasswordRequest{Id: 5, NewPassword: "password123"}); err != ErrAccountOutOfScope {
+		t.Fatalf("ResetAccountPassword(cross scope) error = %v, want %v", err, ErrAccountOutOfScope)
 	}
-	if _, err := svc.UpdateAccountRoles(ctx, &iam_v1.UpdateAccountRolesRequest{AccountId: foreign.Id, AddedRoleCodeList: []string{"nope"}}); err != ErrAccountOutOfScope {
-		t.Fatalf("UpdateAccountRoles(cross home) error = %v, want %v", err, ErrAccountOutOfScope)
+	if _, err := svc.UpdateAccountApplications(ctx, &iam_v1.UpdateAccountApplicationsRequest{AccountId: 5, ApplicationIds: []string{"900"}}); err != ErrAccountOutOfScope {
+		t.Fatalf("UpdateAccountApplications(cross scope) error = %v, want %v", err, ErrAccountOutOfScope)
 	}
-	if _, err := svc.UpdateAccountApplications(ctx, &iam_v1.UpdateAccountApplicationsRequest{AccountId: foreign.Id, ApplicationIds: []string{"900"}}); err != ErrAccountOutOfScope {
-		t.Fatalf("UpdateAccountApplications(cross home) error = %v, want %v", err, ErrAccountOutOfScope)
-	}
-	// 同 home 放行
-	if _, err := svc.GetAccount(ctx, &common_v1.GetRequest{Id: same.Id}); err != nil {
-		t.Fatalf("GetAccount(same home) error = %v", err)
+	// 同范围放行
+	if _, err := svc.GetAccount(ctx, &common_v1.GetRequest{Id: 6}); err != nil {
+		t.Fatalf("GetAccount(same scope) error = %v", err)
 	}
 	// admin 旁路
 	adminCtx := auth.WithAdmin(auth.WithAccountId(context.Background(), 1))
-	if _, err := svc.GetAccount(adminCtx, &common_v1.GetRequest{Id: foreign.Id}); err != nil {
+	if _, err := svc.GetAccount(adminCtx, &common_v1.GetRequest{Id: 5}); err != nil {
 		t.Fatalf("GetAccount(admin bypass) error = %v", err)
-	}
-}
-
-func TestUpdateAccountApplicationsNonAdminHomeChangeRejected(t *testing.T) {
-	db := setupAuthorizationTestDB(t)
-	createTestApp(t, db, testAppIdIam, "iam", model.StatusEnabled)
-	createTestApp(t, db, testAppIdOrder, "order", model.StatusEnabled)
-	operator := createTestUser(t, db, 1, "op", 1)
-	operator.HomeApplicationId = testAppIdIam
-	if err := db.Save(&operator).Error; err != nil {
-		t.Fatalf("save operator home: %v", err)
-	}
-	target := createTestUser(t, db, 5, "target", 1)
-	target.HomeApplicationId = testAppIdIam
-	if err := db.Save(&target).Error; err != nil {
-		t.Fatalf("save target home: %v", err)
-	}
-	svc := &AccountService{db: db}
-	ctx := auth.WithAccountId(context.Background(), 1)
-
-	// 非 admin 显式改 home 拒绝（数据边界不可移动）
-	if _, err := svc.UpdateAccountApplications(ctx, &iam_v1.UpdateAccountApplicationsRequest{
-		AccountId: target.Id, ApplicationIds: []string{}, HomeApplicationId: "901",
-	}); err != ErrAccountOutOfScope {
-		t.Fatalf("UpdateAccountApplications(home change) error = %v, want %v", err, ErrAccountOutOfScope)
-	}
-	// 空串保留旧值 + 准入变更放行
-	if _, err := svc.UpdateAccountApplications(ctx, &iam_v1.UpdateAccountApplicationsRequest{
-		AccountId: target.Id, ApplicationIds: []string{"901"},
-	}); err != nil {
-		t.Fatalf("UpdateAccountApplications(admitted only) error = %v", err)
-	}
-	got, err := svc.GetAccount(ctx, &common_v1.GetRequest{Id: target.Id})
-	if err != nil {
-		t.Fatalf("GetAccount() error = %v", err)
-	}
-	if got.HomeApplicationId != "900" {
-		t.Fatalf("HomeApplicationId = %q, want 900 (unchanged)", got.HomeApplicationId)
-	}
-	if len(got.Applications) != 1 || got.Applications[0].Id != "901" {
-		t.Fatalf("Applications = %v, want [901]", got.Applications)
 	}
 }

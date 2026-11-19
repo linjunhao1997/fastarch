@@ -126,11 +126,11 @@ export const accountApi = {
   updateRoles: (id: string, data: UpdateAccountRolesRequest) =>
     request<void>(`/account/accounts/${id}/roles`, { method: 'PATCH', body: data }),
   /** 管理员重置用户密码（无需旧密码；新密码 ≥8 位） */
-  /** 设置准入应用与所属应用：applicationIds 全量覆盖（不含所属应用） */
-  updateApplications: (id: string, applicationIds: string[], homeApplicationId: string) =>
+  /** 设置接入应用：applicationIds 全量覆盖（空数组 = 清空接入集合） */
+  updateApplications: (id: string, applicationIds: string[]) =>
     request<void>(`/account/accounts/${id}/applications`, {
       method: 'PATCH',
-      body: { accountId: id, applicationIds, homeApplicationId },
+      body: { accountId: id, applicationIds },
     }),
   resetPassword: (id: string, data: ResetAccountPasswordRequest) =>
     request<void>(`/account/accounts/${id}/reset-password`, { method: 'POST', body: data }),

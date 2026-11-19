@@ -197,7 +197,7 @@ func (s *ApplicationService) UpdateApplication(ctx context.Context, request *iam
 }
 
 // countApplicationReferences 统计引用该应用的数据行数：角色/权限/菜单/字典归属、
-// 用户所属应用（home）与准入绑定。固定六项 Count（非数据驱动 N+1），任一引用即禁删。
+// 用户接入绑定。固定五项 Count（非数据驱动 N+1），任一引用即禁删。
 func (s *ApplicationService) countApplicationReferences(ctx context.Context, appId int64) (int64, error) {
 	refs := []struct {
 		model  interface{}
@@ -207,7 +207,6 @@ func (s *ApplicationService) countApplicationReferences(ctx context.Context, app
 		{model.Permission{}, model.PermissionColumnApplicationId},
 		{contribmodel.Menu{}, contribmodel.MenuColumnApplicationId},
 		{contribmodel.DictType{}, contribmodel.DictTypeColumnApplicationId},
-		{model.User{}, model.UserColumnHomeApplicationId},
 		{model.RUserApplication{}, model.RUserApplicationColumnApplicationId},
 	}
 	var total int64

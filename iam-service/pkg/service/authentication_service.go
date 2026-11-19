@@ -93,8 +93,8 @@ func (a AuthenticationService) PasswordAuth(ctx context.Context, request *iam_v1
 	// 菜单/字典归属宿主固定 appId（拦截器注入），数据归属由请求头 appCode 选择，
 	// 控制台由前端登录后选择；调用方自报的 application_code 一律忽略。
 	// 接入集合快照写入 JWT：运行时数据归属校验以此为准（授权来自签名，
-	// header appCode 仅是选择信号）。home 隐式准入 + 显式绑定，一次查库。
-	admittedAppIds, err := loadAdmittedAppIds(ctx, a.db, user.Id, user.HomeApplicationId)
+	// header appCode 仅是选择信号）。接入集合 = t_r_user_application 显式绑定。
+	admittedAppIds, err := loadAdmittedAppIds(ctx, a.db, user.Id)
 	if err != nil {
 		slog.Warn("load admitted apps for jwt failed", "account_id", user.Id, "error", err)
 		return nil, err
@@ -151,7 +151,7 @@ func (a AuthenticationService) GetMyProfile(ctx context.Context, empty *emptypb.
 		return nil, err
 	}
 	isAdmin := auth.IsAdminFromContext(ctx)
-	admittedApps, err := loadAdmittedApplicationSummaries(ctx, a.db, user.Id, user.HomeApplicationId, isAdmin)
+	admittedApps, err := loadAdmittedApplicationSummaries(ctx, a.db, user.Id, isAdmin)
 	if err != nil {
 		slog.Warn("load admitted applications for profile failed", "account_id", accountId, "error", err)
 		return nil, err
@@ -164,7 +164,6 @@ func (a AuthenticationService) GetMyProfile(ctx context.Context, empty *emptypb.
 		Status:            user.Status,
 		CreatedBy:         user.CreatedBy,
 		CreateTime:        timestamppb.New(user.CreateTime),
-		HomeApplicationId: cast.ToString(user.HomeApplicationId),
 		IsAdmin:           isAdmin,
 		Applications:      admittedApps,
 	}, nil

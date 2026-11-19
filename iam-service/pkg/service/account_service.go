@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"time"
 
@@ -33,6 +32,30 @@ func NewAccountService(db *gorm.DB, rdb *redis.Client) *AccountService {
 	return &AccountService{db: db, rdb: rdb}
 }
 
+// filterUserRolesByScope 账号角色清单的读侧数据范围隔离（ADR-0009）：
+// 非 admin 只保留归属应用 == 其 dataAppId 的角色（sender 侧看不到目标账号的
+// iam 角色）；admin/系统调用保留全部；未注入数据范围则 fail-closed 清空。
+// scoped/scopeId 来自 operatorDataScope，由调用方复用避免重复查库。
+func filterUserRolesByScope(u *model.User, scopeId int64, scoped bool) {
+	if !scoped {
+		return
+	}
+	if u == nil {
+		return
+	}
+	if scopeId <= 0 {
+		u.RoleList = []*model.Role{}
+		return
+	}
+	filtered := make([]*model.Role, 0, len(u.RoleList))
+	for _, role := range u.RoleList {
+		if role.ApplicationId == scopeId {
+			filtered = append(filtered, role)
+		}
+	}
+	u.RoleList = filtered
+}
+
 // accountToPb 模型转 pb：id/username/email/nickname/status/audit/role_code_list。
 func accountToPb(a model.User) *iam_v1.Account {
 	return &iam_v1.Account{
@@ -42,7 +65,6 @@ func accountToPb(a model.User) *iam_v1.Account {
 		Nickname:          a.Nickname,
 		Status:            a.Status,
 		Version:           a.Version,
-		HomeApplicationId: cast.ToString(a.HomeApplicationId),
 		CreatedBy:         a.CreatedBy,
 		UpdatedBy:         a.UpdatedBy,
 		CreateTime:        timestamppb.New(a.CreateTime),
@@ -53,6 +75,14 @@ func accountToPb(a model.User) *iam_v1.Account {
 				codes = append(codes, role.Code)
 			}
 			return codes
+		}(),
+		// 与 role_code_list 同源同序；绑定接口按 id 承载（ADR-0009）。
+		RoleIds: func() []string {
+			ids := make([]string, 0, len(a.RoleList))
+			for _, role := range a.RoleList {
+				ids = append(ids, cast.ToString(role.Id))
+			}
+			return ids
 		}(),
 	}
 }
@@ -66,26 +96,26 @@ func (service *AccountService) GetAccount(ctx context.Context, request *common_v
 	if err != nil {
 		return nil, err
 	}
-	if err := service.requireAccountScope(ctx, res.HomeApplicationId); err != nil {
+	if err := service.requireAccountScope(ctx, res.Id); err != nil {
 		return nil, err
 	}
 	// 角色清单走显式关联查询（Preload 会生成 SELECT *）
 	if err := loadUserRoles(ctx, service.db, &res); err != nil {
 		return nil, err
 	}
+	// 读侧隔离（ADR-0009）：非 admin 仅可见本数据范围应用的角色。
+	scopeId, scoped, err := operatorDataScope(ctx, service.db)
+	if err != nil {
+		return nil, err
+	}
+	filterUserRolesByScope(&res, scopeId, scoped)
 	account := accountToPb(res)
-	// 可进入应用清单（多应用裁决 #8）：详情/列表统一经批量查询回填（含展示字段）
+	// 可接入应用清单（ADR 0008）：详情/列表统一经批量查询回填（含展示字段）
 	appsByUser, err := loadUsersApplications(ctx, service.db, []model.User{res})
 	if err != nil {
 		return nil, err
 	}
 	account.Applications = applicationsToPb(appsByUser[res.Id])
-	// 所属应用隐式准入，可能不在 applications 中，单独回填展示摘要。
-	homeApps, err := loadApplicationsByIds(ctx, service.db, []int64{res.HomeApplicationId})
-	if err != nil {
-		return nil, err
-	}
-	account.HomeApplication = applicationSummaryToPb(homeApps[res.HomeApplicationId])
 	return account, nil
 }
 
@@ -142,21 +172,15 @@ func loadApplicationsByIds(ctx context.Context, db *gorm.DB, ids []int64) (map[i
 	return result, nil
 }
 
-// operatorScope 返回操作者的数据边界（ADR 0006），统一委托包级 operatorHomeScope，
-// 避免账号域与角色/权限域各持一份隔离实现产生语义漂移。
-func (service *AccountService) operatorScope(ctx context.Context) (homeId int64, scoped bool, err error) {
-	return operatorHomeScope(ctx, service.db)
+// requireAccountScope 数据边界校验（ADR 0008）：非 admin 操作者仅可查看/操作
+// 接入了当前数据范围应用的账号；admin/系统调用旁路。
+func (service *AccountService) requireAccountScope(ctx context.Context, targetUserId int64) error {
+	return requireAccountScope(ctx, service.db, targetUserId)
 }
 
-// requireAccountScope 数据边界校验：非 admin 操作者仅可查看/操作所属应用一致的用户，
-// 所属应用未设置一律拒绝（fail-closed）。
-func (service *AccountService) requireAccountScope(ctx context.Context, targetHomeId int64) error {
-	return requireHomeMatch(ctx, service.db, targetHomeId)
-}
-
-// UpdateAccountApplications 设置用户准入应用与所属应用（模型 A）：
-// application_ids 全量覆盖语义（空数组 = 清空准入）；home_application_id 是默认进入
-// 的应用，必须属于准入集合且已启用。只写关联表与 t_user 的归属列，不触碰应用行。
+// UpdateAccountApplications 设置用户接入应用（ADR 0008）：
+// application_ids 全量覆盖语义（空数组 = 清空接入集合）。只写关联表，
+// 不触碰应用行或用户行。
 func (service *AccountService) UpdateAccountApplications(ctx context.Context, request *iam_v1.UpdateAccountApplicationsRequest) (*emptypb.Empty, error) {
 	var user model.User
 	err := service.db.WithContext(ctx).
@@ -166,7 +190,7 @@ func (service *AccountService) UpdateAccountApplications(ctx context.Context, re
 	if err != nil {
 		return nil, err
 	}
-	if err := service.requireAccountScope(ctx, user.HomeApplicationId); err != nil {
+	if err := service.requireAccountScope(ctx, user.Id); err != nil {
 		return nil, err
 	}
 	appIds := make([]int64, 0, len(request.ApplicationIds))
@@ -195,49 +219,6 @@ func (service *AccountService) UpdateAccountApplications(ctx context.Context, re
 				"account_id", request.AccountId, "application_ids", request.ApplicationIds)
 			return nil, ErrApplicationNotFoundForScope
 		}
-	}
-
-	// 所属应用校验：隐式可进入，无需出现在准入集合，但必须已启用。
-	// 空串 = 保留仍有效旧值；旧值已停用时自动清空。
-	homeAppId := cast.ToInt64(request.HomeApplicationId)
-	explicitHome := homeAppId > 0
-	if !explicitHome {
-		homeAppId = user.HomeApplicationId
-	}
-	// 数据边界（ADR 0006）：非 admin 不得移动目标用户的所属应用（admin 可改）
-	if explicitHome && homeAppId != user.HomeApplicationId {
-		_, scoped, scopeErr := service.operatorScope(ctx)
-		if scopeErr != nil {
-			return nil, scopeErr
-		}
-		if scoped {
-			return nil, ErrAccountOutOfScope
-		}
-	}
-	if homeAppId > 0 {
-		var enabledCount int64
-		if err := service.db.WithContext(ctx).Model(model.Application{}).
-			Where(model.ApplicationColumnId, homeAppId).
-			Where(model.ApplicationColumnStatus, model.StatusEnabled).
-			Count(&enabledCount).Error; err != nil {
-			return nil, err
-		}
-		if enabledCount == 0 {
-			if explicitHome {
-				return nil, ErrHomeApplicationInvalid
-			}
-			homeAppId = 0
-		}
-	}
-	// 所属应用隐式准入：即使请求把它带进 application_ids，也不落重复绑定。
-	if homeAppId > 0 {
-		filtered := appIds[:0]
-		for _, id := range appIds {
-			if id != homeAppId {
-				filtered = append(filtered, id)
-			}
-		}
-		appIds = filtered
 	}
 
 	var currentIds []int64
@@ -283,10 +264,7 @@ func (service *AccountService) UpdateAccountApplications(ctx context.Context, re
 				return err
 			}
 		}
-		// 所属应用与准入集合同事务落库，避免出现"home 不在准入里"的中间态。
-		return tx.Model(model.User{}).
-			Where(model.UserColumnId, user.Id).
-			Updates(map[string]any{model.UserColumnHomeApplicationId: homeAppId}).Error
+		return nil
 	})
 	if err != nil {
 		slog.Warn("commit account application binding failed",
@@ -300,12 +278,13 @@ func (service *AccountService) ListAccounts(ctx context.Context, request *iam_v1
 	limit, offset := helper.GetLimitAndOffset(request.CurrentPage, request.PageSize)
 	var count int64
 	var res []model.User
-	// 数据边界（ADR 0006）：非 admin 仅见所属应用的用户；未设置所属应用 fail-closed 空列表
-	homeId, scoped, err := service.operatorScope(ctx)
+	// 数据边界（ADR 0008）：非 admin 仅见接入了当前数据范围应用的用户；
+	// 未注入数据范围应用 fail-closed 空列表。
+	scopeId, scoped, err := operatorDataScope(ctx, service.db)
 	if err != nil {
 		return nil, err
 	}
-	if scoped && homeId <= 0 {
+	if scoped && scopeId <= 0 {
 		return &iam_v1.ListAccountsResponse{
 			Accounts: []*iam_v1.Account{},
 			Page:     helper.GetPage(request.CurrentPage, request.PageSize, 0),
@@ -315,7 +294,11 @@ func (service *AccountService) ListAccounts(ctx context.Context, request *iam_v1
 	buildQuery := func() *gorm.DB {
 		query := service.db.WithContext(ctx).Model(model.User{})
 		if scoped {
-			query = query.Where(model.UserColumnHomeApplicationId, homeId)
+			// 接入集合过滤：用户须显式接入当前数据范围应用（t_r_user_application）。
+			sub := service.db.WithContext(ctx).Model(model.RUserApplication{}).
+				Select(model.RUserApplicationColumnUserId).
+				Where(model.RUserApplicationColumnApplicationId, scopeId)
+			query = query.Where(model.UserColumnId+" IN (?)", sub)
 		}
 		return applyKeywordFilter(query, []string{
 			model.UserColumnUsername + " LIKE ?",
@@ -339,16 +322,12 @@ func (service *AccountService) ListAccounts(ctx context.Context, request *iam_v1
 	if err := loadUsersRoles(ctx, service.db, res); err != nil {
 		return nil, err
 	}
+	// 读侧隔离（ADR-0009）：非 admin 仅可见本数据范围应用的角色，复用上方 scopeId。
+	for i := range res {
+		filterUserRolesByScope(&res[i], scopeId, scoped)
+	}
 	// 准入应用清单批量回填（绑定 + 应用两次 IN 查询按用户分组，避免 N+1）
 	appsByUser, err := loadUsersApplications(ctx, service.db, res)
-	if err != nil {
-		return nil, err
-	}
-	homeIds := make([]int64, 0, len(res))
-	for _, v := range res {
-		homeIds = append(homeIds, v.HomeApplicationId)
-	}
-	homeApps, err := loadApplicationsByIds(ctx, service.db, homeIds)
 	if err != nil {
 		return nil, err
 	}
@@ -356,7 +335,6 @@ func (service *AccountService) ListAccounts(ctx context.Context, request *iam_v1
 	for _, v := range res {
 		account := accountToPb(v)
 		account.Applications = applicationsToPb(appsByUser[v.Id])
-		account.HomeApplication = applicationSummaryToPb(homeApps[v.HomeApplicationId])
 		users = append(users, account)
 	}
 	return &iam_v1.ListAccountsResponse{
@@ -376,7 +354,7 @@ func (service *AccountService) UpdateAccount(ctx context.Context, request *iam_v
 	if err != nil {
 		return nil, err
 	}
-	if err := service.requireAccountScope(ctx, user.HomeApplicationId); err != nil {
+	if err := service.requireAccountScope(ctx, user.Id); err != nil {
 		return nil, err
 	}
 
@@ -439,42 +417,60 @@ func (service *AccountService) UpdateAccountRoles(ctx context.Context, request *
 		slog.Warn("get user for role binding failed", "user_id", request.AccountId, "error", err)
 		return nil, err
 	}
-	if err := service.requireAccountScope(ctx, user.HomeApplicationId); err != nil {
+	if err := service.requireAccountScope(ctx, user.Id); err != nil {
 		return nil, err
 	}
-	roleCodes := make([]string, 0, len(request.AddedRoleCodeList)+len(request.RemovedRoleCodeList))
-	roleCodes = append(roleCodes, request.AddedRoleCodeList...)
-	roleCodes = append(roleCodes, request.RemovedRoleCodeList...)
-	roleByCode := make(map[string]model.Role, len(roleCodes))
-	if len(roleCodes) > 0 {
-		// 码按目标用户 home 解析（000014 起角色码应用内唯一，跨应用可同名）：
-		// 非 admin 目标 home=操作者 home，语义不变；admin/系统调用同样收敛，
-		// 跨应用授予须走 CreateAccount role_ids 或先调整目标 home。
+	// 按全局唯一 roleId 解析（ADR-0009）：id 天然消解跨应用同名码歧义，
+	// 超管/系统调用不加应用过滤可跨应用分配；非 admin 的归属与提权校验
+	// 交给 requireRoleBindScope 统一兜底。added/removed 走同一套解析与校验，
+	// 任何无法解析或越界的 id 一律 fail-closed。
+	requestedRoleIds := make([]int64, 0, len(request.AddedRoleIds)+len(request.RemovedRoleIds))
+	seenRequest := make(map[int64]struct{}, len(request.AddedRoleIds)+len(request.RemovedRoleIds))
+	for _, raw := range request.AddedRoleIds {
+		if id, ok := parseRoleId(raw); ok {
+			if _, dup := seenRequest[id]; !dup {
+				seenRequest[id] = struct{}{}
+				requestedRoleIds = append(requestedRoleIds, id)
+			}
+		} else {
+			return nil, ErrRoleNotFound
+		}
+	}
+	for _, raw := range request.RemovedRoleIds {
+		if id, ok := parseRoleId(raw); ok {
+			if _, dup := seenRequest[id]; !dup {
+				seenRequest[id] = struct{}{}
+				requestedRoleIds = append(requestedRoleIds, id)
+			}
+		} else {
+			return nil, ErrRoleNotFound
+		}
+	}
+	roleById := make(map[int64]model.Role, len(requestedRoleIds))
+	if len(requestedRoleIds) > 0 {
 		var roles []model.Role
-		err := service.db.WithContext(ctx).
-			Where(model.RoleColumnCode+" IN ?", roleCodes).
-			Where(model.RoleColumnApplicationId, user.HomeApplicationId).
-			Find(&roles).Error
-		if err != nil {
+		if err := service.db.WithContext(ctx).
+			Where(model.RoleColumnId+" IN ?", requestedRoleIds).
+			Select(model.RoleFields).
+			Find(&roles).Error; err != nil {
 			return nil, err
 		}
 		for _, role := range roles {
-			roleByCode[role.Code] = role
+			roleById[role.Id] = role
 		}
-		for _, code := range request.AddedRoleCodeList {
-			if _, ok := roleByCode[code]; !ok {
-				slog.Warn("bind roles rejected: role code not found",
-					"user_id", request.AccountId, "added_role_codes", request.AddedRoleCodeList)
-				return nil, ErrRoleNotFound
-			}
+		// 不存在（或被删）的 id 一律拒绝，不静默忽略（fail-closed）。
+		if len(roleById) != len(requestedRoleIds) {
+			slog.Warn("bind roles rejected: role id not found",
+				"account_id", request.AccountId, "requested_role_ids", requestedRoleIds)
+			return nil, ErrRoleNotFound
 		}
-		// 数据边界（ADR 0006 补充）：待绑定角色逐个校验归属 home；
-		// 非 admin 禁绑内置 admin 角色（登录按角色码计算 IsAdmin，绑定即提权）。
-		addedRoles := make([]model.Role, 0, len(request.AddedRoleCodeList))
-		for _, code := range request.AddedRoleCodeList {
-			addedRoles = append(addedRoles, roleByCode[code])
+		// added 与 removed 共用同一套归属/提权校验（ADR-0009 对称 fail-closed）：
+		// 非 admin 解绑越界角色同样被拒，杜绝旧实现里删掉 iam 角色的越权路径。
+		allRoles := make([]model.Role, 0, len(requestedRoleIds))
+		for _, id := range requestedRoleIds {
+			allRoles = append(allRoles, roleById[id])
 		}
-		if err := requireRoleBindScope(ctx, service.db, addedRoles); err != nil {
+		if err := requireRoleBindScope(ctx, service.db, allRoles); err != nil {
 			return nil, err
 		}
 	}
@@ -483,20 +479,22 @@ func (service *AccountService) UpdateAccountRoles(ctx context.Context, request *
 		return nil, err
 	}
 
-	boundRoles := make(map[string]model.Role, len(user.RoleList))
+	boundRoleIds := make(map[int64]struct{}, len(user.RoleList))
 	for _, role := range user.RoleList {
-		boundRoles[role.Code] = *role
+		boundRoleIds[role.Id] = struct{}{}
 	}
-	addedRoleIds := make([]int64, 0, len(request.AddedRoleCodeList))
-	for _, code := range request.AddedRoleCodeList {
-		if _, exists := boundRoles[code]; !exists {
-			addedRoleIds = append(addedRoleIds, roleByCode[code].Id)
+	addedRoleIds := make([]int64, 0, len(request.AddedRoleIds))
+	for _, raw := range request.AddedRoleIds {
+		id, _ := parseRoleId(raw)
+		if _, exists := boundRoleIds[id]; !exists {
+			addedRoleIds = append(addedRoleIds, id)
 		}
 	}
-	removedRoleIds := make([]int64, 0, len(request.RemovedRoleCodeList))
-	for _, code := range request.RemovedRoleCodeList {
-		if role, exists := boundRoles[code]; exists {
-			removedRoleIds = append(removedRoleIds, role.Id)
+	removedRoleIds := make([]int64, 0, len(request.RemovedRoleIds))
+	for _, raw := range request.RemovedRoleIds {
+		id, _ := parseRoleId(raw)
+		if _, exists := boundRoleIds[id]; exists {
+			removedRoleIds = append(removedRoleIds, id)
 		}
 	}
 
@@ -524,14 +522,21 @@ func (service *AccountService) UpdateAccountRoles(ctx context.Context, request *
 	if err != nil {
 		slog.Warn("commit role binding failed",
 			"user_id", request.AccountId,
-			"added_role_codes", request.AddedRoleCodeList,
-			"removed_role_codes", request.RemovedRoleCodeList,
+			"added_role_ids", request.AddedRoleIds,
+			"removed_role_ids", request.RemovedRoleIds,
 			"error", err)
 		return nil, err
 	}
 	// 绑定变更立即生效：失效目标用户的权限快照（research.md D6-①）
 	service.invalidateUserPermissionSnapshot(ctx, request.AccountId)
 	return &emptypb.Empty{}, nil
+}
+
+// parseRoleId 解析角色 id 字符串（proto 用 string 编码 int64）：须为正整数，
+// 非法输入 fail-closed 交给调用方拒绝，不静默跳过。
+func parseRoleId(raw string) (int64, bool) {
+	id := cast.ToInt64(raw)
+	return id, id > 0
 }
 
 // ResetAccountPassword 管理员重置用户密码：新密码 bcrypt 摘要落库，
@@ -546,7 +551,7 @@ func (service *AccountService) ResetAccountPassword(ctx context.Context, request
 		slog.Warn("get user for password reset failed", "user_id", request.Id, "error", err)
 		return nil, err
 	}
-	if err := service.requireAccountScope(ctx, user.HomeApplicationId); err != nil {
+	if err := service.requireAccountScope(ctx, user.Id); err != nil {
 		return nil, err
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(request.NewPassword), bcrypt.DefaultCost)
@@ -578,13 +583,13 @@ func (service *AccountService) ResetAccountPassword(ctx context.Context, request
 func (service *AccountService) DeleteAccount(ctx context.Context, request *iam_v1.DeleteAccountRequest) (*emptypb.Empty, error) {
 	var target model.User
 	err := service.db.WithContext(ctx).
-		Select(model.UserColumnId, model.UserColumnHomeApplicationId).
+		Select(model.UserColumnId).
 		Where(model.UserColumnId, request.Id).
 		First(&target).Error
 	if err != nil {
 		return nil, err
 	}
-	if err := service.requireAccountScope(ctx, target.HomeApplicationId); err != nil {
+	if err := service.requireAccountScope(ctx, target.Id); err != nil {
 		return nil, err
 	}
 	var count int64
@@ -629,9 +634,8 @@ func (service *AccountService) DeleteAccount(ctx context.Context, request *iam_v
 }
 
 // CreateAccount 创建用户：初始密码必填（bcrypt 摘要落库），email 可选（唯一），
-// role_ids 可选初始角色绑定；username 唯一。所属应用必填且已启用（数据边界
-// ADR 0006），额外准入可选（所属应用隐式准入、自动剔除）；非 admin 只能创建
-// 所属应用等于操作者所属应用的用户。
+// role_ids 可选初始角色绑定；username 唯一。接入应用必填且均须启用（ADR 0008），
+// 全量写入 t_r_user_application；非 admin 的接入集合须包含其数据范围应用。
 func (service *AccountService) CreateAccount(ctx context.Context, request *iam_v1.CreateAccountRequest) (*iam_v1.Account, error) {
 	// 初始密码必填（创建路径无旧密码可校验，直接拒绝缺省）
 	if len(request.Password) == 0 {
@@ -645,56 +649,44 @@ func (service *AccountService) CreateAccount(ctx context.Context, request *iam_v
 	}
 	passwordHash := string(hash)
 
-	// 所属应用必填（数据边界 ADR 0006）：必须存在且已启用
-	homeAppId := cast.ToInt64(request.HomeApplicationId)
-	if homeAppId <= 0 {
-		slog.Warn("create user rejected: home application required", "username", request.Username)
-		return nil, ErrHomeApplicationRequired
-	}
-	// 非 admin 创建用户 = 操作数据：home 锁定为操作者所属应用
-	if homeId, scoped, scopeErr := service.operatorScope(ctx); scopeErr != nil {
-		return nil, scopeErr
-	} else if scoped && (homeId <= 0 || homeId != homeAppId) {
-		return nil, ErrAccountOutOfScope
-	}
-	var homeApp model.Application
-	if err := service.db.WithContext(ctx).
-		Where(model.ApplicationColumnId, homeAppId).
-		Where(model.ApplicationColumnStatus, model.StatusEnabled).
-		Select(model.ApplicationFields).
-		First(&homeApp).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrHomeApplicationInvalid
-		}
-		return nil, err
-	}
-	// 额外准入应用：去重 + 自动剔除所属应用（隐式准入），整批校验存在
-	admittedIds := make([]int64, 0, len(request.ApplicationIds))
+	// 接入应用必填（ADR 0008）：去重、排除非法 id，全部须存在且已启用
+	appIds := make([]int64, 0, len(request.ApplicationIds))
 	seenApps := make(map[int64]struct{}, len(request.ApplicationIds))
 	for _, raw := range request.ApplicationIds {
 		id := cast.ToInt64(raw)
-		if id <= 0 || id == homeAppId {
+		if id <= 0 {
 			continue
 		}
 		if _, dup := seenApps[id]; dup {
 			continue
 		}
 		seenApps[id] = struct{}{}
-		admittedIds = append(admittedIds, id)
+		appIds = append(appIds, id)
+	}
+	if len(appIds) == 0 {
+		slog.Warn("create user rejected: admitted application required", "username", request.Username)
+		return nil, ErrDataScopeRequired
+	}
+	// 数据边界（ADR 0008）：非 admin 创建的账号须接入其数据范围应用
+	if scopeId, scoped, scopeErr := operatorDataScope(ctx, service.db); scopeErr != nil {
+		return nil, scopeErr
+	} else if scoped {
+		if _, hasScopeApp := seenApps[scopeId]; scopeId <= 0 || !hasScopeApp {
+			return nil, ErrAccountOutOfScope
+		}
 	}
 	var admittedApps []*model.Application
-	if len(admittedIds) > 0 {
-		if err := service.db.WithContext(ctx).
-			Where(model.ApplicationColumnId+" IN ?", admittedIds).
-			Select(model.ApplicationFields).
-			Find(&admittedApps).Error; err != nil {
-			return nil, err
-		}
-		if len(admittedApps) != len(admittedIds) {
-			slog.Warn("create user rejected: some applications not found",
-				"username", request.Username, "application_ids", request.ApplicationIds)
-			return nil, ErrApplicationNotFoundForScope
-		}
+	if err := service.db.WithContext(ctx).
+		Where(model.ApplicationColumnId+" IN ?", appIds).
+		Where(model.ApplicationColumnStatus, model.StatusEnabled).
+		Select(model.ApplicationFields).
+		Find(&admittedApps).Error; err != nil {
+		return nil, err
+	}
+	if len(admittedApps) != len(appIds) {
+		slog.Warn("create user rejected: some applications not found or disabled",
+			"username", request.Username, "application_ids", request.ApplicationIds)
+		return nil, ErrApplicationInvalid
 	}
 
 	pkId := krand.NewID()
@@ -708,18 +700,17 @@ func (service *AccountService) CreateAccount(ctx context.Context, request *iam_v
 		email = &e
 	}
 	user := model.User{
-		Id:                pkId,
-		Username:          request.Username,
-		Email:             email,
-		Nickname:          request.Nickname,
-		PasswordHash:      passwordHash,
-		HomeApplicationId: homeAppId,
-		Status:            constant.AccountStatusEnabled,
-		Version:           1,
-		CreatedBy:         operator,
-		UpdatedBy:         operator,
-		CreateTime:        now,
-		UpdateTime:        now,
+		Id:           pkId,
+		Username:     request.Username,
+		Email:        email,
+		Nickname:     request.Nickname,
+		PasswordHash: passwordHash,
+		Status:       constant.AccountStatusEnabled,
+		Version:      1,
+		CreatedBy:    operator,
+		UpdatedBy:    operator,
+		CreateTime:   now,
+		UpdateTime:   now,
 	}
 	err = service.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var count int64
@@ -791,7 +782,7 @@ func (service *AccountService) CreateAccount(ctx context.Context, request *iam_v
 				}
 			}
 		}
-		// 额外准入绑定只写关联表（所属应用隐式准入，不落绑定）
+		// 接入应用绑定只写关联表（t_r_user_application），全量写入。
 		if len(admittedApps) > 0 {
 			appRows := make([]model.RUserApplication, 0, len(admittedApps))
 			for _, app := range admittedApps {
@@ -809,7 +800,6 @@ func (service *AccountService) CreateAccount(ctx context.Context, request *iam_v
 	}
 	account := accountToPb(user)
 	account.Applications = applicationsToPb(admittedApps)
-	account.HomeApplication = applicationSummaryToPb(&homeApp)
 	return account, nil
 }
 

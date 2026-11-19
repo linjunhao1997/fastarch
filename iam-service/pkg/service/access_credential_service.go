@@ -121,21 +121,12 @@ func (service *AccessCredentialService) CreateAccessCredential(ctx context.Conte
 		if account.Status != constant.AccountStatusEnabled {
 			return ErrAccessCredentialAccountInvalid
 		}
-		// 数据边界：凭证随所属用户 home 隔离（账号已行锁加载，不复查）
-		homeId, scoped, err := operatorHomeScope(ctx, tx)
-		if err != nil {
+		// 数据边界：凭证随所属用户的接入集合隔离（账号已行锁加载，不复查）
+		if err := requireAccountScope(ctx, tx, account.Id); err != nil {
 			return err
 		}
-		if scoped && (homeId <= 0 || homeId != account.HomeApplicationId) {
-			return ErrAccountOutOfScope
-		}
-		// 凭证归属应用：显式指定则校验 ∈ 绑定用户接入集合；缺省回落到绑定用户 home
-		// （与迁移回填、"home 降级为默认落地应用"一致；API 契约仍要求必填，
-		// 此处仅对内部调用/历史客户端做防御性兼容）。
+		// 凭证归属应用：契约必填（request.ApplicationId > 0），须 ∈ 绑定用户接入集合。
 		appId := request.ApplicationId
-		if appId <= 0 {
-			appId = account.HomeApplicationId
-		}
 		if err := requireCredentialAppAdmitted(ctx, tx, account, appId); err != nil {
 			return err
 		}
@@ -219,7 +210,7 @@ func (service *AccessCredentialService) CreateAccessCredential(ctx context.Conte
 	}, nil
 }
 
-// requireCredentialAppAdmitted 校验凭证归属应用 ∈ 绑定用户的接入集合（home + 显式绑定）。
+// requireCredentialAppAdmitted 校验凭证归属应用 ∈ 绑定用户的接入集合（显式绑定）。
 // admin/系统调用（accountId=0）旁路；归属应用须存在且启用，否则拒绝（fail-closed）。
 func requireCredentialAppAdmitted(ctx context.Context, db *gorm.DB, account model.User, appId int64) error {
 	if auth.IsAdminFromContext(ctx) || auth.GetAccountId(ctx) == 0 {
@@ -233,7 +224,7 @@ func requireCredentialAppAdmitted(ctx context.Context, db *gorm.DB, account mode
 	if appId <= 0 {
 		return ErrCredentialAppNotAdmitted
 	}
-	admitted, err := loadAdmittedAppIds(ctx, db, account.Id, account.HomeApplicationId)
+	admitted, err := loadAdmittedAppIds(ctx, db, account.Id)
 	if err != nil {
 		return err
 	}
@@ -258,26 +249,15 @@ func firstCredential(ctx context.Context, db *gorm.DB, id int64) (model.AccessCr
 	return credential, err
 }
 
-// requireCredentialScope 凭证数据边界（ADR 0006 补充）：凭证随所属用户 home 隔离。
-// admin/系统调用旁路；非 admin home 未设置、所属用户不存在或与 home 不一致一律拒绝。
-func (service *AccessCredentialService) requireCredentialScope(ctx context.Context, userId int64) error {
-	homeId, scoped, err := operatorHomeScope(ctx, service.db)
+// requireCredentialScopeById 凭证数据边界（ADR 0008）：凭证随自身归属应用隔离。
+// admin/系统调用旁路；非 admin 的凭证归属应用须等于其数据范围应用，否则拒绝。
+func (service *AccessCredentialService) requireCredentialScopeById(ctx context.Context, credentialAppId int64) error {
+	scopeId, scoped, err := operatorDataScope(ctx, service.db)
 	if err != nil || !scoped {
 		return err
 	}
-	var owner model.User
-	err = service.db.WithContext(ctx).
-		Select(model.UserColumnId, model.UserColumnHomeApplicationId).
-		Where(model.UserColumnId, userId).
-		First(&owner).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return ErrAccountOutOfScope
-	}
-	if err != nil {
-		return err
-	}
-	if homeId <= 0 || homeId != owner.HomeApplicationId {
-		return ErrAccountOutOfScope
+	if scopeId <= 0 || scopeId != credentialAppId {
+		return ErrAccessCredentialNotFound
 	}
 	return nil
 }
@@ -287,7 +267,7 @@ func (service *AccessCredentialService) GetAccessCredential(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
-	if err := service.requireCredentialScope(ctx, credential.UserId); err != nil {
+	if err := service.requireCredentialScopeById(ctx, credential.ApplicationId); err != nil {
 		return nil, err
 	}
 	appSummary, err := loadApplicationSummary(ctx, service.db, credential.ApplicationId)
@@ -299,12 +279,12 @@ func (service *AccessCredentialService) GetAccessCredential(ctx context.Context,
 
 func (service *AccessCredentialService) ListAccessCredentials(ctx context.Context, request *iam_v1.ListAccessCredentialsRequest) (*iam_v1.ListAccessCredentialsResponse, error) {
 	limit, offset := helper.GetLimitAndOffset(request.CurrentPage, request.PageSize)
-	// 数据边界（ADR 0006 补充）：凭证随所属用户 home 隔离；home 未设置 fail-closed 空列表
-	homeId, scoped, err := operatorHomeScope(ctx, service.db)
+	// 数据边界（ADR 0008）：凭证随自身归属应用隔离；未注入数据范围应用 fail-closed 空列表。
+	scopeId, scoped, err := operatorDataScope(ctx, service.db)
 	if err != nil {
 		return nil, err
 	}
-	if scoped && homeId <= 0 {
+	if scoped && scopeId <= 0 {
 		return &iam_v1.ListAccessCredentialsResponse{
 			AccessCredentials: []*iam_v1.AccessCredential{},
 			Page:              helper.GetPage(request.CurrentPage, request.PageSize, 0),
@@ -317,8 +297,8 @@ func (service *AccessCredentialService) ListAccessCredentials(ctx context.Contex
 		query := service.db.WithContext(ctx).Model(model.AccessCredential{})
 		if scoped {
 			// 按凭证自身归属应用过滤（000015 起凭证有 application_id 列），
-			// 与账号/角色/权限共用同一数据边界（appCode 选中应用，回落 home）。
-			query = query.Where(credentialTable+"."+model.AccessCredentialColumnApplicationId+" = ?", homeId)
+			// 与账号/角色/权限共用同一数据边界（appCode 选中应用）。
+			query = query.Where(credentialTable+"."+model.AccessCredentialColumnApplicationId+" = ?", scopeId)
 		}
 		if request.UserId > 0 {
 			query = query.Where(credentialTable+"."+model.AccessCredentialColumnUserId, request.UserId)
@@ -371,7 +351,7 @@ func (service *AccessCredentialService) UpdateAccessCredential(ctx context.Conte
 	if err != nil {
 		return nil, err
 	}
-	if err := service.requireCredentialScope(ctx, credential.UserId); err != nil {
+	if err := service.requireCredentialScopeById(ctx, credential.ApplicationId); err != nil {
 		return nil, err
 	}
 	updates := map[string]interface{}{}
@@ -413,7 +393,7 @@ func (service *AccessCredentialService) ChangeAccessCredentialStatus(ctx context
 	if err != nil {
 		return nil, err
 	}
-	if err := service.requireCredentialScope(ctx, credential.UserId); err != nil {
+	if err := service.requireCredentialScopeById(ctx, credential.ApplicationId); err != nil {
 		return nil, err
 	}
 	if credential.Status == request.Status {
@@ -448,7 +428,7 @@ func (service *AccessCredentialService) ResetAccessCredentialSecret(ctx context.
 	if err != nil {
 		return nil, err
 	}
-	if err := service.requireCredentialScope(ctx, credential.UserId); err != nil {
+	if err := service.requireCredentialScopeById(ctx, credential.ApplicationId); err != nil {
 		return nil, err
 	}
 	plainSecret, err := generateSecretKey()
@@ -494,7 +474,7 @@ func (service *AccessCredentialService) DeleteAccessCredential(ctx context.Conte
 	if err != nil {
 		return nil, err
 	}
-	if err := service.requireCredentialScope(ctx, credential.UserId); err != nil {
+	if err := service.requireCredentialScopeById(ctx, credential.ApplicationId); err != nil {
 		return nil, err
 	}
 	result := service.db.WithContext(ctx).

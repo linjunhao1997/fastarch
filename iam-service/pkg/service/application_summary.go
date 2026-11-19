@@ -38,51 +38,9 @@ func loadApplicationSummary(ctx context.Context, db *gorm.DB, id int64) (*common
 	return summaries[id], nil
 }
 
-// loadHomeApplicationSummariesByUserIds 按用户 id 批量取"所属应用"摘要，按 user id 索引。
-// 两次 IN 查询（用户 home id → 应用摘要），禁 N+1。凭证域用此加载凭证所属用户的 home 应用（ADR 0006）。
-func loadHomeApplicationSummariesByUserIds(ctx context.Context, db *gorm.DB, userIds []int64) (map[int64]*common_v1.ApplicationSummary, error) {
-	result := make(map[int64]*common_v1.ApplicationSummary, len(userIds))
-	if len(userIds) == 0 {
-		return result, nil
-	}
-	var users []model.User
-	if err := db.WithContext(ctx).
-		Select(model.UserColumnId, model.UserColumnHomeApplicationId).
-		Where(model.UserColumnId+" IN ?", userIds).
-		Find(&users).Error; err != nil {
-		return nil, err
-	}
-	homeIdByUser := make(map[int64]int64, len(users))
-	homeIds := make([]int64, 0, len(users))
-	for _, u := range users {
-		if u.HomeApplicationId <= 0 {
-			continue
-		}
-		homeIdByUser[u.Id] = u.HomeApplicationId
-		homeIds = append(homeIds, u.HomeApplicationId)
-	}
-	summaries, err := loadApplicationSummaries(ctx, db, homeIds)
-	if err != nil {
-		return nil, err
-	}
-	for userId, homeId := range homeIdByUser {
-		result[userId] = summaries[homeId]
-	}
-	return result, nil
-}
-
-// homeApplicationSummaryByUserId 单个用户所属应用摘要（详情/创建/重置场景）。
-func homeApplicationSummaryByUserId(ctx context.Context, db *gorm.DB, userId int64) (*common_v1.ApplicationSummary, error) {
-	byUser, err := loadHomeApplicationSummariesByUserIds(ctx, db, []int64{userId})
-	if err != nil {
-		return nil, err
-	}
-	return byUser[userId], nil
-}
-
-// loadAdmittedApplicationSummaries 返回用户可切换应用摘要（home + 显式准入绑定）。
+// loadAdmittedApplicationSummaries 返回用户可切换应用摘要（显式接入绑定）。
 // admin 返回全部启用应用（应用选择页需要列出所有注册应用）；非 admin 只列接入集合。
-func loadAdmittedApplicationSummaries(ctx context.Context, db *gorm.DB, userId, homeAppId int64, isAdmin bool) ([]*common_v1.ApplicationSummary, error) {
+func loadAdmittedApplicationSummaries(ctx context.Context, db *gorm.DB, userId int64, isAdmin bool) ([]*common_v1.ApplicationSummary, error) {
 	if isAdmin {
 		var apps []model.Application
 		if err := db.WithContext(ctx).
@@ -98,7 +56,7 @@ func loadAdmittedApplicationSummaries(ctx context.Context, db *gorm.DB, userId, 
 		}
 		return out, nil
 	}
-	ids, err := loadAdmittedAppIds(ctx, db, userId, homeAppId)
+	ids, err := loadAdmittedAppIds(ctx, db, userId)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +64,7 @@ func loadAdmittedApplicationSummaries(ctx context.Context, db *gorm.DB, userId, 
 	if err != nil {
 		return nil, err
 	}
-	// 按 ids 顺序输出，保证 home 在前、结果稳定。
+	// 按 ids 顺序输出，保证结果稳定。
 	out := make([]*common_v1.ApplicationSummary, 0, len(ids))
 	for _, id := range ids {
 		if summary := byId[id]; summary != nil {

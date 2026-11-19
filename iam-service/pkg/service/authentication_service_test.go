@@ -127,10 +127,9 @@ func TestPasswordAuthEnabledAccountAllowed(t *testing.T) {
 	rdb, _ := setupTestRedis(t)
 	createTestApp(t, db, testAppIdIam, "iam", model.StatusEnabled)
 	user := createTestUserWithPassword(t, db, 1, "enabled", "password123", constant.AccountStatusEnabled)
-	// home 是隐式准入，写入接入集合快照（不再作为登录目标应用）
-	user.HomeApplicationId = testAppIdIam
-	if err := db.Save(&user).Error; err != nil {
-		t.Fatalf("set user home: %v", err)
+	// 接入集合快照来自显式绑定（删除 home 后不再有隐式准入）
+	if err := db.Create(&model.RUserApplication{UserId: user.Id, ApplicationId: testAppIdIam}).Error; err != nil {
+		t.Fatalf("bind admitted app: %v", err)
 	}
 
 	service := NewAuthenticationService(db, rdb)
@@ -149,7 +148,7 @@ func TestPasswordAuthEnabledAccountAllowed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse issued token: %v", err)
 	}
-	// 令牌不再携带应用上下文：admittedAppIds 应包含 home
+	// 令牌不再携带应用上下文：admittedAppIds 应包含接入应用
 	if len(token.AdmittedAppIds) == 0 {
 		t.Fatal("issued token should carry admitted app ids")
 	}
@@ -184,16 +183,15 @@ func TestPasswordAuthInvalidCredentials(t *testing.T) {
 }
 
 // TestPasswordAuthIgnoresCallerApplicationCode 调用方自报 application_code 不参与登录：
-// 统一登录不接受目标应用参数，令牌只写身份与接入集合（home 隐式准入 + 显式绑定）。
+// 统一登录不接受目标应用参数，令牌只写身份与接入集合（显式绑定）。
 func TestPasswordAuthIgnoresCallerApplicationCode(t *testing.T) {
 	db := setupProfileTestDB(t)
 	rdb, _ := setupTestRedis(t)
 	createTestApp(t, db, testAppIdIam, "iam", model.StatusEnabled)
 	createTestApp(t, db, testAppIdOrder, "order", model.StatusEnabled)
 	user := createTestUserWithPassword(t, db, 1, "iam-user", "password123", constant.AccountStatusEnabled)
-	user.HomeApplicationId = testAppIdIam
-	if err := db.Save(&user).Error; err != nil {
-		t.Fatalf("set user home: %v", err)
+	if err := db.Create(&model.RUserApplication{UserId: user.Id, ApplicationId: testAppIdIam}).Error; err != nil {
+		t.Fatalf("bind admitted iam app: %v", err)
 	}
 	// 即使用户也准入 order，自报 code 仍不能改变登录目标
 	if err := db.Create(&model.RUserApplication{UserId: user.Id, ApplicationId: testAppIdOrder}).Error; err != nil {
@@ -212,19 +210,19 @@ func TestPasswordAuthIgnoresCallerApplicationCode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse issued token: %v", err)
 	}
-	// 自报 code 不改变接入集合：只含 home（iam）与显式绑定的 order
+	// 自报 code 不改变接入集合：只含显式绑定的 iam 与 order
 	if len(token.AdmittedAppIds) != 2 {
-		t.Fatalf("admittedAppIds = %v, want home + explicit binding", token.AdmittedAppIds)
+		t.Fatalf("admittedAppIds = %v, want explicit bindings", token.AdmittedAppIds)
 	}
 	seenApps := make(map[int64]bool)
 	for _, id := range token.AdmittedAppIds {
 		seenApps[id] = true
 	}
 	if !seenApps[testAppIdIam] || !seenApps[testAppIdOrder] {
-		t.Fatalf("admittedAppIds = %v, want home (%d) + binding (%d)", token.AdmittedAppIds, testAppIdIam, testAppIdOrder)
+		t.Fatalf("admittedAppIds = %v, want bindings (%d) + (%d)", token.AdmittedAppIds, testAppIdIam, testAppIdOrder)
 	}
 
-	// home 指向不存在应用的用户：接入集合解析失败，登录拒绝（fail-closed）
+	// 无任何接入应用的用户：接入集合为空，登录拒绝（fail-closed）
 	createTestUserWithPassword(t, db, 2, "no-home", "password123", constant.AccountStatusEnabled)
 	_, err = service.PasswordAuth(
 		metadata.NewIncomingContext(baseCtx, metadata.Pairs("application_code", "order")),
@@ -236,7 +234,7 @@ func TestPasswordAuthIgnoresCallerApplicationCode(t *testing.T) {
 }
 
 // TestPasswordAuthUnifiedLoginHomeScope 统一登录：只接入业务应用（如 sender/order）的用户
-// 无需准入 iam 即可登录；AdmittedAppIds 携带 home + 显式绑定的接入集合，令牌不含应用上下文。
+// 无需准入 iam 即可登录；AdmittedAppIds 携带显式绑定的接入集合，令牌不含应用上下文。
 // 控制台选择后由前端决定，登录不再锁定任何控制台。
 func TestPasswordAuthUnifiedLoginHomeScope(t *testing.T) {
 	db := setupProfileTestDB(t)
@@ -245,11 +243,10 @@ func TestPasswordAuthUnifiedLoginHomeScope(t *testing.T) {
 	createTestApp(t, db, testAppIdOrder, "order", model.StatusEnabled)
 
 	user := createTestUserWithPassword(t, db, 20, "order-user", "password123", constant.AccountStatusEnabled)
-	user.HomeApplicationId = testAppIdOrder
-	if err := db.Save(&user).Error; err != nil {
-		t.Fatalf("set user home: %v", err)
+	if err := db.Create(&model.RUserApplication{UserId: user.Id, ApplicationId: testAppIdOrder}).Error; err != nil {
+		t.Fatalf("bind admitted order app: %v", err)
 	}
-	// 额外显式接入 iam：接入集合应同时包含 home 与显式绑定。
+	// 额外显式接入 iam：接入集合应同时包含 order 与 iam。
 	if err := db.Create(&model.RUserApplication{UserId: user.Id, ApplicationId: testAppIdIam}).Error; err != nil {
 		t.Fatalf("bind user iam: %v", err)
 	}
@@ -273,6 +270,6 @@ func TestPasswordAuthUnifiedLoginHomeScope(t *testing.T) {
 		seen[id] = true
 	}
 	if !seen[testAppIdOrder] || !seen[testAppIdIam] {
-		t.Fatalf("admittedAppIds = %v, want home + explicit binding", token.AdmittedAppIds)
+		t.Fatalf("admittedAppIds = %v, want explicit bindings", token.AdmittedAppIds)
 	}
 }

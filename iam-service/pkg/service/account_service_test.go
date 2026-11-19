@@ -78,7 +78,7 @@ func TestAccountUsernameUnique(t *testing.T) {
 	_, err := service.CreateAccount(context.Background(), &iam_v1.CreateAccountRequest{
 		Username:          "alice",
 		Password:          "password123",
-		HomeApplicationId: "900",
+		ApplicationIds:   []string{"900"},
 	})
 	if err != ErrUsernameDuplicated {
 		t.Fatalf("CreateAccount() error = %v, want %v", err, ErrUsernameDuplicated)
@@ -115,7 +115,7 @@ func TestCreateAccountHashesPassword(t *testing.T) {
 		Username:          "hashed",
 		Password:          "password123",
 		Nickname:          "Hashed User",
-		HomeApplicationId: "900",
+		ApplicationIds:   []string{"900"},
 	})
 	if err != nil {
 		t.Fatalf("CreateAccount() error = %v", err)
@@ -142,7 +142,7 @@ func TestCreateAccountEmailUnique(t *testing.T) {
 		Username:          "first",
 		Password:          "password123",
 		Email:             "first@example.com",
-		HomeApplicationId: "900",
+		ApplicationIds:   []string{"900"},
 	})
 	if err != nil {
 		t.Fatalf("CreateAccount() #1 error = %v", err)
@@ -156,7 +156,7 @@ func TestCreateAccountEmailUnique(t *testing.T) {
 		Username:          "second",
 		Password:          "password123",
 		Email:             "first@example.com",
-		HomeApplicationId: "900",
+		ApplicationIds:   []string{"900"},
 	})
 	if err != ErrEmailDuplicated {
 		t.Fatalf("CreateAccount() #2 error = %v, want %v", err, ErrEmailDuplicated)
@@ -167,7 +167,7 @@ func TestCreateAccountEmailUnique(t *testing.T) {
 		if _, err := service.CreateAccount(context.Background(), &iam_v1.CreateAccountRequest{
 			Username:          username,
 			Password:          "password123",
-			HomeApplicationId: "900",
+			ApplicationIds:   []string{"900"},
 		}); err != nil {
 			t.Fatalf("CreateAccount() %s error = %v", username, err)
 		}
@@ -188,7 +188,7 @@ func TestCreateAccountWithRoleIds(t *testing.T) {
 		Username:          "with-roles",
 		Password:          "password123",
 		RoleIds:           []string{cast.ToString(role.Id)},
-		HomeApplicationId: "900",
+		ApplicationIds:   []string{"900"},
 	})
 	if err != nil {
 		t.Fatalf("CreateAccount() error = %v", err)
@@ -424,16 +424,16 @@ func TestUpdateAccountRoles(t *testing.T) {
 	service := NewAccountService(db, nil)
 
 	_, err := service.UpdateAccountRoles(context.Background(), &iam_v1.UpdateAccountRolesRequest{
-		AccountId:         user.Id,
-		AddedRoleCodeList: []string{"role-one", "role-missing"},
+		AccountId:     user.Id,
+		AddedRoleIds: []string{"1", "999"},
 	})
 	if err != ErrRoleNotFound {
 		t.Fatalf("UpdateAccountRoles() error = %v, want %v", err, ErrRoleNotFound)
 	}
 
 	_, err = service.UpdateAccountRoles(context.Background(), &iam_v1.UpdateAccountRolesRequest{
-		AccountId:         user.Id,
-		AddedRoleCodeList: []string{"role-one", "role-two"},
+		AccountId:     user.Id,
+		AddedRoleIds: []string{"1", "2"},
 	})
 	if err != nil {
 		t.Fatalf("UpdateAccountRoles() error = %v", err)
@@ -447,12 +447,20 @@ func TestUpdateAccountRoles(t *testing.T) {
 		t.Fatalf("role count = %d, want 2", len(got.RoleList))
 	}
 
+	// 解绑未绑定的存在角色（id=1 已绑，这里解绑 id=2 后再重复解绑 id=2）应幂等成功
 	_, err = service.UpdateAccountRoles(context.Background(), &iam_v1.UpdateAccountRolesRequest{
-		AccountId:           user.Id,
-		RemovedRoleCodeList: []string{"role-missing"},
+		AccountId:      user.Id,
+		RemovedRoleIds: []string{"2"},
 	})
 	if err != nil {
-		t.Fatalf("remove missing role error = %v, want nil", err)
+		t.Fatalf("remove role error = %v, want nil", err)
+	}
+	_, err = service.UpdateAccountRoles(context.Background(), &iam_v1.UpdateAccountRolesRequest{
+		AccountId:      user.Id,
+		RemovedRoleIds: []string{"2"},
+	})
+	if err != nil {
+		t.Fatalf("remove unbound role error = %v, want nil", err)
 	}
 }
 
@@ -562,8 +570,8 @@ func TestUpdateAccountRolesInvalidatesPermissionCache(t *testing.T) {
 
 	service := NewAccountService(db, rdb)
 	if _, err := service.UpdateAccountRoles(ctx, &iam_v1.UpdateAccountRolesRequest{
-		AccountId:         user.Id,
-		AddedRoleCodeList: []string{"role-one"},
+		AccountId:     user.Id,
+		AddedRoleIds: []string{"1"},
 	}); err != nil {
 		t.Fatalf("UpdateAccountRoles() error = %v", err)
 	}
@@ -583,8 +591,8 @@ func TestUpdateAccountRolesIdempotentNoDuplicateRows(t *testing.T) {
 
 	service := NewAccountService(db, nil)
 	request := &iam_v1.UpdateAccountRolesRequest{
-		AccountId:         user.Id,
-		AddedRoleCodeList: []string{"role-one"},
+		AccountId:     user.Id,
+		AddedRoleIds: []string{"1"},
 	}
 	for i := 0; i < 2; i++ {
 		if _, err := service.UpdateAccountRoles(context.Background(), request); err != nil {
@@ -675,7 +683,7 @@ func TestAccountAuditFields(t *testing.T) {
 	created, err := service.CreateAccount(createCtx, &iam_v1.CreateAccountRequest{
 		Username:          "audit-user",
 		Password:          "password123",
-		HomeApplicationId: "900",
+		ApplicationIds:   []string{"900"},
 	})
 	if err != nil {
 		t.Fatalf("CreateAccount() error = %v", err)
@@ -732,7 +740,7 @@ func TestAccountAuditFieldsWithoutAuthContext(t *testing.T) {
 	created, err := service.CreateAccount(context.Background(), &iam_v1.CreateAccountRequest{
 		Username:          "no-auth-user",
 		Password:          "password123",
-		HomeApplicationId: "900",
+		ApplicationIds:   []string{"900"},
 	})
 	if err != nil {
 		t.Fatalf("CreateAccount() error = %v", err)

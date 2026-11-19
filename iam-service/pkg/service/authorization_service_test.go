@@ -314,18 +314,10 @@ func TestUpdateRoleInvalidatesBoundAccountsCache(t *testing.T) {
 // 审计字段注入：CreateRole 注入四件套，UpdateRole 仅更新
 // update_time/updated_by，created_by/create_time 保持不变；GetRole 回填审计字段。
 func TestRoleAuditFields(t *testing.T) {
-	createCtx := appCtx(context.WithValue(context.Background(), "accountId", "42"))
-	updateCtx := appCtx(context.WithValue(context.Background(), "accountId", "43"))
+	createCtx := auth.WithDataAppId(appCtx(context.WithValue(context.Background(), "accountId", "42")), testAppId)
+	updateCtx := auth.WithDataAppId(appCtx(context.WithValue(context.Background(), "accountId", "43")), testAppId)
 	db := setupAuthorizationTestDB(t)
 	setupTestApplication(t, db)
-	// 角色归属 home：非 admin 操作者须在库中存在且已设置所属应用（ADR 0006）
-	for _, id := range []int64{42, 43} {
-		operator := createTestUser(t, db, id, "operator-"+cast.ToString(id), 1)
-		operator.HomeApplicationId = testAppId
-		if err := db.Save(&operator).Error; err != nil {
-			t.Fatalf("set operator home: %v", err)
-		}
-	}
 	service := NewAuthorizationService(db, nil)
 
 	created, err := service.CreateRole(createCtx, &iam_v1.CreateRoleRequest{
@@ -380,18 +372,10 @@ func TestRoleAuditFields(t *testing.T) {
 
 // 审计字段注入：CreatePermission / UpdatePermission 对称覆盖。
 func TestPermissionAuditFields(t *testing.T) {
-	createCtx := appCtx(auth.WithAccountId(context.Background(), 42))
-	updateCtx := appCtx(auth.WithAccountId(context.Background(), 43))
+	createCtx := auth.WithDataAppId(appCtx(auth.WithAccountId(context.Background(), 42)), testAppId)
+	updateCtx := auth.WithDataAppId(appCtx(auth.WithAccountId(context.Background(), 43)), testAppId)
 	db := setupAuthorizationTestDB(t)
 	setupTestApplication(t, db)
-	// 权限管理按 home 隔离：审计测试的操作者须有所属应用（ADR 0006）。
-	for _, id := range []int64{42, 43} {
-		operator := createTestUser(t, db, id, "permission-audit-"+cast.ToString(id), 1)
-		operator.HomeApplicationId = testAppId
-		if err := db.Save(&operator).Error; err != nil {
-			t.Fatalf("set operator home: %v", err)
-		}
-	}
 	service := NewAuthorizationService(db, nil)
 
 	created, err := service.CreatePermission(createCtx, &iam_v1.CreatePermissionRequest{

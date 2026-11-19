@@ -61,15 +61,11 @@ func loadUsersApplications(ctx context.Context, db *gorm.DB, users []model.User)
 }
 
 // loadAdmittedAppIds 返回用户可切换的数据归属应用 id 集合（签名 JWT claim 用）：
-// home 应用隐式准入，加上 t_r_user_application 的显式绑定；去重、排除 <=0 的脏值。
+// 仅取 t_r_user_application 的显式绑定；去重、排除 <=0 的脏值。
 // admin 的接入集合业务上不用于校验（拦截器旁路），此处仍如实返回其真实集合。
-func loadAdmittedAppIds(ctx context.Context, db *gorm.DB, userId, homeAppId int64) ([]int64, error) {
+func loadAdmittedAppIds(ctx context.Context, db *gorm.DB, userId int64) ([]int64, error) {
 	seen := make(map[int64]struct{})
 	ids := make([]int64, 0, 4)
-	if homeAppId > 0 {
-		seen[homeAppId] = struct{}{}
-		ids = append(ids, homeAppId)
-	}
 	var bindings []model.RUserApplication
 	if err := db.WithContext(ctx).
 		Where(model.RUserApplicationColumnUserId+" = ?", userId).

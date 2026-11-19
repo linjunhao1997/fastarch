@@ -183,7 +183,7 @@ func (a *AuthorizationService) CreatePermission(ctx context.Context, request *ia
 		return nil, err
 	}
 	if scoped && appId <= 0 {
-		return nil, ErrHomeApplicationRequired
+		return nil, ErrDataScopeRequired
 	}
 	if err := requireCodeSegmentMatchesApp(ctx, a.db, appId, request.Code); err != nil {
 		return nil, err
@@ -364,7 +364,7 @@ func (a *AuthorizationService) CreateRole(ctx context.Context, request *iam_v1.C
 	now := time.Now()
 	// 审计字段服务端注入：created_by/updated_by 取认证上下文操作者
 	operator := cast.ToString(auth.GetAccountId(ctx))
-	homeId, scoped, err := operatorHomeScope(ctx, a.db)
+	homeId, scoped, err := operatorDataScope(ctx, a.db)
 	if err != nil {
 		return nil, err
 	}
@@ -372,7 +372,7 @@ func (a *AuthorizationService) CreateRole(ctx context.Context, request *iam_v1.C
 	if scoped {
 		// 非 admin 不能自选归属：强制锁定自身 home；home 未设置则 fail-closed。
 		if homeId <= 0 {
-			return nil, ErrHomeApplicationRequired
+			return nil, ErrDataScopeRequired
 		}
 		applicationId = homeId
 	}

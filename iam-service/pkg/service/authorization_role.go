@@ -45,7 +45,7 @@ func (a *AuthorizationService) ListRoles(ctx context.Context, request *iam_v1.Li
 		model.RoleColumnName + " LIKE ?",
 		model.RoleColumnCode + " LIKE ?",
 	}
-	homeId, scoped, err := operatorHomeScope(ctx, a.db)
+	homeId, scoped, err := operatorDataScope(ctx, a.db)
 	if err != nil {
 		return nil, err
 	}

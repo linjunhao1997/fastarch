@@ -12,6 +12,7 @@ export const PERMISSIONS = {
   userUpdate: 'iam.user.update',
   userDelete: 'iam.user.delete',
   userAssignRoles: 'iam.user.assign_roles',
+  userAssignApplications: 'iam.user.assign_applications',
   userResetPassword: 'iam.user.reset_password',
   // 应用模块
   applicationCreate: 'iam.application.create',

@@ -124,16 +124,10 @@ function CreateCredentialModal({
   const { isSubmitting, run } = useSubmitLock();
   const selectedUserId = Form.useWatch('userId', form);
 
-  // 归属应用候选 = 绑定用户的 home + 显式接入应用（其接入集合），无需额外查询。
+  // 归属应用候选 = 绑定用户的接入应用集合（t_r_user_application），无需额外查询。
   const selectedAccount = accounts.find((account) => account.id === selectedUserId);
   const appOptions = useMemo(() => {
     const options: { value: string; label: string }[] = [];
-    if (selectedAccount?.homeApplication && selectedAccount.homeApplicationId !== '0') {
-      options.push({
-        value: selectedAccount.homeApplicationId,
-        label: `${selectedAccount.homeApplication.name}（${selectedAccount.homeApplication.code}）· 所属应用`,
-      });
-    }
     for (const app of selectedAccount?.applications ?? []) {
       options.push({ value: app.id, label: `${app.name}（${app.code}）` });
     }

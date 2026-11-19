@@ -1,8 +1,7 @@
-import { useEffect } from "react";
-import { Form, Input, Button, Radio, Card, message, Select, Alert } from "antd";
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from "react-router-dom";
-import { accountApi, applicationApi, profileApi } from "@/iam/api/iam";
+import { Form, Input, Button, Radio, Card, message, Select } from 'antd';
+import { useNavigate } from 'react-router-dom';
+import { accountApi, applicationApi } from "@/iam/api/iam";
 import { useApiErrorNotification } from '@/shared/hooks/useApiError';
 import { useSubmitLock } from '@/shared/hooks/useSubmitLock';
 import { ACTIONS } from '@/shared/types/copywriting';
@@ -14,35 +13,13 @@ export default function CreateAccountPage() {
   const showNotification = useApiErrorNotification();
   const { isSubmitting, run } = useSubmitLock();
 
-  // 数据边界（ADR 0006）：非 admin 的所属应用锁定为操作者所属应用
-  const { data: profile } = useQuery({ queryKey: ['profile', 'my'], queryFn: profileApi.get });
   const { data: appsData, isLoading: appsLoading } = useQuery({
     queryKey: ['applications', 'create-account-options'],
     queryFn: () => applicationApi.list(1, 100),
   });
-  const isAdmin = profile?.isAdmin ?? false;
-  const lockedHomeId = profile && profile.homeApplicationId !== '0' ? profile.homeApplicationId : '';
-  const homeLocked = !isAdmin;
-  const cannotCreate = homeLocked && !lockedHomeId;
 
-  useEffect(() => {
-    if (homeLocked && lockedHomeId) {
-      form.setFieldValue('homeApplicationId', lockedHomeId);
-    }
-  }, [homeLocked, lockedHomeId, form]);
-
-  const homeId = Form.useWatch('homeApplicationId', form) as string | undefined;
   const enabledApps = (appsData?.applications ?? []).filter((app) => app.status === 'enabled');
-  const homeOptions = enabledApps.map((app) => ({ value: app.id, label: `${app.name}（${app.code}）` }));
-  const admittedOptions = enabledApps
-    .filter((app) => app.id !== homeId)
-    .map((app) => ({ value: app.id, label: `${app.name}（${app.code}）` }));
-
-  const handleHomeChange = (value: string) => {
-    // 所属应用隐式准入，不再重复占用额外准入名额
-    const admitted: string[] = form.getFieldValue('applicationIds') ?? [];
-    form.setFieldValue('applicationIds', admitted.filter((id) => id !== value));
-  };
+  const appOptions = enabledApps.map((app) => ({ value: app.id, label: `${app.name}（${app.code}）` }));
 
   const onFinish = async (values: {
     username: string;
@@ -50,8 +27,7 @@ export default function CreateAccountPage() {
     email?: string;
     password: string;
     status: string;
-    homeApplicationId: string;
-    applicationIds?: string[];
+    applicationIds: string[];
   }) => {
     run(async () => {
       // 初始密码必填（后端 bcrypt 摘要落库）；email 可空，留空即不设置
@@ -61,8 +37,7 @@ export default function CreateAccountPage() {
         email: values.email,
         password: values.password,
         status: values.status,
-        homeApplicationId: values.homeApplicationId,
-        applicationIds: values.applicationIds ?? [],
+        applicationIds: values.applicationIds,
       });
       message.success(`${ACTIONS.create}成功`);
       queryClient.invalidateQueries({ queryKey: ['accounts'] });
@@ -73,14 +48,6 @@ export default function CreateAccountPage() {
   return (
     <div>
       <Card title="创建用户">
-        {cannotCreate && (
-          <Alert
-            type="warning"
-            showIcon
-            style={{ marginBottom: 16 }}
-            message="当前账号未设置所属应用，无法创建用户，请联系管理员。"
-          />
-        )}
         <Form
           form={form}
           layout="vertical"
@@ -119,31 +86,16 @@ export default function CreateAccountPage() {
           </Form.Item>
 
           <Form.Item
-            label="所属应用"
-            name="homeApplicationId"
-            rules={[{ required: true, message: "请选择所属应用" }]}
-            extra={homeLocked ? "非 admin 只能创建本所属应用的用户" : "用户只能查看和操作所属应用的数据"}
-          >
-            <Select
-              placeholder="选择所属应用（必填）"
-              loading={appsLoading}
-              disabled={homeLocked}
-              options={homeOptions}
-              optionFilterProp="label"
-              onChange={handleHomeChange}
-            />
-          </Form.Item>
-
-          <Form.Item
-            label="准入应用"
+            label="接入应用"
             name="applicationIds"
-            extra="额外可进入的应用，功能受权限码控制；所属应用隐式准入，无需选择"
+            rules={[{ required: true, type: 'array', min: 1, message: "请至少选择一个接入应用" }]}
+            extra="接入应用决定该用户可切换的数据范围，可多选、至少一项；非 admin 须包含其当前数据范围应用"
           >
             <Select
               mode="multiple"
-              placeholder="可留空"
+              placeholder="选择接入应用（至少一项）"
               loading={appsLoading}
-              options={admittedOptions}
+              options={appOptions}
               optionFilterProp="label"
             />
           </Form.Item>
@@ -156,7 +108,7 @@ export default function CreateAccountPage() {
           </Form.Item>
 
           <Form.Item>
-            <Button type="primary" htmlType="submit" loading={isSubmitting} disabled={cannotCreate}>
+            <Button type="primary" htmlType="submit" loading={isSubmitting}>
               {ACTIONS.create}
             </Button>
             <Button style={{ marginLeft: 8 }} onClick={() => navigate('/account_management/account_list')}>

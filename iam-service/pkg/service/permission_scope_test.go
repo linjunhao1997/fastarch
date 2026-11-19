@@ -14,11 +14,11 @@ import (
 	"iam-service/pkg/model"
 )
 
-// TestPermissionHomeApplicationIsolation 验证权限管理纳入所属应用数据边界：
-// 非 admin 即使登录在 IAM 控制台（token applicationId=iam），权限列表也只能看到
-// home 应用的码；跨应用增删改拒绝；创建码强制 home；home 未设置 fail-closed。
-// admin/系统调用继续按当前应用上下文管理（ADR 0006）。
-func TestPermissionHomeApplicationIsolation(t *testing.T) {
+// TestPermissionDataScopeIsolation 验证权限管理纳入数据范围边界：
+// 非 admin 即使登录在 IAM 控制台，权限列表也只能看到数据范围应用的码；
+// 跨应用增删改拒绝；创建码强制归属数据范围应用；数据范围未注入 fail-closed。
+// admin/系统调用继续按宿主应用上下文管理。
+func TestPermissionDataScopeIsolation(t *testing.T) {
 	db := setupAuthorizationTestDB(t)
 	setupTestApplication(t, db)
 	const otherAppId = int64(901)
@@ -29,12 +29,8 @@ func TestPermissionHomeApplicationIsolation(t *testing.T) {
 		t.Fatalf("create other application: %v", err)
 	}
 
-	for _, spec := range []struct{ id, home int64 }{{1, testAppId}, {2, otherAppId}, {3, 0}} {
-		operator := createTestUser(t, db, spec.id, "permission-operator-"+cast.ToString(spec.id), 1)
-		operator.HomeApplicationId = spec.home
-		if err := db.Save(&operator).Error; err != nil {
-			t.Fatalf("set operator home: %v", err)
-		}
+	for _, spec := range []struct{ id, scope int64 }{{1, testAppId}, {2, otherAppId}, {3, 0}} {
+		createTestUser(t, db, spec.id, "permission-operator-"+cast.ToString(spec.id), 1)
 	}
 
 	iamPermission := createTestPermission(t, db, 10, "iam.alpha.code", 1)
@@ -48,10 +44,10 @@ func TestPermissionHomeApplicationIsolation(t *testing.T) {
 	}
 
 	svc := NewAuthorizationService(db, nil)
-	// 三个操作者都登录在 IAM 控制台：应用上下文是 iam，数据边界取决于 home。
-	ctxIam := appCtx(auth.WithAccountId(context.Background(), 1))
-	ctxSender := appCtx(auth.WithAccountId(context.Background(), 2))
-	ctxNoHome := appCtx(auth.WithAccountId(context.Background(), 3))
+	// 三个操作者都登录在 IAM 控制台：宿主 appId 是 iam，数据范围由 dataAppId 注入。
+	ctxIam := auth.WithDataAppId(appCtx(auth.WithAccountId(context.Background(), 1)), testAppId)
+	ctxSender := auth.WithDataAppId(appCtx(auth.WithAccountId(context.Background(), 2)), otherAppId)
+	ctxNoScope := appCtx(auth.WithAccountId(context.Background(), 3))
 	page := &iam_v1.ListPermissionsRequest{CurrentPage: 1, PageSize: 10}
 
 	listCodes := func(ctx context.Context) []string {
@@ -68,13 +64,13 @@ func TestPermissionHomeApplicationIsolation(t *testing.T) {
 	}
 
 	if codes := listCodes(ctxSender); len(codes) != 1 || codes[0] != senderPermission.Code {
-		t.Fatalf("sender-home operator codes = %v, want only %q", codes, senderPermission.Code)
+		t.Fatalf("sender-scope operator codes = %v, want only %q", codes, senderPermission.Code)
 	}
 	if codes := listCodes(ctxIam); len(codes) != 1 || codes[0] != iamPermission.Code {
-		t.Fatalf("iam-home operator codes = %v, want only %q", codes, iamPermission.Code)
+		t.Fatalf("iam-scope operator codes = %v, want only %q", codes, iamPermission.Code)
 	}
-	if codes := listCodes(ctxNoHome); len(codes) != 0 {
-		t.Fatalf("no-home operator codes = %v, want empty", codes)
+	if codes := listCodes(ctxNoScope); len(codes) != 0 {
+		t.Fatalf("no-scope operator codes = %v, want empty", codes)
 	}
 
 	if _, err := svc.GetPermission(ctxSender, &common_v1.GetRequest{Id: iamPermission.Id}); !errors.Is(err, ErrPermissionOutOfScope) {
@@ -98,12 +94,12 @@ func TestPermissionHomeApplicationIsolation(t *testing.T) {
 		t.Fatalf("load created permission: %v", err)
 	}
 	if createdRow.ApplicationId != otherAppId {
-		t.Fatalf("created permission applicationId = %d, want %d (operator home)", createdRow.ApplicationId, otherAppId)
+		t.Fatalf("created permission applicationId = %d, want %d (operator data scope)", createdRow.ApplicationId, otherAppId)
 	}
 	if _, err := svc.CreatePermission(ctxSender, &iam_v1.CreatePermissionRequest{Name: "x", Code: "iam.new.code"}); !errors.Is(err, ErrPermissionCodeSegmentMismatch) {
 		t.Fatalf("CreatePermission(other segment) error = %v, want %v", err, ErrPermissionCodeSegmentMismatch)
 	}
-	if _, err := svc.CreatePermission(ctxNoHome, &iam_v1.CreatePermissionRequest{Name: "x", Code: "sender.no_home.code"}); !errors.Is(err, ErrHomeApplicationRequired) {
-		t.Fatalf("CreatePermission(no home) error = %v, want %v", err, ErrHomeApplicationRequired)
+	if _, err := svc.CreatePermission(ctxNoScope, &iam_v1.CreatePermissionRequest{Name: "x", Code: "sender.no_scope.code"}); !errors.Is(err, ErrDataScopeRequired) {
+		t.Fatalf("CreatePermission(no data scope) error = %v, want %v", err, ErrDataScopeRequired)
 	}
 }

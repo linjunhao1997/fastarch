@@ -15,10 +15,6 @@ type User struct {
 	// email 可空唯一（迁移 000004）：nil 落库为 NULL，避免空串占用唯一索引位
 	Email  *string `gorm:"column:email;size:255;uniqueIndex"`
 	Status string  `gorm:"column:status;size:16;default:enabled"`
-	// HomeApplicationId 所属应用（数据边界 ADR 0006）：单个、创建必填、隐式准入
-	// 且无法取消；非 admin 仅可查看/操作该应用的数据；登录默认进入。
-	// 0 = 未设置（存量用户 fail-closed，admin 可补设）。
-	HomeApplicationId int64     `gorm:"column:home_application_id"`
 	Version           int64     `gorm:"column:version"`
 	CreatedBy         string    `gorm:"column:created_by;size:64"`
 	UpdatedBy         string    `gorm:"column:updated_by;size:64"`
@@ -44,6 +40,6 @@ func (u *User) EmailString() string {
 
 var UserFields = []string{
 	UserColumnId, UserColumnUsername, UserColumnPasswordHash, UserColumnNickname,
-	UserColumnEmail, UserColumnStatus, UserColumnHomeApplicationId, UserColumnVersion,
+	UserColumnEmail, UserColumnStatus, UserColumnVersion,
 	UserColumnCreatedBy, UserColumnUpdatedBy, UserColumnCreateTime, UserColumnUpdateTime,
 }

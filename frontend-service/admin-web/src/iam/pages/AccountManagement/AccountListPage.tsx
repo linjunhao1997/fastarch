@@ -12,6 +12,7 @@ import { usePermissions } from '@/shared/hooks/permission-context';
 import { useTableQuery } from '@/shared/hooks/useTableQuery';
 import type { Account, AccountApplication } from '@/iam/types';
 import { ACTIONS, buildSuccessMessage } from '@/shared/types/copywriting';
+import { PERMISSIONS } from '@/shared/types/permissions';
 import { formatDateTime } from '@/shared/utils/datetime';
 
 const { Search } = Input;
@@ -19,7 +20,8 @@ const { Search } = Input;
 export default function AccountListPage() {
   const navigate = useNavigate();
   const showNotification = useApiErrorNotification();
-  const { reload } = usePermissions();
+  const { reload, hasPermission } = usePermissions();
+  const canAssignApps = hasPermission(PERMISSIONS.userAssignApplications);
   const [bindRolesAccount, setBindRolesAccount] = useState<Account | null>(null);
   const [assignAppsAccount, setAssignAppsAccount] = useState<Account | null>(null);
   const confirmDelete = useConfirmDelete();
@@ -53,14 +55,7 @@ export default function AccountListPage() {
           : '—',
     },
     {
-      title: '所属应用',
-      dataIndex: 'homeApplication',
-      key: 'homeApplication',
-      render: (home: AccountApplication | undefined) =>
-        home ? <Tag color="gold">{home.name}（{home.code}）</Tag> : '—',
-    },
-    {
-      title: '准入应用',
+      title: '接入应用',
       dataIndex: 'applications',
       key: 'applications',
       render: (applications: AccountApplication[] | undefined) =>
@@ -85,7 +80,9 @@ export default function AccountListPage() {
             {ACTIONS.edit}
           </Button>
           <Button type="link" onClick={() => setBindRolesAccount(record)}>{ACTIONS.bindRoles}</Button>
-          <Button type="link" onClick={() => setAssignAppsAccount(record)}>分配应用</Button>
+          {canAssignApps ? (
+            <Button type="link" onClick={() => setAssignAppsAccount(record)}>分配应用</Button>
+          ) : null}
           <Button
             type="link"
             danger
@@ -105,7 +102,7 @@ export default function AccountListPage() {
         </Flex>
       ),
     },
-  ], [navigate, showNotification, tableQuery]);
+  ], [navigate, showNotification, tableQuery, canAssignApps]);
 
   return (
     <div>

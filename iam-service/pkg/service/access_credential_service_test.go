@@ -24,7 +24,7 @@ import (
 const testServiceAESKey = "0123456789abcdef0123456789abcdef"
 
 // newTestCredentialService 构造内存 SQLite + miniredis 的凭证服务测试环境。
-// 操作者 42 落库并归属 testAppId（凭证域数据边界夹具，ADR 0006 补充）。
+// 操作者 42 落库并接入 testAppId（凭证域数据边界夹具）。
 func newTestCredentialService(t *testing.T, maxPerAccount int) (*AccessCredentialService, *cipher.AESGCM) {
 	t.Helper()
 	db := setupAccountTestDB(t)
@@ -37,21 +37,19 @@ func newTestCredentialService(t *testing.T, maxPerAccount int) (*AccessCredentia
 	return NewAccessCredentialService(db, rdb, aes, maxPerAccount), aes
 }
 
-// credentialContext 返回携带操作者身份的上下文（审计字段服务端注入来源）。
+// credentialContext 返回携带操作者身份与数据范围（testAppId）的上下文。
 func credentialContext() context.Context {
-	return auth.WithAccountId(context.Background(), 42)
+	ctx := auth.WithAccountId(context.Background(), 42)
+	return auth.WithDataAppId(ctx, testAppId)
 }
 
-// createCredentialTestUser 创建归属 testAppId 的测试用户（与操作者 42 同 home，
-// 凭证域数据边界夹具，ADR 0006 补充）。
+// createCredentialTestUser 创建接入 testAppId 的测试用户（凭证域数据边界夹具）。
 func createCredentialTestUser(t *testing.T, db *gorm.DB, id int64, username string, version int64) model.User {
 	t.Helper()
 	user := createTestUser(t, db, id, username, version)
-	if err := db.Model(&model.User{}).Where(model.UserColumnId, id).
-		Update(model.UserColumnHomeApplicationId, testAppId).Error; err != nil {
-		t.Fatalf("set test user home: %v", err)
+	if err := db.Create(&model.RUserApplication{UserId: id, ApplicationId: testAppId}).Error; err != nil {
+		t.Fatalf("bind test user app: %v", err)
 	}
-	user.HomeApplicationId = testAppId
 	return user
 }
 
@@ -72,8 +70,9 @@ func TestCreateAccessCredentialReturnsOneTimeSecret(t *testing.T) {
 	createCredentialTestUser(t, service.db, 1, "cred", 1)
 
 	resp, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{
-		UserId: 1,
-		Remark:    "ci-deploy",
+		UserId:        1,
+		ApplicationId: testAppId,
+		Remark:        "ci-deploy",
 	})
 	if err != nil {
 		t.Fatalf("CreateAccessCredential() error = %v", err)
@@ -138,7 +137,7 @@ func TestCreateAccessCredentialAccountInvalid(t *testing.T) {
 		{name: "account disabled", accountId: 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{UserId: tc.accountId})
+			_, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{ApplicationId: testAppId, UserId: tc.accountId})
 			if err != ErrAccessCredentialAccountInvalid {
 				t.Fatalf("error = %v, want ErrAccessCredentialAccountInvalid", err)
 			}
@@ -159,11 +158,11 @@ func TestCreateAccessCredentialLimitExceeded(t *testing.T) {
 	createCredentialTestUser(t, service.db, 1, "limit", 1)
 
 	for i := 0; i < 2; i++ {
-		if _, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{UserId: 1}); err != nil {
+		if _, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{ApplicationId: testAppId, UserId: 1}); err != nil {
 			t.Fatalf("create #%d error = %v", i+1, err)
 		}
 	}
-	_, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{UserId: 1})
+	_, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{ApplicationId: testAppId, UserId: 1})
 	if err != ErrAccessCredentialLimitExceeded {
 		t.Fatalf("error = %v, want ErrAccessCredentialLimitExceeded", err)
 	}
@@ -187,8 +186,9 @@ func TestListAccessCredentialsPaging(t *testing.T) {
 			accountId = 2
 		}
 		if _, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{
-			UserId: accountId,
-			Remark:    "remark-" + string(rune('a'+i)),
+			UserId:        accountId,
+			ApplicationId: testAppId,
+			Remark:        "remark-" + string(rune('a'+i)),
 		}); err != nil {
 			t.Fatalf("create #%d error = %v", i+1, err)
 		}
@@ -227,14 +227,14 @@ func TestListAccessCredentialsFilters(t *testing.T) {
 	createCredentialTestUser(t, service.db, 2, "b-user", 1)
 
 	// 两个账号各 1 条启用 + 账号 1 追加 1 条禁用
-	enabledOne, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{UserId: 1, Remark: "keep"})
+	enabledOne, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{ApplicationId: testAppId, UserId: 1, Remark: "keep"})
 	if err != nil {
 		t.Fatalf("create enabled one: %v", err)
 	}
-	if _, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{UserId: 1, Remark: "off"}); err != nil {
+	if _, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{ApplicationId: testAppId, UserId: 1, Remark: "off"}); err != nil {
 		t.Fatalf("create disabled: %v", err)
 	}
-	if _, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{UserId: 2, Remark: "other"}); err != nil {
+	if _, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{ApplicationId: testAppId, UserId: 2, Remark: "other"}); err != nil {
 		t.Fatalf("create account2: %v", err)
 	}
 	if err := service.db.Model(&model.AccessCredential{}).
@@ -281,7 +281,7 @@ func TestListAccessCredentialsFilters(t *testing.T) {
 func TestChangeAccessCredentialStatus(t *testing.T) {
 	service, _ := newTestCredentialService(t, 20)
 	createCredentialTestUser(t, service.db, 1, "a-user", 1)
-	created, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{UserId: 1})
+	created, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{ApplicationId: testAppId, UserId: 1})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -334,7 +334,7 @@ func TestChangeAccessCredentialStatus(t *testing.T) {
 func TestResetAccessCredentialSecret(t *testing.T) {
 	service, aes := newTestCredentialService(t, 20)
 	createCredentialTestUser(t, service.db, 1, "a-user", 1)
-	created, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{UserId: 1})
+	created, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{ApplicationId: testAppId, UserId: 1})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -381,7 +381,7 @@ func TestResetAccessCredentialSecret(t *testing.T) {
 func TestDeleteAccessCredential(t *testing.T) {
 	service, _ := newTestCredentialService(t, 20)
 	createCredentialTestUser(t, service.db, 1, "a-user", 1)
-	created, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{UserId: 1})
+	created, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{ApplicationId: testAppId, UserId: 1})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -406,7 +406,7 @@ func TestDeleteAccessCredential(t *testing.T) {
 func TestGetAccessCredential(t *testing.T) {
 	service, _ := newTestCredentialService(t, 20)
 	createCredentialTestUser(t, service.db, 1, "a-user", 1)
-	created, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{UserId: 1, Remark: "detail"})
+	created, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{ApplicationId: testAppId, UserId: 1, Remark: "detail"})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -434,8 +434,9 @@ func TestCreateAccessCredentialWithExpireTime(t *testing.T) {
 	expire := time.Now().Add(24 * time.Hour).Round(time.Second).UTC()
 
 	resp, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{
-		UserId:  1,
-		ExpireTime: timestamppb.New(expire),
+		UserId:        1,
+		ApplicationId: testAppId,
+		ExpireTime:    timestamppb.New(expire),
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
@@ -448,59 +449,60 @@ func TestCreateAccessCredentialWithExpireTime(t *testing.T) {
 	}
 }
 
-// TestAccessCredentialHomeIsolation 验证凭证域数据边界（ADR 0006 补充裁决）：
-// 凭证随所属用户 home 隔离——非 admin 跨 home 创建/点查/修改/启停/重置/删除一律拒绝，
-// 列表仅见 home 内凭证；home 未设置 fail-closed；admin 与系统调用旁路。
-func TestAccessCredentialHomeIsolation(t *testing.T) {
+// TestAccessCredentialDataScopeIsolation 验证凭证域数据边界（ADR 0008）：
+// 凭证随自身归属应用隔离——非 admin 只能创建接入其数据范围应用的用户之凭证，
+// 且只能操作归属应用等于其数据范围的凭证；admin 与系统调用旁路。
+func TestAccessCredentialDataScopeIsolation(t *testing.T) {
 	service, _ := newTestCredentialService(t, 20)
-	// 用户 1 与操作者 42 同 home（testAppId）；用户 2 跨 home；用户 3 无 home
-	createCredentialTestUser(t, service.db, 1, "same-home", 1)
-	other := createTestUser(t, service.db, 2, "other-home", 1)
-	other.HomeApplicationId = 901
-	if err := service.db.Save(&other).Error; err != nil {
-		t.Fatalf("set other home: %v", err)
+	// order 应用（用户 2 的接入应用）
+	createTestApp(t, service.db, 901, "order", model.StatusEnabled)
+	// 用户 1 接入 iam（与操作者同范围）；用户 2 仅接入 order；用户 3 无接入
+	createCredentialTestUser(t, service.db, 1, "same-scope", 1)
+	createTestUser(t, service.db, 2, "other-scope", 1)
+	if err := service.db.Create(&model.RUserApplication{UserId: 2, ApplicationId: 901}).Error; err != nil {
+		t.Fatalf("bind order app: %v", err)
 	}
-	createTestUser(t, service.db, 3, "no-home", 1)
-	ctxNoHome := auth.WithAccountId(context.Background(), 3)
+	createTestUser(t, service.db, 3, "no-scope", 1)
+	ctxNoScope := auth.WithAccountId(context.Background(), 3)
 	ctxAdmin := auth.WithAdmin(auth.WithAccountId(context.Background(), 99))
 
-	// 同 home 创建成功；跨 home 创建拒绝
-	created, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{UserId: 1})
+	// 同范围用户创建凭证成功；跨范围用户创建拒绝（目标未接入操作者数据范围应用）
+	created, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{ApplicationId: testAppId, UserId: 1})
 	if err != nil {
-		t.Fatalf("create same-home: %v", err)
+		t.Fatalf("create same-scope: %v", err)
 	}
-	if _, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{UserId: 2}); !errors.Is(err, ErrAccountOutOfScope) {
-		t.Fatalf("create cross-home error = %v, want %v", err, ErrAccountOutOfScope)
+	if _, err := service.CreateAccessCredential(credentialContext(), &iam_v1.CreateAccessCredentialRequest{ApplicationId: 901, UserId: 2}); !errors.Is(err, ErrAccountOutOfScope) {
+		t.Fatalf("create cross-scope error = %v, want %v", err, ErrAccountOutOfScope)
 	}
-	// 跨 home 凭证经系统调用落库（旁路），供越权操作断言
-	otherCreated, err := service.CreateAccessCredential(context.Background(), &iam_v1.CreateAccessCredentialRequest{UserId: 2})
+	// 跨范围凭证（归属 order）经系统调用落库（旁路），供越权操作断言
+	otherCreated, err := service.CreateAccessCredential(context.Background(), &iam_v1.CreateAccessCredentialRequest{ApplicationId: 901, UserId: 2})
 	if err != nil {
-		t.Fatalf("create other-home via system: %v", err)
+		t.Fatalf("create other-scope via system: %v", err)
 	}
 	otherId := parseCredentialID(t, otherCreated.Credential.Id)
 
-	// 跨 home 点查/修改/启停/重置/删除一律拒绝
-	if _, err := service.GetAccessCredential(credentialContext(), &common_v1.GetRequest{Id: otherId}); !errors.Is(err, ErrAccountOutOfScope) {
-		t.Fatalf("get cross-home error = %v, want %v", err, ErrAccountOutOfScope)
+	// 跨范围凭证（归属 order ≠ 操作者 dataAppId=iam）点查/修改/启停/重置/删除一律拒绝
+	if _, err := service.GetAccessCredential(credentialContext(), &common_v1.GetRequest{Id: otherId}); !errors.Is(err, ErrAccessCredentialNotFound) {
+		t.Fatalf("get cross-scope error = %v, want %v", err, ErrAccessCredentialNotFound)
 	}
 	if _, err := service.UpdateAccessCredential(credentialContext(), &iam_v1.UpdateAccessCredentialRequest{
 		Id: otherId, Remark: "hacked", Version: otherCreated.Credential.Version,
-	}); !errors.Is(err, ErrAccountOutOfScope) {
-		t.Fatalf("update cross-home error = %v, want %v", err, ErrAccountOutOfScope)
+	}); !errors.Is(err, ErrAccessCredentialNotFound) {
+		t.Fatalf("update cross-scope error = %v, want %v", err, ErrAccessCredentialNotFound)
 	}
 	if _, err := service.ChangeAccessCredentialStatus(credentialContext(), &iam_v1.ChangeAccessCredentialStatusRequest{
 		Id: otherId, Status: constant.AccessCredentialStatusDisabled,
-	}); !errors.Is(err, ErrAccountOutOfScope) {
-		t.Fatalf("status cross-home error = %v, want %v", err, ErrAccountOutOfScope)
+	}); !errors.Is(err, ErrAccessCredentialNotFound) {
+		t.Fatalf("status cross-scope error = %v, want %v", err, ErrAccessCredentialNotFound)
 	}
-	if _, err := service.ResetAccessCredentialSecret(credentialContext(), &iam_v1.ResetAccessCredentialSecretRequest{Id: otherId}); !errors.Is(err, ErrAccountOutOfScope) {
-		t.Fatalf("reset cross-home error = %v, want %v", err, ErrAccountOutOfScope)
+	if _, err := service.ResetAccessCredentialSecret(credentialContext(), &iam_v1.ResetAccessCredentialSecretRequest{Id: otherId}); !errors.Is(err, ErrAccessCredentialNotFound) {
+		t.Fatalf("reset cross-scope error = %v, want %v", err, ErrAccessCredentialNotFound)
 	}
-	if _, err := service.DeleteAccessCredential(credentialContext(), &iam_v1.DeleteAccessCredentialRequest{Id: otherId}); !errors.Is(err, ErrAccountOutOfScope) {
-		t.Fatalf("delete cross-home error = %v, want %v", err, ErrAccountOutOfScope)
+	if _, err := service.DeleteAccessCredential(credentialContext(), &iam_v1.DeleteAccessCredentialRequest{Id: otherId}); !errors.Is(err, ErrAccessCredentialNotFound) {
+		t.Fatalf("delete cross-scope error = %v, want %v", err, ErrAccessCredentialNotFound)
 	}
 
-	// 列表：非 admin 仅见 home 内凭证（用户 1 一条）
+	// 列表：非 admin 仅见归属应用 = 数据范围(iam) 的凭证（用户 1 一条）
 	resp, err := service.ListAccessCredentials(credentialContext(), &iam_v1.ListAccessCredentialsRequest{CurrentPage: 1, PageSize: 10})
 	if err != nil {
 		t.Fatalf("list scoped: %v", err)
@@ -508,20 +510,20 @@ func TestAccessCredentialHomeIsolation(t *testing.T) {
 	if len(resp.AccessCredentials) != 1 || resp.AccessCredentials[0].Id != created.Credential.Id {
 		t.Fatalf("scoped list = %+v, want only user 1 credential", resp.AccessCredentials)
 	}
-	// home 未设置：列表空、创建拒绝（fail-closed）
-	empty, err := service.ListAccessCredentials(ctxNoHome, &iam_v1.ListAccessCredentialsRequest{CurrentPage: 1, PageSize: 10})
+	// 未注入数据范围应用：列表空、创建拒绝（fail-closed）
+	empty, err := service.ListAccessCredentials(ctxNoScope, &iam_v1.ListAccessCredentialsRequest{CurrentPage: 1, PageSize: 10})
 	if err != nil {
-		t.Fatalf("list no-home: %v", err)
+		t.Fatalf("list no-scope: %v", err)
 	}
 	if len(empty.AccessCredentials) != 0 {
-		t.Fatalf("no-home list = %+v, want empty", empty.AccessCredentials)
+		t.Fatalf("no-scope list = %+v, want empty", empty.AccessCredentials)
 	}
-	if _, err := service.CreateAccessCredential(ctxNoHome, &iam_v1.CreateAccessCredentialRequest{UserId: 1}); !errors.Is(err, ErrAccountOutOfScope) {
-		t.Fatalf("create no-home error = %v, want %v", err, ErrAccountOutOfScope)
+	if _, err := service.CreateAccessCredential(ctxNoScope, &iam_v1.CreateAccessCredentialRequest{ApplicationId: testAppId, UserId: 1}); !errors.Is(err, ErrAccountOutOfScope) {
+		t.Fatalf("create no-scope error = %v, want %v", err, ErrAccountOutOfScope)
 	}
-	// admin 旁路：跨 home 重置成功
+	// admin 旁路：跨范围重置成功
 	if _, err := service.ResetAccessCredentialSecret(ctxAdmin, &iam_v1.ResetAccessCredentialSecretRequest{Id: otherId}); err != nil {
-		t.Fatalf("admin reset cross-home: %v", err)
+		t.Fatalf("admin reset cross-scope: %v", err)
 	}
 	// 系统调用旁路：列表全量（2 条）
 	all, err := service.ListAccessCredentials(context.Background(), &iam_v1.ListAccessCredentialsRequest{CurrentPage: 1, PageSize: 10})

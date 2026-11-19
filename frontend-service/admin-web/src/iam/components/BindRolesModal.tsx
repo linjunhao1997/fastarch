@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Modal, Select, Tag, Flex } from 'antd';
+import { Modal, Select, Flex } from 'antd';
 import { EmptyState } from '@/shared/components/states';
 import { accountApi, roleApi } from '@/iam/api/iam';
 import { useApiErrorNotification } from '@/shared/hooks/useApiError';
@@ -16,18 +16,20 @@ interface BindRolesModalProps {
 
 export function BindRolesModal({ open, account, onClose, onSuccess }: BindRolesModalProps) {
   const [roles, setRoles] = useState<Role[]>([]);
-  const [selectedRoleCodes, setSelectedRoleCodes] = useState<string[]>([]);
+  const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const showNotification = useApiErrorNotification();
   const { isSubmitting, run } = useSubmitLock();
 
-  const initialRoleCodes = account?.roleCodeList ?? [];
+  // 初值与提交均按 roleId（ADR-0009）：账号详情的 roleIds 已由服务端按数据范围
+  // 过滤，sender 侧看不到 iam 角色；跨应用同名码不再参与绑定，杜绝裸码越权删除。
+  const initialRoleIds = account?.roleIds ?? [];
 
   useEffect(() => {
     if (!open) return;
     let isMounted = true;
     setIsLoading(true);
-    setSelectedRoleCodes(account?.roleCodeList ?? []);
+    setSelectedRoleIds(account?.roleIds ?? []);
     roleApi.list(1, 100)
       .then((response) => {
         if (isMounted) setRoles(response.roles);
@@ -46,11 +48,11 @@ export function BindRolesModal({ open, account, onClose, onSuccess }: BindRolesM
   const handleSubmit = () => {
     if (!account) return;
     run(async () => {
-      const selectedCodes = new Set(selectedRoleCodes);
-      const initialCodes = new Set(initialRoleCodes);
-      const addedRoleCodeList = [...selectedCodes].filter((code) => !initialCodes.has(code));
-      const removedRoleCodeList = [...initialCodes].filter((code) => !selectedCodes.has(code));
-      await accountApi.updateRoles(account.id, { addedRoleCodeList, removedRoleCodeList });
+      const selected = new Set(selectedRoleIds);
+      const initial = new Set(initialRoleIds);
+      const addedRoleIds = [...selected].filter((id) => !initial.has(id));
+      const removedRoleIds = [...initial].filter((id) => !selected.has(id));
+      await accountApi.updateRoles(account.id, { addedRoleIds, removedRoleIds });
       onSuccess();
       onClose();
     });
@@ -72,15 +74,14 @@ export function BindRolesModal({ open, account, onClose, onSuccess }: BindRolesM
         <EmptyState description="暂无可绑定角色" action={{ text: '先去创建', onClick: onClose }} />
       ) : (
         <Flex vertical gap={8}>
-          <div style={{ color: 'rgba(0,0,0,0.45)', fontSize: 12 }}>选择角色（{selectedRoleCodes.length} 个已选）</div>
+          <div style={{ color: 'rgba(0,0,0,0.45)', fontSize: 12 }}>选择角色（{selectedRoleIds.length} 个已选）</div>
           <Select
             mode="multiple"
             style={{ width: '100%' }}
             loading={isLoading}
-            value={selectedRoleCodes}
-            onChange={setSelectedRoleCodes}
-            options={roles.map((role) => ({ label: role.name, value: role.roleCode }))}
-            tagRender={(props) => <Tag closable={props.closable} onClose={props.onClose}>{props.label}</Tag>}
+            value={selectedRoleIds}
+            onChange={setSelectedRoleIds}
+            options={roles.map((role) => ({ label: role.name, value: role.id }))}
             placeholder="请选择角色"
           />
         </Flex>
