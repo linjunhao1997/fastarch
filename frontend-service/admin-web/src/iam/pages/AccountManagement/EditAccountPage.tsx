@@ -4,8 +4,10 @@ import { Form, Input, Button, Card, Divider, Radio, message } from "antd";
 import { useNavigate, useParams } from "react-router-dom";
 import { accountApi } from "@/iam/api/iam";
 import { useApiErrorNotification } from "@/shared/hooks/useApiError";
+import { usePermissions } from "@/shared/hooks/permission-context";
 import { useSubmitLock } from "@/shared/hooks/useSubmitLock";
 import { ACTIONS } from "@/shared/types/copywriting";
+import { PERMISSIONS } from "@/shared/types/permissions";
 
 export default function EditAccountPage() {
   const [form] = Form.useForm();
@@ -15,6 +17,8 @@ export default function EditAccountPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const showNotification = useApiErrorNotification();
+  const { hasPermission } = usePermissions();
+  const canResetPassword = hasPermission(PERMISSIONS.userResetPassword);
   const { isSubmitting, run } = useSubmitLock();
   const { isSubmitting: isPwdSubmitting, run: runPwd } = useSubmitLock();
   const [version, setVersion] = useState<number>(0);
@@ -106,26 +110,29 @@ export default function EditAccountPage() {
           </Form.Item>
         </Form>
 
-        <Divider />
-
-        <Card size="small" title="重置密码">
-          <Form form={pwdForm} layout="inline" onFinish={onResetPassword}>
-            <Form.Item
-              name="newPassword"
-              rules={[
-                { required: true, message: "请输入新密码" },
-                { min: 8, message: "密码至少 8 位" },
-              ]}
-            >
-              <Input.Password placeholder="新密码（至少 8 位）" style={{ width: 240 }} />
-            </Form.Item>
-            <Form.Item>
-              <Button type="primary" htmlType="submit" loading={isPwdSubmitting}>
-                重置密码
-              </Button>
-            </Form.Item>
-          </Form>
-        </Card>
+        {canResetPassword ? (
+          <>
+            <Divider />
+            <Card size="small" title="重置密码">
+              <Form form={pwdForm} layout="inline" onFinish={onResetPassword}>
+                <Form.Item
+                  name="newPassword"
+                  rules={[
+                    { required: true, message: "请输入新密码" },
+                    { min: 8, message: "密码至少 8 位" },
+                  ]}
+                >
+                  <Input.Password placeholder="新密码（至少 8 位）" style={{ width: 240 }} />
+                </Form.Item>
+                <Form.Item>
+                  <Button type="primary" htmlType="submit" loading={isPwdSubmitting}>
+                    重置密码
+                  </Button>
+                </Form.Item>
+              </Form>
+            </Card>
+          </>
+        ) : null}
       </Card>
     </div>
   );

@@ -11,10 +11,12 @@ import { getConsole } from '@/shared/api/app-context';
 import { ListPageShell } from '@/shared/components/ListPageShell';
 import { useConfirmDelete } from '@/shared/components/ConfirmDelete';
 import { useApiErrorNotification } from '@/shared/hooks/useApiError';
+import { usePermissions } from '@/shared/hooks/permission-context';
 import { useSubmitLock } from '@/shared/hooks/useSubmitLock';
 import { useTableQuery } from '@/shared/hooks/useTableQuery';
 import type { DictItem, DictType } from '@/shared/types';
 import { ACTIONS, buildSuccessMessage } from '@/shared/types/copywriting';
+import { DICT_MODULE_CODES } from '@/shared/types/permissions';
 import { formatDateTime } from '@/shared/utils/datetime';
 
 interface DictTypeFormValues {
@@ -41,6 +43,12 @@ export default function DictManagementPage() {
   const queryClient = useQueryClient();
   const showNotification = useApiErrorNotification();
   const confirmDelete = useConfirmDelete();
+  const { hasPermission } = usePermissions();
+  // 字典码按控制台选择：iam 控制台用 iam.dict.*，sender 控制台用 sender.dict.*
+  const dictCodes = DICT_MODULE_CODES[getConsole()];
+  const canCreate = hasPermission(dictCodes.create);
+  const canUpdate = hasPermission(dictCodes.update);
+  const canDelete = hasPermission(dictCodes.delete);
   const { isSubmitting, run } = useSubmitLock();
 
   const [typeForm] = Form.useForm<DictTypeFormValues>();
@@ -143,30 +151,34 @@ export default function DictManagementPage() {
       render: (_: unknown, record: DictType) => (
         <Flex gap={0}>
           <Button type="link" size="small" onClick={() => setDrawerType(record)}>管理条目</Button>
-          <Button type="link" size="small" onClick={() => openTypeModal({ mode: 'edit', type: record })}>
-            {ACTIONS.edit}
-          </Button>
-          <Button
-            type="link"
-            size="small"
-            danger
-            onClick={() => confirmDelete({
-              entityType: '字典类型',
-              entityName: record.name,
-              onDelete: async () => {
-                await dictApi.deleteType(record.id);
-                await tableQuery.refresh();
-                message.success(buildSuccessMessage(ACTIONS.delete));
-              },
-              onError: (error) => showNotification(error, '删除字典类型失败'),
-            })}
-          >
-            {ACTIONS.delete}
-          </Button>
+          {canUpdate ? (
+            <Button type="link" size="small" onClick={() => openTypeModal({ mode: 'edit', type: record })}>
+              {ACTIONS.edit}
+            </Button>
+          ) : null}
+          {canDelete ? (
+            <Button
+              type="link"
+              size="small"
+              danger
+              onClick={() => confirmDelete({
+                entityType: '字典类型',
+                entityName: record.name,
+                onDelete: async () => {
+                  await dictApi.deleteType(record.id);
+                  await tableQuery.refresh();
+                  message.success(buildSuccessMessage(ACTIONS.delete));
+                },
+                onError: (error) => showNotification(error, '删除字典类型失败'),
+              })}
+            >
+              {ACTIONS.delete}
+            </Button>
+          ) : null}
         </Flex>
       ),
     },
-  ], [confirmDelete, showNotification, tableQuery]);
+  ], [canDelete, canUpdate, confirmDelete, showNotification, tableQuery]);
 
   const itemColumns: TableColumnsType<DictItem> = useMemo(() => [
     { title: '标签', dataIndex: 'label', key: 'label' },
@@ -177,30 +189,34 @@ export default function DictManagementPage() {
       title: '操作', key: 'action', width: 160,
       render: (_: unknown, record: DictItem) => (
         <Flex gap={0}>
-          <Button type="link" size="small" onClick={() => openItemModal({ mode: 'edit', item: record })}>
-            {ACTIONS.edit}
-          </Button>
-          <Button
-            type="link"
-            size="small"
-            danger
-            onClick={() => confirmDelete({
-              entityType: '字典条目',
-              entityName: record.label,
-              onDelete: async () => {
-                await dictApi.deleteItem(record.id);
-                await queryClient.invalidateQueries({ queryKey: ['dict-items', getConsole(), drawerType?.id] });
-                message.success(buildSuccessMessage(ACTIONS.delete));
-              },
-              onError: (error) => showNotification(error, '删除字典条目失败'),
-            })}
-          >
-            {ACTIONS.delete}
-          </Button>
+          {canUpdate ? (
+            <Button type="link" size="small" onClick={() => openItemModal({ mode: 'edit', item: record })}>
+              {ACTIONS.edit}
+            </Button>
+          ) : null}
+          {canDelete ? (
+            <Button
+              type="link"
+              size="small"
+              danger
+              onClick={() => confirmDelete({
+                entityType: '字典条目',
+                entityName: record.label,
+                onDelete: async () => {
+                  await dictApi.deleteItem(record.id);
+                  await queryClient.invalidateQueries({ queryKey: ['dict-items', getConsole(), drawerType?.id] });
+                  message.success(buildSuccessMessage(ACTIONS.delete));
+                },
+                onError: (error) => showNotification(error, '删除字典条目失败'),
+              })}
+            >
+              {ACTIONS.delete}
+            </Button>
+          ) : null}
         </Flex>
       ),
     },
-  ], [confirmDelete, drawerType, queryClient, showNotification]);
+  ], [canDelete, canUpdate, confirmDelete, drawerType, queryClient, showNotification]);
 
   return (
     <div>
@@ -211,8 +227,8 @@ export default function DictManagementPage() {
         keyword={searchParams.get('keyword') ?? ''}
         onSearch={tableQuery.setKeyword}
         emptyDescription="暂无字典类型"
-        createLabel="新建字典类型"
-        onCreate={() => openTypeModal({ mode: 'create' })}
+        createLabel={canCreate ? '新建字典类型' : undefined}
+        onCreate={canCreate ? () => openTypeModal({ mode: 'create' }) : undefined}
       />
 
       <Modal
@@ -252,7 +268,9 @@ export default function DictManagementPage() {
         width={640}
         open={drawerType !== null}
         onClose={() => setDrawerType(null)}
-        extra={<Button type="primary" icon={<PlusOutlined />} onClick={() => openItemModal({ mode: 'create' })}>新建条目</Button>}
+        extra={canCreate ? (
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => openItemModal({ mode: 'create' })}>新建条目</Button>
+        ) : null}
       >
         <Card size="small">
           <Table<DictItem>

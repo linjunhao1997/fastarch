@@ -1,3 +1,5 @@
+import type { ConsoleKinds } from '@/shared/api/app-context';
+
 /**
  * 权限码常量（与后端 iam-service/pkg/model/permission_codes.go 词汇镜像）。
  * 数据源：GetMyPermissions.permissionCodeList（纯权限码快照）；
@@ -62,6 +64,28 @@ export const PERMISSIONS = {
   senderTemplateList: 'sender.template.list',
   senderTemplateUpdate: 'sender.template.update',
   senderTemplateDelete: 'sender.template.delete',
+  // sender 菜单/字典模块（sender 控制台自持，与 IAM 模块码两套词汇）
   senderMenuList: 'sender.menu.list',
+  senderMenuCreate: 'sender.menu.create',
+  senderMenuUpdate: 'sender.menu.update',
+  senderMenuDelete: 'sender.menu.delete',
   senderDictList: 'sender.dict.list',
+  senderDictCreate: 'sender.dict.create',
+  senderDictUpdate: 'sender.dict.update',
+  senderDictDelete: 'sender.dict.delete',
 } as const;
+
+/**
+ * 菜单/字典操作码按控制台选择（ADR 0007：单工程双控制台，iam/sender 各自自持模块码）。
+ * 共享页面（MenuManagementPage / DictManagementPage）据此在渲染时取当前控制台对应码；
+ * getConsole() 未显式缓存时回落 iam 控制台，与 app-context 缺省一致。
+ */
+export const MENU_MODULE_CODES: Record<ConsoleKinds, { create: string; update: string; delete: string }> = {
+  iam: { create: 'iam.menu.create', update: 'iam.menu.update', delete: 'iam.menu.delete' },
+  sender: { create: 'sender.menu.create', update: 'sender.menu.update', delete: 'sender.menu.delete' },
+};
+
+export const DICT_MODULE_CODES: Record<ConsoleKinds, { create: string; update: string; delete: string }> = {
+  iam: { create: 'iam.dict.create', update: 'iam.dict.update', delete: 'iam.dict.delete' },
+  sender: { create: 'sender.dict.create', update: 'sender.dict.update', delete: 'sender.dict.delete' },
+};

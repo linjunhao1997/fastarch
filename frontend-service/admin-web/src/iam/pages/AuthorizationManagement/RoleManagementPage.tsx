@@ -6,21 +6,27 @@ import { roleApi } from '@/iam/api/iam';
 import { ListPageShell } from '@/shared/components/ListPageShell';
 import { useConfirmDelete } from '@/shared/components/ConfirmDelete';
 import { useApiErrorNotification } from '@/shared/hooks/useApiError';
+import { usePermissions } from '@/shared/hooks/permission-context';
 import { useTableQuery } from '@/shared/hooks/useTableQuery';
 import type { Role } from '@/iam/types';
 import { ACTIONS, buildSuccessMessage } from '@/shared/types/copywriting';
+import { PERMISSIONS } from '@/shared/types/permissions';
 import { formatDateTime } from '@/shared/utils/datetime';
 
 export default function RoleManagementPage() {
   const navigate = useNavigate();
   const showNotification = useApiErrorNotification();
   const confirmDelete = useConfirmDelete();
+  const { hasPermission } = usePermissions();
   const [searchParams] = useSearchParams();
   const tableQuery = useTableQuery({
     domain: 'roles',
     fetcher: (currentPage, pageSize, keyword) => roleApi.list(currentPage, pageSize, keyword),
     getItems: (response) => response.roles,
   });
+  const canCreate = hasPermission(PERMISSIONS.roleCreate);
+  const canUpdate = hasPermission(PERMISSIONS.roleUpdate);
+  const canDelete = hasPermission(PERMISSIONS.roleDelete);
 
   const columns = useMemo(() => [
     { title: 'ID', dataIndex: 'id', key: 'id' },
@@ -59,29 +65,33 @@ export default function RoleManagementPage() {
       key: 'action',
       render: (_: unknown, record: Role) => (
         <Flex gap={0}>
-          <Button type="link" onClick={() => navigate(`/authorization_management/role_edit/${record.id}`)}>
-            {ACTIONS.edit}
-          </Button>
-          <Button
-            type="link"
-            danger
-            onClick={() => confirmDelete({
-              entityType: '角色',
-              entityName: record.name,
-              onDelete: async () => {
-                await roleApi.delete(record.id);
-                await tableQuery.refresh();
-                message.success(buildSuccessMessage(ACTIONS.delete));
-              },
-              onError: (error) => showNotification(error, '删除角色失败'),
-            })}
-          >
-            {ACTIONS.delete}
-          </Button>
+          {canUpdate ? (
+            <Button type="link" onClick={() => navigate(`/authorization_management/role_edit/${record.id}`)}>
+              {ACTIONS.edit}
+            </Button>
+          ) : null}
+          {canDelete ? (
+            <Button
+              type="link"
+              danger
+              onClick={() => confirmDelete({
+                entityType: '角色',
+                entityName: record.name,
+                onDelete: async () => {
+                  await roleApi.delete(record.id);
+                  await tableQuery.refresh();
+                  message.success(buildSuccessMessage(ACTIONS.delete));
+                },
+                onError: (error) => showNotification(error, '删除角色失败'),
+              })}
+            >
+              {ACTIONS.delete}
+            </Button>
+          ) : null}
         </Flex>
       ),
     },
-  ], [navigate, showNotification, tableQuery]);
+  ], [navigate, showNotification, tableQuery, canDelete, canUpdate]);
 
   return (
     <ListPageShell<Role>
@@ -91,8 +101,8 @@ export default function RoleManagementPage() {
       keyword={searchParams.get('keyword') ?? ''}
       onSearch={tableQuery.setKeyword}
       emptyDescription="暂无角色"
-      createLabel={`${ACTIONS.create}角色`}
-      onCreate={() => navigate('/authorization_management/role_create')}
+      createLabel={canCreate ? `${ACTIONS.create}角色` : undefined}
+      onCreate={canCreate ? () => navigate('/authorization_management/role_create') : undefined}
     />
   );
 }

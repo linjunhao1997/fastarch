@@ -10,10 +10,12 @@ import { getConsole } from '@/shared/api/app-context';
 import { permissionApi } from '@/iam/api/iam';
 import { useConfirmDelete } from '@/shared/components/ConfirmDelete';
 import { useApiErrorNotification } from '@/shared/hooks/useApiError';
+import { usePermissions } from '@/shared/hooks/permission-context';
 import { useSubmitLock } from '@/shared/hooks/useSubmitLock';
 import { MENU_ICONS } from '@/app/router';
 import type { Menu, MenuTreeNode } from '@/shared/types';
 import { ACTIONS, buildSuccessMessage } from '@/shared/types/copywriting';
+import { MENU_MODULE_CODES } from '@/shared/types/permissions';
 
 const ICON_OPTIONS = Object.keys(MENU_ICONS).map((name) => ({
   value: name,
@@ -52,6 +54,12 @@ export default function MenuManagementPage() {
   const showNotification = useApiErrorNotification();
   const queryClient = useQueryClient();
   const confirmDelete = useConfirmDelete();
+  const { hasPermission } = usePermissions();
+  // 菜单码按控制台选择：iam 控制台用 iam.menu.*，sender 控制台用 sender.menu.*
+  const menuCodes = MENU_MODULE_CODES[getConsole()];
+  const canCreate = hasPermission(menuCodes.create);
+  const canUpdate = hasPermission(menuCodes.update);
+  const canDelete = hasPermission(menuCodes.delete);
   const [form] = Form.useForm<MenuFormValues>();
   const [editing, setEditing] = useState<EditingState | null>(null);
   const { isSubmitting, run } = useSubmitLock();
@@ -181,39 +189,47 @@ export default function MenuManagementPage() {
       title: '操作', key: 'action', width: 220,
       render: (_: unknown, record: MenuRow) => (
         <Flex gap={0}>
-          <Button type="link" size="small" onClick={() => openModal({ mode: 'create', parent: record })}>
-            新建子项
-          </Button>
-          <Button type="link" size="small" onClick={() => openModal({ mode: 'edit', menu: record })}>
-            {ACTIONS.edit}
-          </Button>
-          <Button
-            type="link"
-            size="small"
-            danger
-            onClick={() => confirmDelete({
-              entityType: '菜单',
-              entityName: record.name,
-              onDelete: async () => {
-                await menuApi.delete(record.id);
-                void queryClient.invalidateQueries({ queryKey: ['menu-tree'] });
-                message.success(buildSuccessMessage(ACTIONS.delete));
-              },
-              onError: (error) => showNotification(error, '删除菜单失败'),
-            })}
-          >
-            {ACTIONS.delete}
-          </Button>
+          {canCreate ? (
+            <Button type="link" size="small" onClick={() => openModal({ mode: 'create', parent: record })}>
+              新建子项
+            </Button>
+          ) : null}
+          {canUpdate ? (
+            <Button type="link" size="small" onClick={() => openModal({ mode: 'edit', menu: record })}>
+              {ACTIONS.edit}
+            </Button>
+          ) : null}
+          {canDelete ? (
+            <Button
+              type="link"
+              size="small"
+              danger
+              onClick={() => confirmDelete({
+                entityType: '菜单',
+                entityName: record.name,
+                onDelete: async () => {
+                  await menuApi.delete(record.id);
+                  void queryClient.invalidateQueries({ queryKey: ['menu-tree'] });
+                  message.success(buildSuccessMessage(ACTIONS.delete));
+                },
+                onError: (error) => showNotification(error, '删除菜单失败'),
+              })}
+            >
+              {ACTIONS.delete}
+            </Button>
+          ) : null}
         </Flex>
       ),
     },
-  ], [confirmDelete, menuById, queryClient, showNotification]);
+  ], [canCreate, canDelete, canUpdate, confirmDelete, menuById, queryClient, showNotification]);
 
   return (
     <div>
       <Card
         title="菜单管理"
-        extra={<Button type="primary" icon={<PlusOutlined />} onClick={() => openModal({ mode: 'create' })}>新建顶级菜单</Button>}
+        extra={canCreate ? (
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal({ mode: 'create' })}>新建顶级菜单</Button>
+        ) : undefined}
       >
         <Table<MenuRow>
           rowKey="id"

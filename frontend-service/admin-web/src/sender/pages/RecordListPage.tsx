@@ -6,10 +6,12 @@ import { messageApi } from '@/sender/api/sender';
 import { ListPageShell } from '@/shared/components/ListPageShell';
 import { useConfirmDelete } from '@/shared/components/ConfirmDelete';
 import { useApiErrorNotification } from '@/shared/hooks/useApiError';
+import { usePermissions } from '@/shared/hooks/permission-context';
 import { useSubmitLock } from '@/shared/hooks/useSubmitLock';
 import { useTableQuery } from '@/shared/hooks/useTableQuery';
 import { useSearchParams } from 'react-router-dom';
 import type { MessageRecord, SendMessageRequest } from '@/sender/types/sender';
+import { PERMISSIONS } from '@/shared/types/permissions';
 
 const { Text, Paragraph } = Typography;
 
@@ -30,6 +32,9 @@ interface SendFormValues {
 export default function RecordListPage() {
   const showNotification = useApiErrorNotification();
   const confirmDelete = useConfirmDelete();
+  const { hasPermission } = usePermissions();
+  const canSend = hasPermission(PERMISSIONS.senderRecordSend);
+  const canDelete = hasPermission(PERMISSIONS.senderRecordDelete);
   const { isSubmitting, run } = useSubmitLock();
   const [form] = Form.useForm<SendFormValues>();
   const [sendOpen, setSendOpen] = useState(false);
@@ -111,9 +116,9 @@ export default function RecordListPage() {
     },
     {
       title: '操作', key: 'action', width: 80,
-      render: (_, record) => (
+      render: (_, record) => canDelete ? (
         <Button type="link" danger size="small" onClick={() => handleDelete(record)}>删除</Button>
-      ),
+      ) : '—',
     },
   ];
 
@@ -126,8 +131,8 @@ export default function RecordListPage() {
         keyword={searchParams.get('keyword') ?? ''}
         onSearch={tableQuery.setKeyword}
         emptyDescription="暂无发送记录"
-        createLabel="发送消息"
-        onCreate={() => setSendOpen(true)}
+        createLabel={canSend ? '发送消息' : undefined}
+        onCreate={canSend ? () => setSendOpen(true) : undefined}
         extraActions={
           <Select
             allowClear

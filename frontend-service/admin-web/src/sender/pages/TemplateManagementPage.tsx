@@ -6,10 +6,12 @@ import { templateApi } from '@/sender/api/sender';
 import { ListPageShell } from '@/shared/components/ListPageShell';
 import { useConfirmDelete } from '@/shared/components/ConfirmDelete';
 import { useApiErrorNotification } from '@/shared/hooks/useApiError';
+import { usePermissions } from '@/shared/hooks/permission-context';
 import { useSubmitLock } from '@/shared/hooks/useSubmitLock';
 import { useTableQuery } from '@/shared/hooks/useTableQuery';
 import { useSearchParams } from 'react-router-dom';
 import type { MessageTemplate } from '@/sender/types/sender';
+import { PERMISSIONS } from '@/shared/types/permissions';
 
 const { Paragraph, Text } = Typography;
 
@@ -24,6 +26,10 @@ interface TemplateFormValues {
 export default function TemplateManagementPage() {
   const showNotification = useApiErrorNotification();
   const confirmDelete = useConfirmDelete();
+  const { hasPermission } = usePermissions();
+  const canCreate = hasPermission(PERMISSIONS.senderTemplateCreate);
+  const canUpdate = hasPermission(PERMISSIONS.senderTemplateUpdate);
+  const canDelete = hasPermission(PERMISSIONS.senderTemplateDelete);
   const { isSubmitting, run } = useSubmitLock();
   const [form] = Form.useForm<TemplateFormValues>();
   const [editing, setEditing] = useState<MessageTemplate | null>(null);
@@ -106,8 +112,12 @@ export default function TemplateManagementPage() {
       title: '操作', key: 'action', width: 140,
       render: (_, record) => (
         <Space size="small">
-          <Button type="link" size="small" onClick={() => openEdit(record)}>编辑</Button>
-          <Button type="link" danger size="small" onClick={() => handleDelete(record)}>删除</Button>
+          {canUpdate ? (
+            <Button type="link" size="small" onClick={() => openEdit(record)}>编辑</Button>
+          ) : null}
+          {canDelete ? (
+            <Button type="link" danger size="small" onClick={() => handleDelete(record)}>删除</Button>
+          ) : null}
         </Space>
       ),
     },
@@ -122,8 +132,8 @@ export default function TemplateManagementPage() {
         keyword={searchParams.get('keyword') ?? ''}
         onSearch={tableQuery.setKeyword}
         emptyDescription="暂无消息模板"
-        createLabel="新建模板"
-        onCreate={openCreate}
+        createLabel={canCreate ? '新建模板' : undefined}
+        onCreate={canCreate ? openCreate : undefined}
       />
       <Text type="secondary" style={{ fontSize: 12 }}>模板按当前应用隔离，编码应用内唯一</Text>
 

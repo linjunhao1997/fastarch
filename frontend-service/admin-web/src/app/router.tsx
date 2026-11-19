@@ -90,12 +90,12 @@ export const routes: RouteObject[] = [
           },
           {
             path: 'create_account',
-            handle: { breadcrumb: '创建用户', permission: PERMISSIONS.userList },
+            handle: { breadcrumb: '创建用户', permission: PERMISSIONS.userCreate },
             element: withSuspense(<CreateAccountPage />),
           },
           {
             path: 'edit_account/:id',
-            handle: { breadcrumb: '编辑用户', permission: PERMISSIONS.userList },
+            handle: { breadcrumb: '编辑用户', permission: PERMISSIONS.userUpdate },
             element: withSuspense(<EditAccountPage />),
           },
         ],
@@ -115,12 +115,12 @@ export const routes: RouteObject[] = [
           },
           {
             path: 'create_application',
-            handle: { breadcrumb: '创建应用', permission: PERMISSIONS.applicationList },
+            handle: { breadcrumb: '创建应用', permission: PERMISSIONS.applicationCreate },
             element: withSuspense(<CreateApplicationPage />),
           },
           {
             path: 'edit_application/:id',
-            handle: { breadcrumb: '编辑应用', permission: PERMISSIONS.applicationList },
+            handle: { breadcrumb: '编辑应用', permission: PERMISSIONS.applicationUpdate },
             element: withSuspense(<EditApplicationPage />),
           },
         ],
@@ -173,12 +173,12 @@ export const routes: RouteObject[] = [
           },
           {
             path: 'permission_create',
-            handle: { breadcrumb: '创建权限', permission: PERMISSIONS.permissionList },
+            handle: { breadcrumb: '创建权限', permission: PERMISSIONS.permissionCreate },
             element: withSuspense(<CreatePermissionPage />),
           },
           {
             path: 'permission_edit/:id',
-            handle: { breadcrumb: '编辑权限', permission: PERMISSIONS.permissionList },
+            handle: { breadcrumb: '编辑权限', permission: PERMISSIONS.permissionUpdate },
             element: withSuspense(<EditPermissionPage />),
           },
           {
@@ -192,12 +192,12 @@ export const routes: RouteObject[] = [
           },
           {
             path: 'role_create',
-            handle: { breadcrumb: '创建角色', permission: PERMISSIONS.roleList },
+            handle: { breadcrumb: '创建角色', permission: PERMISSIONS.roleCreate },
             element: withSuspense(<CreateRolePage />),
           },
           {
             path: 'role_edit/:id',
-            handle: { breadcrumb: '编辑角色', permission: PERMISSIONS.roleList },
+            handle: { breadcrumb: '编辑角色', permission: PERMISSIONS.roleUpdate },
             element: withSuspense(<EditRolePage />),
           },
           {

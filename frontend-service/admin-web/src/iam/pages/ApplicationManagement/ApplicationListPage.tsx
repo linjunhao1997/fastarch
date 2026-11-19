@@ -6,21 +6,27 @@ import { applicationApi } from '@/iam/api/iam';
 import { ListPageShell } from '@/shared/components/ListPageShell';
 import { useConfirmDelete } from '@/shared/components/ConfirmDelete';
 import { useApiErrorNotification } from '@/shared/hooks/useApiError';
+import { usePermissions } from '@/shared/hooks/permission-context';
 import { useTableQuery } from '@/shared/hooks/useTableQuery';
 import type { Application } from '@/iam/types';
 import { ACTIONS, buildSuccessMessage } from '@/shared/types/copywriting';
+import { PERMISSIONS } from '@/shared/types/permissions';
 import { formatDateTime } from '@/shared/utils/datetime';
 
 export default function ApplicationListPage() {
   const navigate = useNavigate();
   const showNotification = useApiErrorNotification();
   const confirmDelete = useConfirmDelete();
+  const { hasPermission } = usePermissions();
   const [searchParams] = useSearchParams();
   const tableQuery = useTableQuery({
     domain: 'applications',
     fetcher: (currentPage, pageSize, keyword) => applicationApi.list(currentPage, pageSize, keyword),
     getItems: (response) => response.applications,
   });
+  const canCreate = hasPermission(PERMISSIONS.applicationCreate);
+  const canUpdate = hasPermission(PERMISSIONS.applicationUpdate);
+  const canDelete = hasPermission(PERMISSIONS.applicationDelete);
 
   const columns = useMemo(() => [
     { title: 'ID', dataIndex: 'id', key: 'id' },
@@ -42,29 +48,33 @@ export default function ApplicationListPage() {
       title: '操作', key: 'action',
       render: (_: unknown, record: Application) => (
         <Flex gap={0}>
-          <Button type="link" onClick={() => navigate(`/application_management/edit_application/${record.id}`)}>
-            {ACTIONS.edit}
-          </Button>
-          <Button
-            type="link"
-            danger
-            onClick={() => confirmDelete({
-              entityType: '应用',
-              entityName: record.name,
-              onDelete: async () => {
-                await applicationApi.delete(record.id);
-                await tableQuery.refresh();
-                message.success(buildSuccessMessage(ACTIONS.delete));
-              },
-              onError: (error) => showNotification(error, '删除应用失败'),
-            })}
-          >
-            {ACTIONS.delete}
-          </Button>
+          {canUpdate ? (
+            <Button type="link" onClick={() => navigate(`/application_management/edit_application/${record.id}`)}>
+              {ACTIONS.edit}
+            </Button>
+          ) : null}
+          {canDelete ? (
+            <Button
+              type="link"
+              danger
+              onClick={() => confirmDelete({
+                entityType: '应用',
+                entityName: record.name,
+                onDelete: async () => {
+                  await applicationApi.delete(record.id);
+                  await tableQuery.refresh();
+                  message.success(buildSuccessMessage(ACTIONS.delete));
+                },
+                onError: (error) => showNotification(error, '删除应用失败'),
+              })}
+            >
+              {ACTIONS.delete}
+            </Button>
+          ) : null}
         </Flex>
       ),
     },
-  ], [navigate, showNotification, tableQuery]);
+  ], [navigate, showNotification, tableQuery, canDelete, canUpdate]);
 
   return (
     <ListPageShell<Application>
@@ -74,8 +84,8 @@ export default function ApplicationListPage() {
       keyword={searchParams.get('keyword') ?? ''}
       onSearch={tableQuery.setKeyword}
       emptyDescription="暂无应用"
-      createLabel={`${ACTIONS.create}应用`}
-      onCreate={() => navigate('/application_management/create_application')}
+      createLabel={canCreate ? `${ACTIONS.create}应用` : undefined}
+      onCreate={canCreate ? () => navigate('/application_management/create_application') : undefined}
     />
   );
 }

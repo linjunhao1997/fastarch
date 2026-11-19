@@ -21,7 +21,11 @@ export default function AccountListPage() {
   const navigate = useNavigate();
   const showNotification = useApiErrorNotification();
   const { reload, hasPermission } = usePermissions();
+  const canCreate = hasPermission(PERMISSIONS.userCreate);
+  const canUpdate = hasPermission(PERMISSIONS.userUpdate);
+  const canAssignRoles = hasPermission(PERMISSIONS.userAssignRoles);
   const canAssignApps = hasPermission(PERMISSIONS.userAssignApplications);
+  const canDelete = hasPermission(PERMISSIONS.userDelete);
   const [bindRolesAccount, setBindRolesAccount] = useState<Account | null>(null);
   const [assignAppsAccount, setAssignAppsAccount] = useState<Account | null>(null);
   const confirmDelete = useConfirmDelete();
@@ -76,33 +80,39 @@ export default function AccountListPage() {
       key: 'action',
       render: (_: unknown, record: Account) => (
         <Flex gap={0}>
-          <Button type="link" onClick={() => navigate(`/account_management/edit_account/${record.id}`)}>
-            {ACTIONS.edit}
-          </Button>
-          <Button type="link" onClick={() => setBindRolesAccount(record)}>{ACTIONS.bindRoles}</Button>
+          {canUpdate ? (
+            <Button type="link" onClick={() => navigate(`/account_management/edit_account/${record.id}`)}>
+              {ACTIONS.edit}
+            </Button>
+          ) : null}
+          {canAssignRoles ? (
+            <Button type="link" onClick={() => setBindRolesAccount(record)}>{ACTIONS.bindRoles}</Button>
+          ) : null}
           {canAssignApps ? (
             <Button type="link" onClick={() => setAssignAppsAccount(record)}>分配应用</Button>
           ) : null}
-          <Button
-            type="link"
-            danger
-            onClick={() => confirmDelete({
-              entityType: '账号',
-              entityName: record.username,
-              onDelete: async () => {
-                await accountApi.delete(record.id);
-                await tableQuery.refresh();
-                message.success(buildSuccessMessage(ACTIONS.delete));
-              },
-              onError: (error) => showNotification(error, '删除账号失败'),
-            })}
-          >
-            {ACTIONS.delete}
-          </Button>
+          {canDelete ? (
+            <Button
+              type="link"
+              danger
+              onClick={() => confirmDelete({
+                entityType: '账号',
+                entityName: record.username,
+                onDelete: async () => {
+                  await accountApi.delete(record.id);
+                  await tableQuery.refresh();
+                  message.success(buildSuccessMessage(ACTIONS.delete));
+                },
+                onError: (error) => showNotification(error, '删除账号失败'),
+              })}
+            >
+              {ACTIONS.delete}
+            </Button>
+          ) : null}
         </Flex>
       ),
     },
-  ], [navigate, showNotification, tableQuery, canAssignApps]);
+  ], [navigate, showNotification, tableQuery, canAssignApps, canAssignRoles, canDelete, canUpdate]);
 
   return (
     <div>
@@ -114,9 +124,11 @@ export default function AccountListPage() {
           style={{ width: 240 }}
         />
         <Button onClick={() => tableQuery.setKeyword('')}>{ACTIONS.reset}</Button>
-        <Button type="primary" onClick={() => navigate('/account_management/create_account')}>
-          {ACTIONS.create}账号
-        </Button>
+        {canCreate ? (
+          <Button type="primary" onClick={() => navigate('/account_management/create_account')}>
+            {ACTIONS.create}账号
+          </Button>
+        ) : null}
       </Flex>
       {tableQuery.status === 'loading' ? (
         <Table<Account> columns={columns} dataSource={[]} rowKey="id" loading pagination={false} />
@@ -127,7 +139,7 @@ export default function AccountListPage() {
       ) : tableQuery.status === 'empty' ? (
         <EmptyState
           description="暂无账号"
-          action={{ text: '创建账号', onClick: () => navigate('/account_management/create_account') }}
+          action={canCreate ? { text: '创建账号', onClick: () => navigate('/account_management/create_account') } : undefined}
         />
       ) : (
         <Table<Account>
