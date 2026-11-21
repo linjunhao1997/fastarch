@@ -31,6 +31,8 @@ const { Text, Paragraph } = Typography;
 const STATE_META: Record<string, { color: string; label: string }> = {
   ready: { color: 'green', label: '可开工' },
   blocked: { color: 'orange', label: '被阻塞' },
+  in_progress: { color: 'blue', label: '进行中' },
+  submitted: { color: 'purple', label: '已提交' },
   done: { color: 'default', label: '已完成' },
   discarded: { color: 'red', label: '已作废' },
 };
@@ -51,6 +53,8 @@ type Scope = 'mine' | 'upstream' | 'created' | 'all';
 const STATE_TABS = [
   { label: '全部', value: '' },
   { label: '待处理', value: 'ready' },
+  { label: '进行中', value: 'in_progress' },
+  { label: '已提交', value: 'submitted' },
   { label: '被阻塞', value: 'blocked' },
   { label: '已完成', value: 'done' },
   { label: '已作废', value: 'discarded' },
@@ -71,7 +75,10 @@ export default function TaskWorkbenchPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [parentTask, setParentTask] = useState<Task | null>(null);
   const [detail, setDetail] = useState<Task | null>(null);
+  const [artifactTask, setArtifactTask] = useState<Task | null>(null);
+  const [artifactMode, setArtifactMode] = useState<'submit' | 'finish'>('submit');
   const [form] = Form.useForm<CreateTaskRequest>();
+  const [artifactForm] = Form.useForm<{ artifactType: string; title?: string; contentMd: string }>();
 
   const meQuery = useQuery({ queryKey: ['flow', 'me'], queryFn: memberApi.me });
   const me = meQuery.data;
@@ -87,6 +94,11 @@ export default function TaskWorkbenchPage() {
     enabled: !!me,
   });
   const data = tasksQuery.data;
+  const artifactsQuery = useQuery({
+    queryKey: ['flow', 'artifacts', detail?.id],
+    queryFn: () => taskApi.artifacts(detail!.id),
+    enabled: !!detail?.id,
+  });
 
   const scopeTabs = [
     { label: '我的任务', value: 'mine' },
@@ -109,7 +121,7 @@ export default function TaskWorkbenchPage() {
       qc.invalidateQueries({ queryKey: ['flow', 'tasks'] }),
       qc.invalidateQueries({ queryKey: ['flow', 'me'] }),
       qc.invalidateQueries({ queryKey: ['flow', 'questions'] }),
-      qc.invalidateQueries({ queryKey: ['flow', 'metrics'] }),
+      qc.invalidateQueries({ queryKey: ['flow', 'artifacts'] }),
     ]);
   };
 
@@ -153,6 +165,75 @@ export default function TaskWorkbenchPage() {
     },
     onError: (e: Error) => message.error(e.message),
   });
+
+  const startMutation = useMutation({
+    mutationFn: (task: Task) => taskApi.start(task.id),
+    onSuccess: async (pkg) => {
+      await invalidate();
+      message.success(`已开工，读取 ${pkg.artifacts.length} 份上游物料`);
+    },
+    onError: (e: Error) => message.error(e.message),
+  });
+
+  const submitMutation = useMutation({
+    mutationFn: (values: { id: string; artifactType: string; title?: string; contentMd: string }) =>
+      taskApi.submit(values.id, {
+        artifactType: values.artifactType,
+        title: values.title,
+        contentMd: values.contentMd,
+      }),
+    onSuccess: async () => {
+      setArtifactTask(null);
+      artifactForm.resetFields();
+      await invalidate();
+      message.success('物料已提交，等待下游或老板确认');
+    },
+    onError: (e: Error) => message.error(e.message),
+  });
+
+  const finishMutation = useMutation({
+    mutationFn: (values: { id: string; artifactType?: string; title?: string; contentMd: string }) =>
+      taskApi.finish(values.id, {
+        artifactType: values.artifactType,
+        title: values.title,
+        contentMd: values.contentMd,
+      }),
+    onSuccess: async () => {
+      setArtifactTask(null);
+      artifactForm.resetFields();
+      await invalidate();
+      message.success('实施产物已归档，任务已完成');
+    },
+    onError: (e: Error) => message.error(e.message),
+  });
+
+  const acceptMutation = useMutation({
+    mutationFn: (id: string) => taskApi.accept(id),
+    onSuccess: async () => {
+      await invalidate();
+      message.success('物料已确认，任务已完成');
+    },
+    onError: (e: Error) => message.error(e.message),
+  });
+
+  const openArtifactModal = (task: Task, mode: 'submit' | 'finish') => {
+    const roleCode = roleCodeById.get(task.roleId);
+    const defaultType =
+      mode === 'submit'
+        ? roleCode === 'analyst'
+          ? 'requirement_spec'
+          : roleCode === 'pm'
+            ? 'feature_design'
+            : 'tech_plan'
+        : roleCode === 'qa'
+          ? 'test_report'
+          : roleCode === 'ops'
+            ? 'deployment_record'
+            : 'code_change';
+    setArtifactMode(mode);
+    setArtifactTask(task);
+    artifactForm.setFieldsValue({ artifactType: defaultType, title: task.title, contentMd: '' });
+  };
 
   const columns: TableColumnsType<Task> = useMemo(
     () => [
@@ -231,6 +312,9 @@ export default function TaskWorkbenchPage() {
         render: (_, record) => {
           const pendingChildren =
             record.childOpen ?? Math.max(0, (record.childTotal ?? 0) - (record.childDone ?? 0));
+          const roleCode = roleCodeById.get(record.roleId);
+          const isPlanning = roleCode === 'analyst' || roleCode === 'pm' || roleCode === 'arch';
+          const isExecution = roleCode === 'dev' || roleCode === 'qa' || roleCode === 'ops';
           return (
           <Space size={0}>
             <Button type="link" size="small" onClick={() => setDetail(record)}>详情</Button>
@@ -239,13 +323,36 @@ export default function TaskWorkbenchPage() {
                 <Button type="link" size="small">去闭环</Button>
               </Link>
             ) : null}
-            {scope === 'mine' && record.state === 'ready' && pendingChildren === 0 ? (
+            {scope === 'mine' && isPlanning && (record.state === 'ready' || record.state === 'in_progress') ? (
+              <Button type="link" size="small" onClick={() => openArtifactModal(record, 'submit')}>
+                提交物料
+              </Button>
+            ) : null}
+            {scope === 'mine' && isPlanning && record.state === 'submitted' ? (
+              <Text type="secondary" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>等待下游确认</Text>
+            ) : null}
+            {scope === 'mine' && isExecution && record.state === 'ready' ? (
+              <Button type="link" size="small" onClick={() => startMutation.mutate(record)}>
+                开始任务
+              </Button>
+            ) : null}
+            {scope === 'mine' && isExecution && record.state === 'in_progress' && pendingChildren === 0 ? (
+              <Button type="link" size="small" onClick={() => openArtifactModal(record, 'finish')}>
+                完成任务
+              </Button>
+            ) : null}
+            {scope === 'mine' && isExecution && record.state === 'in_progress' && pendingChildren > 0 ? (
+              <Text type="secondary" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+                等 {pendingChildren} 个下级完成
+              </Text>
+            ) : null}
+            {scope === 'mine' && roleCode === 'boss' && record.state === 'ready' && pendingChildren === 0 ? (
               <Button
                 type="link"
                 size="small"
                 onClick={() =>
                   modal.confirm({
-                    title: '确认完成这个任务？',
+                    title: '确认完成这个目标？',
                     content: record.title,
                     onOk: async () => {
                       try {
@@ -260,7 +367,17 @@ export default function TaskWorkbenchPage() {
                 完成
               </Button>
             ) : null}
-            {scope === 'mine' && record.state === 'ready' && pendingChildren > 0 ? (
+            {scope === 'mine' && roleCode === 'boss' && record.state === 'ready' && pendingChildren > 0 ? (
+              <Text type="secondary" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+                等 {pendingChildren} 个下级完成
+              </Text>
+            ) : null}
+            {scope !== 'mine' && record.state === 'submitted' && record.roleId !== me?.currentRoleId && pendingChildren === 0 ? (
+              <Button type="link" size="small" onClick={() => acceptMutation.mutate(record.id)}>
+                确认物料
+              </Button>
+            ) : null}
+            {scope !== 'mine' && record.state === 'submitted' && record.roleId !== me?.currentRoleId && pendingChildren > 0 ? (
               <Text type="secondary" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
                 等 {pendingChildren} 个下级完成
               </Text>
@@ -311,7 +428,18 @@ export default function TaskWorkbenchPage() {
         },
       },
     ],
-    [closeMutation, discardMutation, modal, scope, me?.currentRoleId, roleCodeById, form],
+    [
+      closeMutation,
+      discardMutation,
+      modal,
+      scope,
+      me?.currentRoleId,
+      roleCodeById,
+      form,
+      startMutation,
+      acceptMutation,
+      openArtifactModal,
+    ],
   );
 
   const detailStateMeta = detail ? taskStateMeta(detail, roleCodeById.get(detail.roleId)) : null;
@@ -504,6 +632,44 @@ export default function TaskWorkbenchPage() {
         </Form>
       </Modal>
 
+      <Modal
+        title={artifactMode === 'submit' ? '提交规划物料' : '完成任务并归档产物'}
+        open={!!artifactTask}
+        width={760}
+        okText={artifactMode === 'submit' ? '提交' : '完成'}
+        confirmLoading={submitMutation.isPending || finishMutation.isPending}
+        onCancel={() => {
+          setArtifactTask(null);
+          artifactForm.resetFields();
+        }}
+        onOk={() => artifactForm.submit()}
+        destroyOnClose
+      >
+        <Form
+          form={artifactForm}
+          layout="vertical"
+          preserve={false}
+          onFinish={(values) => {
+            if (!artifactTask) return;
+            if (artifactMode === 'submit') {
+              submitMutation.mutate({ id: artifactTask.id, ...values });
+            } else {
+              finishMutation.mutate({ id: artifactTask.id, ...values });
+            }
+          }}
+        >
+          <Form.Item name="artifactType" label="物料类型" rules={[{ required: true, message: '请填物料类型' }]}>
+            <Input placeholder="requirement_spec / feature_design / tech_plan / acceptance_criteria" />
+          </Form.Item>
+          <Form.Item name="title" label="物料标题">
+            <Input placeholder="默认使用任务标题" maxLength={120} />
+          </Form.Item>
+          <Form.Item name="contentMd" label="Markdown 正文" rules={[{ required: true, message: '请填写 Markdown 正文' }]}>
+            <Input.TextArea rows={14} placeholder="写清结论、范围、约束、验收标准；这份内容会作为下游的开工物料。" />
+          </Form.Item>
+        </Form>
+      </Modal>
+
       <Drawer
         title={detail?.title}
         open={!!detail}
@@ -525,6 +691,24 @@ export default function TaskWorkbenchPage() {
                 <Descriptions.Item label="下级任务">
                   {detail.childDone}/{detail.childTotal} 已完成
                   {detail.childOpen ? `，${detail.childOpen} 个进行中` : ''}；未全部完成前父任务不能完成
+                </Descriptions.Item>
+              ) : null}
+              <Descriptions.Item label="开工物料">
+                {detail.requiredArtifactTypes?.length ? detail.requiredArtifactTypes.join('、') : '按角色默认'}
+              </Descriptions.Item>
+              {detail.startedAt ? (
+                <Descriptions.Item label="开工时间">
+                  {new Date(detail.startedAt).toLocaleString()}
+                </Descriptions.Item>
+              ) : null}
+              {detail.submittedAt ? (
+                <Descriptions.Item label="提交时间">
+                  {new Date(detail.submittedAt).toLocaleString()}
+                </Descriptions.Item>
+              ) : null}
+              {detail.contextHash ? (
+                <Descriptions.Item label="执行快照">
+                  <Text code>{detail.contextHash.slice(0, 16)}…</Text>
                 </Descriptions.Item>
               ) : null}
               <Descriptions.Item label="更新时间">
@@ -554,6 +738,37 @@ export default function TaskWorkbenchPage() {
             <div>
               <Text strong>任务说明</Text>
               <Paragraph style={{ marginTop: 8, whiteSpace: 'pre-wrap' }}>{detail.brief || '（无）'}</Paragraph>
+            </div>
+            <div>
+              <Text strong>Markdown 物料（{artifactsQuery.data?.artifacts.length ?? 0}）</Text>
+              {artifactsQuery.isLoading ? (
+                <Text type="secondary">加载中…</Text>
+              ) : artifactsQuery.data?.artifacts.length ? (
+                <Space direction="vertical" size={8} style={{ display: 'flex', marginTop: 8 }}>
+                  {artifactsQuery.data.artifacts.map((artifact) => (
+                    <Card
+                      key={artifact.id}
+                      size="small"
+                      title={
+                        <Space wrap>
+                          <Tag color="blue">{artifact.type}</Tag>
+                          <Text>{artifact.title || '未命名物料'}</Text>
+                          <Text type="secondary">v{artifact.version}</Text>
+                          <Tag color={artifact.status === 'accepted' ? 'green' : 'purple'}>{artifact.status}</Tag>
+                        </Space>
+                      }
+                    >
+                      <Paragraph
+                        style={{ margin: 0, whiteSpace: 'pre-wrap', maxHeight: 220, overflow: 'auto' }}
+                      >
+                        {artifact.contentMd}
+                      </Paragraph>
+                    </Card>
+                  ))}
+                </Space>
+              ) : (
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有提交物料" />
+              )}
             </div>
             <div>
               <Text strong>卡住它的问题（{detail.blockers.length}）</Text>

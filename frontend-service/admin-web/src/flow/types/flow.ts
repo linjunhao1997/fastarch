@@ -71,7 +71,7 @@ export interface Task {
   brief: string;
   /** 落库终态：open / done / discarded */
   status: string;
-  /** 派生：ready / blocked / done / discarded */
+  /** 派生：ready / blocked / in_progress / submitted / done / discarded */
   state: string;
   openQuestions: number;
   blockers: TaskBlocker[];
@@ -87,9 +87,39 @@ export interface Task {
   childTotal?: number;
   childDone?: number;
   childOpen?: number;
+  /** v1.4：开工物料与执行快照 */
+  requiredArtifactTypes?: string[];
+  startedAt?: string;
+  submittedAt?: string;
+  contextHash?: string;
+  artifactCount?: number;
   updatedBy: string;
   createTime: string;
   updateTime: string;
+}
+
+export interface Artifact {
+  id: string;
+  taskId: string;
+  type: string;
+  title: string;
+  contentMd: string;
+  version: number;
+  status: 'submitted' | 'accepted' | 'superseded' | 'disputed' | string;
+  hash: string;
+  createdBy: string;
+  createdRoleId: string;
+  acceptedBy: string;
+  acceptedAt?: string;
+  createTime: string;
+}
+
+export interface WorkPackage {
+  task: Task;
+  artifacts: Artifact[];
+  missingTypes: string[];
+  contextHash: string;
+  generatedAt: string;
 }
 
 export interface ListMyTasksParams {
@@ -116,6 +146,8 @@ export interface CreateTaskRequest {
   roleCode?: string;
   /** 父任务 id；为空表示顶层任务 */
   parentTaskId?: string;
+  /** 开工所需物料类型；为空按角色默认 */
+  requiredArtifactTypes?: string[];
 }
 
 export interface QuestionOption {

@@ -8,11 +8,11 @@
 | --- | --- |
 | 契约 | `idl/proto/flow/{member,task,question,log,menu,dict}.proto`，已 buf 生成网关与 swagger |
 | IAM | `000017_flow.up.sql`：注册应用 `flow`(id=3) + 22 个 `flow.*` 权限码 |
-| 后端 | `flow-service/`：6 个服务、5 张业务表 + 1 张关系表、种子数据、MCP stdio 服务 |
+| 后端 | `flow-service/`：6 个服务、6 张业务表 + 1 张关系表、种子数据、MCP stdio 服务 |
 | 前端 | `admin-web/src/flow/`：任务工作台 `/flow/tasks`、问题中心 `/flow/questions`，并注册为第三个控制台 |
 | 菜单 | flow 库内种子：`/flow/tasks`、`/flow/questions`（前端按菜单树渲染侧边栏） |
 
-**状态不落库**：`t_task.status` 只有 `open/done/discarded`；`ready/blocked` 由 `EXISTS(open question)` 在查询期派生。闭环只改 `t_question` 一行，任务自动解冻，无需任何同步代码。
+**状态分层**：`t_task.status` 只保留终态 `open/done/discarded`；`ready/blocked` 由 `EXISTS(open question)` 在查询期派生；v1.4 的执行态 `in_progress/submitted` 由 `started_at/submitted_at` 派生。闭环只改 `t_question` 一行，任务自动解冻，无需同步代码。
 
 ## 2. 启动顺序（本地）
 
@@ -323,4 +323,60 @@ v1.1.1 的任务仍只挂 `role_id`，`CreateTask` 允许用 `role_code` 把任�
 - 新建弹窗明确：任务归你和当前角色，不改派；父任务要等这条及所有下级完成。
 - 顶部保留待处理 / 被阻塞 / 待我闭环；平均闭环、P50 闭环、重开率、闭环后停滞已下线（含 `/flow/metrics` 与 MCP `metrics`）。
 - 任务状态按角色语义显示：规划类角色（boss/analyst/pm/arch）刚建、还没有下级时显示“待拆解”；已有下级显示“进行中”；开发/测试/运维无下级时显示“可开工”。筛选与顶部统计统一叫“待处理”。
+
+## 13. v1.3：角色收敛与状态语义
+
+- 删除项目经理 `pjm`：`000004_remove_pjm` 停用角色、清理成员担任关系、当前角色回退 boss；角色剩 7 个。
+- 删除平均闭环 / P50 闭环 / 重开率 / 闭环后停滞，连同 `/flow/metrics` 与 MCP `metrics`。
+- “全链路”改“全部”；任务表去掉“归属 / 上游”，只保留“处理角色”。
+- 详情抽屉与列表统一状态语义，不再出现“建完就显示可开工”的规划类任务。
+
+## 14. v1.4：Markdown 物料与开工门禁
+
+### 14.1 设计口径
+
+- **规划类** `analyst/pm/arch`：待拆解 → 进行中 → **已提交** → 已完成。提交物料后停在“已提交”，不自动验收自己的产物。
+- **实施类** `dev/qa/ops`：可开工 → **进行中**（调 `start`）→ 已完成（调 `finish`）。开工前必须拿到上游规划物料，服务端生成工作包并记录上下文 hash，防止 AI 跑偏。
+- **boss**：只负责目标与兜底确认，不参与实施。
+- 物料先用 Markdown 文本存储，不接文件存储；同类型重复提交时，旧版本置 `superseded`。
+
+### 14.2 数据与契约
+
+| 位置 | 变化 |
+| --- | --- |
+| `t_task` | `required_artifact_types`、`started_at`、`submitted_at`、`context_hash`、`context_json` |
+| `t_artifact` | `task_id/type/title/content_md/version/status/hash`，以及提交人、提交角色、确认人、确认时间 |
+| `Task` | 新增 `required_artifact_types/started_at/submitted_at/context_hash/artifact_count` |
+| `CreateTaskRequest` | 新增 `required_artifact_types`；不传则按当前角色默认 |
+| 新 RPC | `start / submit / finish / accept`、`work-package / artifacts` |
+| 新 MCP | `start_task / submit_task / finish_task / accept_task / work_package / list_artifacts` |
+
+默认开工物料：dev=`requirement_spec,feature_design,tech_plan,acceptance_criteria`；qa=`requirement_spec,feature_design,acceptance_criteria,code_change`；ops=`acceptance_criteria,test_report,release_plan`。默认产出：dev=`code_change`、qa=`test_report`、ops=`deployment_record`。
+
+### 14.3 门禁与状态
+
+- `StartTask`：仅实施类、本人当前角色、任务 open、无 open 问题；缺料返回 `3001034`。成功后写 `started_at` 和工作包快照；祖先中已提交的规划任务只有在**没有未完成直接子任务**时才会被顺带确认，否则继续停在“已提交”。
+- `SubmitTask`：仅规划类、本人当前角色、无 open 问题；写入 Markdown 物料，任务停在“已提交”（`status` 仍 open）。
+- `AcceptTask`：任务必须已提交；当前角色不能是任务角色；老板或 sort 更大的下游可确认；直接 done，物料置 accepted。**有未完成直接子任务时返回 `3001029`**，与父任务完成门槛一致。
+- `FinishTask`：仅实施类、必须已开工、无 open 问题、直接子任务全部完成；写入实施产物并直接 done。
+- `CloseTask`：拒绝规划类与实施类 owner 自行关闭，只允许老板等兜底角色关闭目标；父任务仍需直接子任务全部完成。
+- `TaskWorkbenchPage`：新增“进行中 / 已提交”筛选与状态；规划类显示“提交物料”，实施类显示“开始任务 / 完成任务”；详情抽屉展示开工物料、开工/提交时间、执行快照和 Markdown 物料列表。
+
+### 14.4 错误码
+
+| 码 | 含义 |
+| --- | --- |
+| 3001034 | 缺少开工物料 |
+| 3001035 | 当前任务状态不允许该动作 |
+| 3001036 | 未开工不能完成 |
+| 3001037 | 物料正文为空 |
+| 3001038 | 不能自己确认自己的提交 |
+
+### 14.5 验证
+
+- `go build ./...`、`go vet ./...`、`go test ./...`、`pnpm build` 均通过。
+- 迁移 `000005` 已应用到 `flow_dev`，schema version=5。
+- 事务内集成验证通过：无上游物料时 `StartTask` 返回 `3001034`；补齐 4 份物料后开工成功、工作包含 4 份物料和 context hash；父任务有未完成子任务时 `AcceptTask` 返回 `3001029`，子任务完成后确认父任务才 done；`FinishTask` 写入 `code_change` 后任务 done。
+- HTTP 实时 MCP 工具因本机个人 token 过期未复测；服务端工具已注册，使用 AK/SK 重新接入后即可用。
+
 

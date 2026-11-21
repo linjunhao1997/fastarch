@@ -5,6 +5,7 @@
 import { request } from '@/shared/api/request';
 import type {
   AnswerQuestionRequest,
+  Artifact,
   CreateTaskRequest,
   ListEventsResponse,
   ListMembersParams,
@@ -18,6 +19,7 @@ import type {
   Question,
   RaiseQuestionRequest,
   Task,
+  WorkPackage,
 } from '@/flow/types/flow';
 
 const query = (base: string, params: Record<string, string | number | undefined>) => {
@@ -66,6 +68,14 @@ export const taskApi = {
   create: (data: CreateTaskRequest) => request<Task>('/flow/tasks', { method: 'POST', body: data }),
   close: (id: string) => request<void>(`/flow/tasks/${id}/close`, { method: 'POST' }),
   discard: (id: string) => request<void>(`/flow/tasks/${id}/discard`, { method: 'POST' }),
+  start: (id: string) => request<WorkPackage>(`/flow/tasks/${id}/start`, { method: 'POST' }),
+  submit: (id: string, data: { artifactType: string; title?: string; contentMd: string }) =>
+    request<Artifact>(`/flow/tasks/${id}/submit`, { method: 'POST', body: data }),
+  finish: (id: string, data: { artifactType?: string; title?: string; contentMd: string }) =>
+    request<void>(`/flow/tasks/${id}/finish`, { method: 'POST', body: data }),
+  accept: (id: string) => request<void>(`/flow/tasks/${id}/accept`, { method: 'POST' }),
+  workPackage: (id: string) => request<WorkPackage>(`/flow/tasks/${id}/work-package`),
+  artifacts: (id: string) => request<{ artifacts: Artifact[] }>(`/flow/tasks/${id}/artifacts`),
 };
 
 export const questionApi = {

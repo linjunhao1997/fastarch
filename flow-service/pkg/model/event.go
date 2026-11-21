@@ -38,6 +38,10 @@ var EventFields = []string{
 const (
 	EventActionRoleSwitch       = "role.switch"
 	EventActionTaskCreate       = "task.create"
+	EventActionTaskStart        = "task.start"
+	EventActionTaskSubmit       = "task.submit"
+	EventActionTaskAccept       = "task.accept"
+	EventActionTaskFinish       = "task.finish"
 	EventActionTaskClose        = "task.close"
 	EventActionTaskDiscard      = "task.discard"
 	EventActionQuestionRaise    = "question.raise"

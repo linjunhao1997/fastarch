@@ -17,11 +17,12 @@
 ## 2. 迁移
 
 ```text
-schema_migrations: version=4, dirty=0
+schema_migrations: version=5, dirty=0
 t_task.owner_id        default 0, indexed
 t_task.parent_task_id  default 0, indexed
 历史任务按“持有该角色的成员”回填 owner_id
 000004 停用 pjm，并清掉成员担任关系、回退当前角色
+000005 新增任务执行字段与 t_artifact
 ```
 
 ## 3. 建任务规则（实测）
@@ -89,3 +90,18 @@ pnpm build       exit 0  （18.49s）
 - `upstream` 返回所有上游角色的任务（含已完成），用于建子任务；尚未按“直接父角色”收窄。
 - 历史任务已回填归属人，但父子关系未自动重建；本次用 #25–#29 新建了完整链。
 - 前端只做构建级验收，未做浏览器人工点选。
+
+## 8. v1.4 物料与开工门禁（追加）
+
+| 项 | 结果 |
+| --- | --- |
+| 迁移 000005 | 已应用，`t_artifact` 已建，任务执行字段已加 |
+| 无上游物料开工 | 返回 `3001034`，任务不进入进行中 |
+| 补齐 4 份规划物料后开工 | 成功；工作包含 4 份物料与 `context_hash`；父任务仍有未完成子任务时保持“已提交” |
+| 父任务提前确认 | 返回 `3001029`，必须等直接子任务完成 |
+| 实施完成 | `FinishTask` 写入 `code_change`，任务变 done；随后父任务可确认 |
+| 构建 | `go build ./...`、`go vet ./...`、`go test ./...`、`pnpm build` 全部通过 |
+| MCP | 6 个新工具已注册；本机 token 过期，未做实时 HTTP 调用复测，需重新配置 AK/SK 后复测 |
+
+验证方式是服务层集成用例：真实 `flow_dev`，测试数据写入后清理，成员当前角色恢复 boss。
+

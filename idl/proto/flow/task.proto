@@ -38,7 +38,50 @@ service TaskService {
     };
   }
 
-  // 完成任务（动作语义，宪法 XIV）
+  // 实施类开工：校验上游物料，返回工作包并记录本次执行快照。
+  rpc StartTask(common.v1.GetRequest) returns (WorkPackage) {
+    option (google.api.http) = {
+      post: "/flow/tasks/{id}/start"
+    };
+  }
+
+  // 规划类提交物料：任务进入“已提交”，等待下游或老板确认。
+  rpc SubmitTask(SubmitTaskRequest) returns (Artifact) {
+    option (google.api.http) = {
+      post: "/flow/tasks/{id}/submit"
+      body: "*"
+    };
+  }
+
+  // 确认规划物料：任务完成，物料归档为 accepted。
+  rpc AcceptTask(common.v1.GetRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      post: "/flow/tasks/{id}/accept"
+    };
+  }
+
+  // 实施类完成：写入实施产物并直接完成。
+  rpc FinishTask(FinishTaskRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      post: "/flow/tasks/{id}/finish"
+      body: "*"
+    };
+  }
+
+  // 只读查看工作包，不改变任务状态。
+  rpc GetWorkPackage(common.v1.GetRequest) returns (WorkPackage) {
+    option (google.api.http) = {
+      get: "/flow/tasks/{id}/work-package"
+    };
+  }
+
+  rpc ListTaskArtifacts(common.v1.GetRequest) returns (ListArtifactsResponse) {
+    option (google.api.http) = {
+      get: "/flow/tasks/{id}/artifacts"
+    };
+  }
+
+  // 完成任务（仅老板目标/实施类兜底；规划类请先 submit）
   rpc CloseTask(common.v1.GetRequest) returns (google.protobuf.Empty) {
     option (google.api.http) = {
       post: "/flow/tasks/{id}/close"
@@ -87,6 +130,12 @@ message Task {
   int32 child_total = 20;
   int32 child_done = 21;
   int32 child_open = 22;
+  // v1.4 开工物料：规划类提交、实施类开工前读取
+  repeated string required_artifact_types = 23;
+  google.protobuf.Timestamp started_at = 24;
+  google.protobuf.Timestamp submitted_at = 25;
+  string context_hash = 26;
+  int32 artifact_count = 27;
 }
 
 message ListMyTasksRequest {
@@ -117,4 +166,48 @@ message CreateTaskRequest {
   string role_code = 3;
   // 父任务 id；为空表示顶层任务。父任务必须属于上游角色。
   string parent_task_id = 4;
+  // 开工所需物料类型；为空按当前角色默认（dev/qa/ops 有默认，规划类为空）。
+  repeated string required_artifact_types = 5;
+}
+
+message Artifact {
+  string id = 1;
+  string task_id = 2;
+  string type = 3;
+  string title = 4;
+  string content_md = 5;
+  int32 version = 6;
+  string status = 7; // submitted / accepted / superseded / disputed
+  string hash = 8;
+  string created_by = 9;
+  string created_role_id = 10;
+  string accepted_by = 11;
+  google.protobuf.Timestamp accepted_at = 12;
+  google.protobuf.Timestamp create_time = 13;
+}
+
+message ListArtifactsResponse {
+  repeated Artifact artifacts = 1;
+}
+
+message WorkPackage {
+  Task task = 1;
+  repeated Artifact artifacts = 2;
+  repeated string missing_types = 3;
+  string context_hash = 4;
+  google.protobuf.Timestamp generated_at = 5;
+}
+
+message SubmitTaskRequest {
+  string id = 1 [(buf.validate.field).string.min_len = 1];
+  string artifact_type = 2 [(buf.validate.field).string.min_len = 1];
+  string title = 3;
+  string content_md = 4 [(buf.validate.field).string.min_len = 1];
+}
+
+message FinishTaskRequest {
+  string id = 1 [(buf.validate.field).string.min_len = 1];
+  string artifact_type = 2;
+  string title = 3;
+  string content_md = 4 [(buf.validate.field).string.min_len = 1];
 }

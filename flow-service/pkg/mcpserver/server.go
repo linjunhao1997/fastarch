@@ -318,16 +318,17 @@ func tools() []map[string]any {
 			"inputSchema": map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"title":          map[string]any{"type": "string", "description": "任务标题"},
-					"brief":          map[string]any{"type": "string", "description": "一句话说明做什么、交付什么"},
-					"parent_task_id": map[string]any{"type": "string", "description": "父任务 id；为空表示顶层任务（老板目标）。父任务必须属于上游角色。"},
+					"title":                   map[string]any{"type": "string", "description": "任务标题"},
+					"brief":                   map[string]any{"type": "string", "description": "一句话说明做什么、交付什么"},
+					"parent_task_id":          map[string]any{"type": "string", "description": "父任务 id；为空表示顶层任务（老板目标）。父任务必须属于上游角色。"},
+					"required_artifact_types": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "开工所需物料类型，可空；dev/qa/ops 有默认，规划类为空"},
 				},
 				"required": []string{"title"},
 			},
 		},
 		{
 			"name":        "close_task",
-			"description": "完成自己名下的任务。仍有 open 问题返回 3001002；有未完成的直接下级任务返回 3001029。",
+			"description": "老板关闭目标/兜底完成；规划类必须先 submit_task，实施类必须先 start_task 再 finish_task。",
 			"inputSchema": map[string]any{
 				"type":       "object",
 				"properties": map[string]any{"task_id": map[string]any{"type": "string"}},
@@ -337,6 +338,70 @@ func tools() []map[string]any {
 		{
 			"name":        "discard_task",
 			"description": "作废自己名下的任务（不再需要做了）。会同时丢掉该任务下未闭环的问题。",
+			"inputSchema": map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"task_id": map[string]any{"type": "string"}},
+				"required":   []string{"task_id"},
+			},
+		},
+		{
+			"name":        "start_task",
+			"description": "实施类开工：校验并读取上游规划物料（Markdown），返回工作包并把任务改为进行中；缺物料返回 3001034。",
+			"inputSchema": map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"task_id": map[string]any{"type": "string"}},
+				"required":   []string{"task_id"},
+			},
+		},
+		{
+			"name":        "submit_task",
+			"description": "规划类提交 Markdown 物料（需求规格/功能设计/技术方案等），任务进入已提交，等待下游或老板确认。",
+			"inputSchema": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"task_id":       map[string]any{"type": "string"},
+					"artifact_type": map[string]any{"type": "string", "description": "例如 requirement_spec / feature_design / tech_plan / acceptance_criteria"},
+					"title":         map[string]any{"type": "string", "description": "物料标题，可空，默认任务标题"},
+					"content_md":    map[string]any{"type": "string", "description": "Markdown 正文"},
+				},
+				"required": []string{"task_id", "artifact_type", "content_md"},
+			},
+		},
+		{
+			"name":        "finish_task",
+			"description": "实施类完成任务：提交实施产物（code_change/test_report/deployment_record），任务直接完成；未开工返回 3001036。",
+			"inputSchema": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"task_id":       map[string]any{"type": "string"},
+					"artifact_type": map[string]any{"type": "string", "description": "可空，按角色默认"},
+					"title":         map[string]any{"type": "string", "description": "产物标题，可空"},
+					"content_md":    map[string]any{"type": "string", "description": "Markdown 正文"},
+				},
+				"required": []string{"task_id", "content_md"},
+			},
+		},
+		{
+			"name":        "accept_task",
+			"description": "确认规划类物料：下游角色或老板调用，任务完成、物料归档；不能自己确认自己的提交。",
+			"inputSchema": map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"task_id": map[string]any{"type": "string"}},
+				"required":   []string{"task_id"},
+			},
+		},
+		{
+			"name":        "work_package",
+			"description": "只读查看某任务的开工工作包：任务 + 上游 Markdown 物料 + 缺失物料类型，不改变状态。",
+			"inputSchema": map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"task_id": map[string]any{"type": "string"}},
+				"required":   []string{"task_id"},
+			},
+		},
+		{
+			"name":        "list_artifacts",
+			"description": "列某任务的全部 Markdown 物料（含版本、状态、hash）。",
 			"inputSchema": map[string]any{
 				"type":       "object",
 				"properties": map[string]any{"task_id": map[string]any{"type": "string"}},
@@ -532,7 +597,83 @@ func (s *server) callTool(ctx context.Context, name string, args map[string]any)
 		if parent := argStr(args, "parent_task_id"); parent != "" {
 			payload["parentTaskId"] = parent
 		}
+		if types := argStrList(args, "required_artifact_types"); len(types) > 0 {
+			payload["requiredArtifactTypes"] = types
+		}
 		body, err := s.post(ctx, "/flow/tasks", payload)
+		if err != nil {
+			return "", err
+		}
+		return pretty(body), nil
+
+	case "start_task":
+		id := argInt64(args, "task_id")
+		if id <= 0 {
+			return "", errors.New("task_id 必填")
+		}
+		body, err := s.post(ctx, fmt.Sprintf("/flow/tasks/%d/start", id), map[string]any{})
+		if err != nil {
+			return "", err
+		}
+		return pretty(body), nil
+
+	case "submit_task":
+		id := argInt64(args, "task_id")
+		content := argStr(args, "content_md")
+		artType := argStr(args, "artifact_type")
+		if id <= 0 || content == "" || artType == "" {
+			return "", errors.New("task_id、artifact_type、content_md 必填")
+		}
+		body, err := s.post(ctx, fmt.Sprintf("/flow/tasks/%d/submit", id), map[string]any{
+			"artifactType": artType, "title": argStr(args, "title"), "contentMd": content,
+		})
+		if err != nil {
+			return "", err
+		}
+		return pretty(body), nil
+
+	case "finish_task":
+		id := argInt64(args, "task_id")
+		content := argStr(args, "content_md")
+		if id <= 0 || content == "" {
+			return "", errors.New("task_id、content_md 必填")
+		}
+		body, err := s.post(ctx, fmt.Sprintf("/flow/tasks/%d/finish", id), map[string]any{
+			"artifactType": argStr(args, "artifact_type"), "title": argStr(args, "title"), "contentMd": content,
+		})
+		if err != nil {
+			return "", err
+		}
+		return closedText("已完成", body), nil
+
+	case "accept_task":
+		id := argInt64(args, "task_id")
+		if id <= 0 {
+			return "", errors.New("task_id 必填")
+		}
+		body, err := s.post(ctx, fmt.Sprintf("/flow/tasks/%d/accept", id), map[string]any{})
+		if err != nil {
+			return "", err
+		}
+		return closedText("已确认", body), nil
+
+	case "work_package":
+		id := argInt64(args, "task_id")
+		if id <= 0 {
+			return "", errors.New("task_id 必填")
+		}
+		body, err := s.get(ctx, fmt.Sprintf("/flow/tasks/%d/work-package", id))
+		if err != nil {
+			return "", err
+		}
+		return pretty(body), nil
+
+	case "list_artifacts":
+		id := argInt64(args, "task_id")
+		if id <= 0 {
+			return "", errors.New("task_id 必填")
+		}
+		body, err := s.get(ctx, fmt.Sprintf("/flow/tasks/%d/artifacts", id))
 		if err != nil {
 			return "", err
 		}

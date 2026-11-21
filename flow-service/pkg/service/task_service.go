@@ -83,12 +83,23 @@ func (s *TaskService) ListMyTasks(ctx context.Context, req *flow_v1.ListMyTasksR
 	switch req.GetState() {
 	case model.TaskStateReady:
 		q = q.Where(model.TaskColumnStatus, model.TaskStatusOpen).
+			Where(model.TaskColumnStartedAt + " IS NULL").
+			Where(model.TaskColumnSubmittedAt + " IS NULL").
 			Where("NOT EXISTS (SELECT 1 FROM " + model.Question{}.TableName() +
 				" q WHERE q.task_id = " + model.Task{}.TableName() + ".id AND q.status = 'open' AND q.is_deleted = 0)")
 	case model.TaskStateBlocked:
 		q = q.Where(model.TaskColumnStatus, model.TaskStatusOpen).
 			Where("EXISTS (SELECT 1 FROM " + model.Question{}.TableName() +
 				" q WHERE q.task_id = " + model.Task{}.TableName() + ".id AND q.status = 'open' AND q.is_deleted = 0)")
+	case model.TaskStateInProgress:
+		q = q.Where(model.TaskColumnStatus, model.TaskStatusOpen).
+			Where(model.TaskColumnStartedAt + " IS NOT NULL").
+			Where(model.TaskColumnSubmittedAt + " IS NULL").
+			Where("NOT EXISTS (SELECT 1 FROM " + model.Question{}.TableName() +
+				" q WHERE q.task_id = " + model.Task{}.TableName() + ".id AND q.status = 'open' AND q.is_deleted = 0)")
+	case model.TaskStateSubmitted:
+		q = q.Where(model.TaskColumnStatus, model.TaskStatusOpen).
+			Where(model.TaskColumnSubmittedAt + " IS NOT NULL")
 	case model.TaskStateDone:
 		q = q.Where(model.TaskColumnStatus, model.TaskStatusDone)
 	case model.TaskStateDiscarded:
@@ -203,6 +214,14 @@ func (s *TaskService) GetTask(ctx context.Context, req *common_v1.GetRequest) (*
 	if st, ok := childStats[t.Id]; ok {
 		meta.childTotal, meta.childDone, meta.childOpen = st[0], st[1], st[2]
 	}
+	var artCount int64
+	if err := s.host.DB.WithContext(ctx).Model(&model.Artifact{}).
+		Where(model.ArtifactColumnTaskId, t.Id).
+		Where(model.ArtifactColumnIsDeleted, false).
+		Count(&artCount).Error; err != nil {
+		return nil, err
+	}
+	meta.artifactCount = int32(artCount)
 	return taskToPb(t, meta, blockers[t.Id]), nil
 }
 
@@ -254,21 +273,33 @@ func (s *TaskService) CreateTask(ctx context.Context, req *flow_v1.CreateTaskReq
 		}
 	}
 
+	requiredTypes := make([]string, 0, len(req.GetRequiredArtifactTypes()))
+	for _, raw := range req.GetRequiredArtifactTypes() {
+		if v := strings.TrimSpace(raw); v != "" {
+			requiredTypes = append(requiredTypes, v)
+		}
+	}
+	required := strings.Join(requiredTypes, ",")
+	if required == "" {
+		required = joinTypes(defaultRequiredArtifacts[role.Code])
+	}
+
 	t := model.Task{
-		ApplicationId: s.host.AppId,
-		RoleId:        role.Id,
-		OwnerId:       accountId,
-		ParentTaskId:  parentId,
-		Title:         strings.TrimSpace(req.GetTitle()),
-		Brief:         req.GetBrief(),
-		Status:        model.TaskStatusOpen,
-		Version:       0,
-		IsDeleted:     false,
-		CreatedBy:     cast.ToString(accountId),
-		CreatedRoleId: creatorRole.Id,
-		UpdatedBy:     cast.ToString(accountId),
-		CreateTime:    now(),
-		UpdateTime:    now(),
+		ApplicationId:         s.host.AppId,
+		RoleId:                role.Id,
+		OwnerId:               accountId,
+		ParentTaskId:          parentId,
+		Title:                 strings.TrimSpace(req.GetTitle()),
+		Brief:                 req.GetBrief(),
+		RequiredArtifactTypes: required,
+		Status:                model.TaskStatusOpen,
+		Version:               0,
+		IsDeleted:             false,
+		CreatedBy:             cast.ToString(accountId),
+		CreatedRoleId:         creatorRole.Id,
+		UpdatedBy:             cast.ToString(accountId),
+		CreateTime:            now(),
+		UpdateTime:            now(),
 	}
 	tx := s.host.DB.WithContext(ctx).Begin()
 	if err := tx.Create(&t).Error; err != nil {
@@ -296,8 +327,16 @@ func (s *TaskService) CreateTask(ctx context.Context, req *flow_v1.CreateTaskReq
 }
 
 func (s *TaskService) CloseTask(ctx context.Context, req *common_v1.GetRequest) (*emptypb.Empty, error) {
-	if _, _, err := s.host.ensureMember(ctx); err != nil {
+	m, roles, err := s.host.ensureMember(ctx)
+	if err != nil {
 		return nil, err
+	}
+	role := currentRole(m, roles)
+	if role == nil {
+		return nil, ErrRoleNotFound
+	}
+	if executionRoleCodes[role.Code] || planningRoleCodes[role.Code] {
+		return nil, ErrTaskStateInvalid
 	}
 	accountId, err := accountIdFromContext(ctx)
 	if err != nil {
@@ -497,6 +536,7 @@ type taskMeta struct {
 	childTotal      int32
 	childDone       int32
 	childOpen       int32
+	artifactCount   int32
 }
 
 func taskToPb(t *model.Task, meta taskMeta, blockers []*flow_v1.TaskBlocker) *flow_v1.Task {
@@ -509,32 +549,46 @@ func taskToPb(t *model.Task, meta taskMeta, blockers []*flow_v1.TaskBlocker) *fl
 	default:
 		if len(blockers) > 0 {
 			state = model.TaskStateBlocked
+		} else if t.SubmittedAt != nil {
+			state = model.TaskStateSubmitted
+		} else if t.StartedAt != nil {
+			state = model.TaskStateInProgress
 		}
 	}
-	return &flow_v1.Task{
-		Id:              cast.ToString(t.Id),
-		RoleId:          cast.ToString(t.RoleId),
-		RoleName:        meta.roleName,
-		Title:           t.Title,
-		Brief:           t.Brief,
-		Status:          t.Status,
-		State:           state,
-		OpenQuestions:   int32(len(blockers)),
-		Blockers:        blockers,
-		CreatedBy:       t.CreatedBy,
-		CreatedRoleId:   cast.ToString(t.CreatedRoleId),
-		CreatedRoleName: meta.createdRoleName,
-		UpdatedBy:       t.UpdatedBy,
-		CreateTime:      tsOf(t.CreateTime),
-		UpdateTime:      tsOf(t.UpdateTime),
-		ParentTaskId:    cast.ToString(t.ParentTaskId),
-		ParentTaskTitle: meta.parentTitle,
-		OwnerId:         cast.ToString(t.OwnerId),
-		OwnerName:       meta.ownerName,
-		ChildTotal:      meta.childTotal,
-		ChildDone:       meta.childDone,
-		ChildOpen:       meta.childOpen,
+	pb := &flow_v1.Task{
+		Id:                    cast.ToString(t.Id),
+		RoleId:                cast.ToString(t.RoleId),
+		RoleName:              meta.roleName,
+		Title:                 t.Title,
+		Brief:                 t.Brief,
+		Status:                t.Status,
+		State:                 state,
+		OpenQuestions:         int32(len(blockers)),
+		Blockers:              blockers,
+		CreatedBy:             t.CreatedBy,
+		CreatedRoleId:         cast.ToString(t.CreatedRoleId),
+		CreatedRoleName:       meta.createdRoleName,
+		UpdatedBy:             t.UpdatedBy,
+		CreateTime:            tsOf(t.CreateTime),
+		UpdateTime:            tsOf(t.UpdateTime),
+		ParentTaskId:          cast.ToString(t.ParentTaskId),
+		ParentTaskTitle:       meta.parentTitle,
+		OwnerId:               cast.ToString(t.OwnerId),
+		OwnerName:             meta.ownerName,
+		ChildTotal:            meta.childTotal,
+		ChildDone:             meta.childDone,
+		ChildOpen:             meta.childOpen,
+		RequiredArtifactTypes: splitTypes(t.RequiredArtifactTypes),
+		ContextHash:           t.ContextHash,
+		ArtifactCount:         meta.artifactCount,
 	}
+	if t.StartedAt != nil {
+		pb.StartedAt = tsOf(*t.StartedAt)
+	}
+	if t.SubmittedAt != nil {
+		pb.SubmittedAt = tsOf(*t.SubmittedAt)
+	}
+	return pb
 }
 
 func (h *Host) memberNameMapByAccountIDs(ctx context.Context, accountIds []int64) (map[int64]string, error) {

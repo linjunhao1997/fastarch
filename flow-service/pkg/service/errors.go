@@ -72,6 +72,13 @@ var (
 	ErrTaskOwnerMismatch     = NewErrorWithCode("3001032", codes.PermissionDenied, errors.New("该任务不归你（当前账号）所有，不能替你完成或作废"))
 	ErrParentTaskBlocked     = NewErrorWithCode("3001033", codes.FailedPrecondition, errors.New("父任务还有未闭环问题，不能基于它新建子任务；先等父任务的问题闭环"))
 
+	// v1.4 开工物料：
+	ErrWorkPackageMissing  = NewErrorWithCode("3001034", codes.FailedPrecondition, errors.New("缺少开工物料，不能开工；请先让上游提交所需物料"))
+	ErrTaskStateInvalid    = NewErrorWithCode("3001035", codes.FailedPrecondition, errors.New("任务当前状态不允许这个动作"))
+	ErrTaskNotStarted      = NewErrorWithCode("3001036", codes.FailedPrecondition, errors.New("任务还没有开工，不能直接完成；请先开始任务"))
+	ErrArtifactEmpty       = NewErrorWithCode("3001037", codes.InvalidArgument, errors.New("物料内容不能为空，请提交 Markdown 文本"))
+	ErrTaskAcceptForbidden = NewErrorWithCode("3001038", codes.PermissionDenied, errors.New("只有下游角色或老板可以确认规划物料，不能自己确认自己的提交"))
+
 	// 菜单/字典错误别名（沿用 contrib 既有业务码）
 	ErrMenuNotFound           = menu.ErrMenuNotFound
 	ErrMenuHasChildren        = menu.ErrMenuHasChildren

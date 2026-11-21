@@ -137,9 +137,73 @@
         ]
       }
     },
+    "/flow/tasks/{id}/accept": {
+      "post": {
+        "summary": "确认规划物料：任务完成，物料归档为 accepted。",
+        "operationId": "TaskService_AcceptTask",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "int64"
+          }
+        ],
+        "tags": [
+          "TaskService"
+        ]
+      }
+    },
+    "/flow/tasks/{id}/artifacts": {
+      "get": {
+        "operationId": "TaskService_ListTaskArtifacts",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListArtifactsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "int64"
+          }
+        ],
+        "tags": [
+          "TaskService"
+        ]
+      }
+    },
     "/flow/tasks/{id}/close": {
       "post": {
-        "summary": "完成任务（动作语义，宪法 XIV）",
+        "summary": "完成任务（仅老板目标/实施类兜底；规划类请先 submit）",
         "operationId": "TaskService_CloseTask",
         "responses": {
           "200": {
@@ -202,6 +266,171 @@
           "TaskService"
         ]
       }
+    },
+    "/flow/tasks/{id}/finish": {
+      "post": {
+        "summary": "实施类完成：写入实施产物并直接完成。",
+        "operationId": "TaskService_FinishTask",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "artifactType": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "contentMd": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        ],
+        "tags": [
+          "TaskService"
+        ]
+      }
+    },
+    "/flow/tasks/{id}/start": {
+      "post": {
+        "summary": "实施类开工：校验上游物料，返回工作包并记录本次执行快照。",
+        "operationId": "TaskService_StartTask",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1WorkPackage"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "int64"
+          }
+        ],
+        "tags": [
+          "TaskService"
+        ]
+      }
+    },
+    "/flow/tasks/{id}/submit": {
+      "post": {
+        "summary": "规划类提交物料：任务进入“已提交”，等待下游或老板确认。",
+        "operationId": "TaskService_SubmitTask",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Artifact"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "artifactType": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "contentMd": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        ],
+        "tags": [
+          "TaskService"
+        ]
+      }
+    },
+    "/flow/tasks/{id}/work-package": {
+      "get": {
+        "summary": "只读查看工作包，不改变任务状态。",
+        "operationId": "TaskService_GetWorkPackage",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1WorkPackage"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "int64"
+          }
+        ],
+        "tags": [
+          "TaskService"
+        ]
+      }
     }
   },
   "definitions": {
@@ -233,6 +462,54 @@
         }
       }
     },
+    "v1Artifact": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "taskId": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "contentMd": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "status": {
+          "type": "string",
+          "title": "submitted / accepted / superseded / disputed"
+        },
+        "hash": {
+          "type": "string"
+        },
+        "createdBy": {
+          "type": "string"
+        },
+        "createdRoleId": {
+          "type": "string"
+        },
+        "acceptedBy": {
+          "type": "string"
+        },
+        "acceptedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "createTime": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
     "v1CreateTaskRequest": {
       "type": "object",
       "properties": {
@@ -249,6 +526,25 @@
         "parentTaskId": {
           "type": "string",
           "title": "父任务 id；为空表示顶层任务。父任务必须属于上游角色。"
+        },
+        "requiredArtifactTypes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "开工所需物料类型；为空按当前角色默认（dev/qa/ops 有默认，规划类为空）。"
+        }
+      }
+    },
+    "v1ListArtifactsResponse": {
+      "type": "object",
+      "properties": {
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Artifact"
+          }
         }
       }
     },
@@ -391,6 +687,28 @@
         "childOpen": {
           "type": "integer",
           "format": "int32"
+        },
+        "requiredArtifactTypes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "v1.4 开工物料：规划类提交、实施类开工前读取"
+        },
+        "startedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "submittedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "contextHash": {
+          "type": "string"
+        },
+        "artifactCount": {
+          "type": "integer",
+          "format": "int32"
         }
       }
     },
@@ -415,6 +733,34 @@
         }
       },
       "title": "卡住任务的问题摘要（只读回传）"
+    },
+    "v1WorkPackage": {
+      "type": "object",
+      "properties": {
+        "task": {
+          "$ref": "#/definitions/v1Task"
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Artifact"
+          }
+        },
+        "missingTypes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "contextHash": {
+          "type": "string"
+        },
+        "generatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
     }
   }
 }

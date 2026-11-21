@@ -21,11 +21,17 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	TaskService_ListMyTasks_FullMethodName = "/flow.v1.TaskService/ListMyTasks"
-	TaskService_GetTask_FullMethodName     = "/flow.v1.TaskService/GetTask"
-	TaskService_CreateTask_FullMethodName  = "/flow.v1.TaskService/CreateTask"
-	TaskService_CloseTask_FullMethodName   = "/flow.v1.TaskService/CloseTask"
-	TaskService_DiscardTask_FullMethodName = "/flow.v1.TaskService/DiscardTask"
+	TaskService_ListMyTasks_FullMethodName       = "/flow.v1.TaskService/ListMyTasks"
+	TaskService_GetTask_FullMethodName           = "/flow.v1.TaskService/GetTask"
+	TaskService_CreateTask_FullMethodName        = "/flow.v1.TaskService/CreateTask"
+	TaskService_StartTask_FullMethodName         = "/flow.v1.TaskService/StartTask"
+	TaskService_SubmitTask_FullMethodName        = "/flow.v1.TaskService/SubmitTask"
+	TaskService_AcceptTask_FullMethodName        = "/flow.v1.TaskService/AcceptTask"
+	TaskService_FinishTask_FullMethodName        = "/flow.v1.TaskService/FinishTask"
+	TaskService_GetWorkPackage_FullMethodName    = "/flow.v1.TaskService/GetWorkPackage"
+	TaskService_ListTaskArtifacts_FullMethodName = "/flow.v1.TaskService/ListTaskArtifacts"
+	TaskService_CloseTask_FullMethodName         = "/flow.v1.TaskService/CloseTask"
+	TaskService_DiscardTask_FullMethodName       = "/flow.v1.TaskService/DiscardTask"
 )
 
 // TaskServiceClient is the client API for TaskService service.
@@ -37,7 +43,18 @@ type TaskServiceClient interface {
 	GetTask(ctx context.Context, in *common.GetRequest, opts ...grpc.CallOption) (*Task, error)
 	// 建任务：只能建在当前人名下、当前角色下；parent_task_id 非空表示基于上游任务派生的子任务。
 	CreateTask(ctx context.Context, in *CreateTaskRequest, opts ...grpc.CallOption) (*Task, error)
-	// 完成任务（动作语义，宪法 XIV）
+	// 实施类开工：校验上游物料，返回工作包并记录本次执行快照。
+	StartTask(ctx context.Context, in *common.GetRequest, opts ...grpc.CallOption) (*WorkPackage, error)
+	// 规划类提交物料：任务进入“已提交”，等待下游或老板确认。
+	SubmitTask(ctx context.Context, in *SubmitTaskRequest, opts ...grpc.CallOption) (*Artifact, error)
+	// 确认规划物料：任务完成，物料归档为 accepted。
+	AcceptTask(ctx context.Context, in *common.GetRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// 实施类完成：写入实施产物并直接完成。
+	FinishTask(ctx context.Context, in *FinishTaskRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// 只读查看工作包，不改变任务状态。
+	GetWorkPackage(ctx context.Context, in *common.GetRequest, opts ...grpc.CallOption) (*WorkPackage, error)
+	ListTaskArtifacts(ctx context.Context, in *common.GetRequest, opts ...grpc.CallOption) (*ListArtifactsResponse, error)
+	// 完成任务（仅老板目标/实施类兜底；规划类请先 submit）
 	CloseTask(ctx context.Context, in *common.GetRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// 作废任务：被阻塞且不再需要的任务直接丢弃，不占队列
 	DiscardTask(ctx context.Context, in *common.GetRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
@@ -78,6 +95,60 @@ func (c *taskServiceClient) CreateTask(ctx context.Context, in *CreateTaskReques
 	return out, nil
 }
 
+func (c *taskServiceClient) StartTask(ctx context.Context, in *common.GetRequest, opts ...grpc.CallOption) (*WorkPackage, error) {
+	out := new(WorkPackage)
+	err := c.cc.Invoke(ctx, TaskService_StartTask_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *taskServiceClient) SubmitTask(ctx context.Context, in *SubmitTaskRequest, opts ...grpc.CallOption) (*Artifact, error) {
+	out := new(Artifact)
+	err := c.cc.Invoke(ctx, TaskService_SubmitTask_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *taskServiceClient) AcceptTask(ctx context.Context, in *common.GetRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, TaskService_AcceptTask_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *taskServiceClient) FinishTask(ctx context.Context, in *FinishTaskRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, TaskService_FinishTask_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *taskServiceClient) GetWorkPackage(ctx context.Context, in *common.GetRequest, opts ...grpc.CallOption) (*WorkPackage, error) {
+	out := new(WorkPackage)
+	err := c.cc.Invoke(ctx, TaskService_GetWorkPackage_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *taskServiceClient) ListTaskArtifacts(ctx context.Context, in *common.GetRequest, opts ...grpc.CallOption) (*ListArtifactsResponse, error) {
+	out := new(ListArtifactsResponse)
+	err := c.cc.Invoke(ctx, TaskService_ListTaskArtifacts_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *taskServiceClient) CloseTask(ctx context.Context, in *common.GetRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, TaskService_CloseTask_FullMethodName, in, out, opts...)
@@ -105,7 +176,18 @@ type TaskServiceServer interface {
 	GetTask(context.Context, *common.GetRequest) (*Task, error)
 	// 建任务：只能建在当前人名下、当前角色下；parent_task_id 非空表示基于上游任务派生的子任务。
 	CreateTask(context.Context, *CreateTaskRequest) (*Task, error)
-	// 完成任务（动作语义，宪法 XIV）
+	// 实施类开工：校验上游物料，返回工作包并记录本次执行快照。
+	StartTask(context.Context, *common.GetRequest) (*WorkPackage, error)
+	// 规划类提交物料：任务进入“已提交”，等待下游或老板确认。
+	SubmitTask(context.Context, *SubmitTaskRequest) (*Artifact, error)
+	// 确认规划物料：任务完成，物料归档为 accepted。
+	AcceptTask(context.Context, *common.GetRequest) (*emptypb.Empty, error)
+	// 实施类完成：写入实施产物并直接完成。
+	FinishTask(context.Context, *FinishTaskRequest) (*emptypb.Empty, error)
+	// 只读查看工作包，不改变任务状态。
+	GetWorkPackage(context.Context, *common.GetRequest) (*WorkPackage, error)
+	ListTaskArtifacts(context.Context, *common.GetRequest) (*ListArtifactsResponse, error)
+	// 完成任务（仅老板目标/实施类兜底；规划类请先 submit）
 	CloseTask(context.Context, *common.GetRequest) (*emptypb.Empty, error)
 	// 作废任务：被阻塞且不再需要的任务直接丢弃，不占队列
 	DiscardTask(context.Context, *common.GetRequest) (*emptypb.Empty, error)
@@ -123,6 +205,24 @@ func (UnimplementedTaskServiceServer) GetTask(context.Context, *common.GetReques
 }
 func (UnimplementedTaskServiceServer) CreateTask(context.Context, *CreateTaskRequest) (*Task, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateTask not implemented")
+}
+func (UnimplementedTaskServiceServer) StartTask(context.Context, *common.GetRequest) (*WorkPackage, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method StartTask not implemented")
+}
+func (UnimplementedTaskServiceServer) SubmitTask(context.Context, *SubmitTaskRequest) (*Artifact, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SubmitTask not implemented")
+}
+func (UnimplementedTaskServiceServer) AcceptTask(context.Context, *common.GetRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AcceptTask not implemented")
+}
+func (UnimplementedTaskServiceServer) FinishTask(context.Context, *FinishTaskRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method FinishTask not implemented")
+}
+func (UnimplementedTaskServiceServer) GetWorkPackage(context.Context, *common.GetRequest) (*WorkPackage, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetWorkPackage not implemented")
+}
+func (UnimplementedTaskServiceServer) ListTaskArtifacts(context.Context, *common.GetRequest) (*ListArtifactsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListTaskArtifacts not implemented")
 }
 func (UnimplementedTaskServiceServer) CloseTask(context.Context, *common.GetRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CloseTask not implemented")
@@ -196,6 +296,114 @@ func _TaskService_CreateTask_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _TaskService_StartTask_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(common.GetRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TaskServiceServer).StartTask(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TaskService_StartTask_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TaskServiceServer).StartTask(ctx, req.(*common.GetRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _TaskService_SubmitTask_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SubmitTaskRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TaskServiceServer).SubmitTask(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TaskService_SubmitTask_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TaskServiceServer).SubmitTask(ctx, req.(*SubmitTaskRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _TaskService_AcceptTask_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(common.GetRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TaskServiceServer).AcceptTask(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TaskService_AcceptTask_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TaskServiceServer).AcceptTask(ctx, req.(*common.GetRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _TaskService_FinishTask_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FinishTaskRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TaskServiceServer).FinishTask(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TaskService_FinishTask_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TaskServiceServer).FinishTask(ctx, req.(*FinishTaskRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _TaskService_GetWorkPackage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(common.GetRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TaskServiceServer).GetWorkPackage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TaskService_GetWorkPackage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TaskServiceServer).GetWorkPackage(ctx, req.(*common.GetRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _TaskService_ListTaskArtifacts_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(common.GetRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TaskServiceServer).ListTaskArtifacts(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TaskService_ListTaskArtifacts_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TaskServiceServer).ListTaskArtifacts(ctx, req.(*common.GetRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _TaskService_CloseTask_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(common.GetRequest)
 	if err := dec(in); err != nil {
@@ -250,6 +458,30 @@ var TaskService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CreateTask",
 			Handler:    _TaskService_CreateTask_Handler,
+		},
+		{
+			MethodName: "StartTask",
+			Handler:    _TaskService_StartTask_Handler,
+		},
+		{
+			MethodName: "SubmitTask",
+			Handler:    _TaskService_SubmitTask_Handler,
+		},
+		{
+			MethodName: "AcceptTask",
+			Handler:    _TaskService_AcceptTask_Handler,
+		},
+		{
+			MethodName: "FinishTask",
+			Handler:    _TaskService_FinishTask_Handler,
+		},
+		{
+			MethodName: "GetWorkPackage",
+			Handler:    _TaskService_GetWorkPackage_Handler,
+		},
+		{
+			MethodName: "ListTaskArtifacts",
+			Handler:    _TaskService_ListTaskArtifacts_Handler,
 		},
 		{
 			MethodName: "CloseTask",
