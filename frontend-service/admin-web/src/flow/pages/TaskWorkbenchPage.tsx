@@ -314,6 +314,8 @@ export default function TaskWorkbenchPage() {
     [closeMutation, discardMutation, modal, scope, me?.currentRoleId, roleCodeById, form],
   );
 
+  const detailStateMeta = detail ? taskStateMeta(detail, roleCodeById.get(detail.roleId)) : null;
+
   return (
     <Space direction="vertical" size={16} style={{ display: 'flex' }}>
       <Card>
@@ -512,9 +514,9 @@ export default function TaskWorkbenchPage() {
           <Space direction="vertical" size={16} style={{ display: 'flex' }}>
             <Descriptions column={1} size="small" bordered>
               <Descriptions.Item label="状态">
-                <Tag color={STATE_META[detail.state]?.color}>{STATE_META[detail.state]?.label ?? detail.state}</Tag>
+                <Tag color={detailStateMeta?.color}>{detailStateMeta?.label ?? detail.state}</Tag>
               </Descriptions.Item>
-              <Descriptions.Item label="角色">{detail.roleName}</Descriptions.Item>
+              <Descriptions.Item label="处理角色">{detail.roleName}</Descriptions.Item>
               <Descriptions.Item label="负责人">{detail.ownerName || '—'}</Descriptions.Item>
               <Descriptions.Item label="父任务">
                 {detail.parentTaskTitle ? `${detail.parentTaskTitle}（#${detail.parentTaskId}）` : '顶层任务'}
