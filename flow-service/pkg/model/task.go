@@ -2,13 +2,16 @@ package model
 
 import "time"
 
-// Task 是任务：只归属工作角色，不归属人。
+// Task 是任务树中的一个节点：归创建它的「人 + 角色」所有，
+// 下游角色只能基于父任务新建自己的子任务，不能改派或替别人执行。
 // status 只存 open/done/discarded 三个终态；能否开工（ready/blocked）由问题表现算，
 // 绝不落库（宪法 V 派生而非复制）。
 type Task struct {
 	Id            int64     `gorm:"column:id;primaryKey"`
 	ApplicationId int64     `gorm:"column:application_id;index"`
 	RoleId        int64     `gorm:"column:role_id;index"`
+	OwnerId       int64     `gorm:"column:owner_id;index"`
+	ParentTaskId  int64     `gorm:"column:parent_task_id;index"`
 	Title         string    `gorm:"column:title;size:255"`
 	Brief         string    `gorm:"column:brief;type:text"`
 	Status        string    `gorm:"column:status;size:16;default:open"`
@@ -27,6 +30,8 @@ const (
 	TaskColumnId            = "id"
 	TaskColumnApplicationId = "application_id"
 	TaskColumnRoleId        = "role_id"
+	TaskColumnOwnerId       = "owner_id"
+	TaskColumnParentTaskId  = "parent_task_id"
 	TaskColumnTitle         = "title"
 	TaskColumnBrief         = "brief"
 	TaskColumnStatus        = "status"
@@ -40,7 +45,8 @@ const (
 )
 
 var TaskFields = []string{
-	TaskColumnId, TaskColumnApplicationId, TaskColumnRoleId, TaskColumnTitle,
+	TaskColumnId, TaskColumnApplicationId, TaskColumnRoleId, TaskColumnOwnerId,
+	TaskColumnParentTaskId, TaskColumnTitle,
 	TaskColumnBrief, TaskColumnStatus, TaskColumnVersion, TaskColumnIsDeleted,
 	TaskColumnCreatedBy, TaskColumnCreatedRoleId, TaskColumnUpdatedBy, TaskColumnCreateTime, TaskColumnUpdateTime,
 }

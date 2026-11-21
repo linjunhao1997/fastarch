@@ -299,3 +299,41 @@ Invoke-RestMethod -Uri 'http://127.0.0.1:8082/flow/mcp' -Method Post -ContentTyp
 - `go build ./...` / `go vet ./...` / `pnpm build` 通过。
 - boss 的“我发起的”能看到 #12、#18、#19、#20 等派发记录；analyst 队列能看到 #18。
 - q7/q8/q10 显示“老板（boss）”，q9 显示“测试（qa）”。
+
+## 12. v1.2：任务树（任务归人，父子派生）
+
+### 12.1 对 v1.1.1 的修正
+
+v1.1.1 的任务仍只挂 `role_id`，`CreateTask` 允许用 `role_code` 把任务改派给另一个角色，导致老板派完任务后自己队列为空。v1.2 改为任务树：
+
+- 任务归**创建人 + 创建时角色**，`t_task.owner_id` + `role_id`。
+- 下游角色不接收父任务，只能只读父任务，基于它新建**自己的子任务**，`parent_task_id` 指向父任务。
+- 不再提供改派：`role_code` 与当前角色不一致时返回 3001030。
+
+### 12.2 数据与契约
+
+| 位置 | 变化 |
+| --- | --- |
+| `t_task` | 新增 `owner_id`、`parent_task_id`，均带索引，默认 0 |
+| `Task` | 新增 `parent_task_id/parent_task_title/owner_id/owner_name/child_total/child_done/child_open` |
+| `CreateTaskRequest` | 新增 `parent_task_id`；`role_code` 标记废弃 |
+| `ListMyTasksRequest.scope` | 新增 `upstream`（上游角色任务，只读） |
+
+### 12.3 队列语义
+
+- **我的任务（mine）**：`owner_id=当前账号 AND role_id=当前角色`；老板看到自己建的父任务。
+- **上游任务（upstream）**：`role.sort < 当前角色.sort` 的任务，只读；用于基于父任务建子任务。
+- **我发起的（created）**：`created_by=当前账号`，跨角色。
+- **全链路（all）**：boss/pjm 只读，按角色分组。
+
+### 12.4 完成门槛
+
+`CloseTask` 在完成前统计 `parent_task_id=当前任务 AND status=open` 的直接子任务；大于 0 返回 3001029。已完成/已作废的下级不阻塞。每一级都受同一规则约束，所以整棵树逐级向上完成。
+
+### 12.5 页面
+
+- 任务表“归属 / 上游”列显示：负责人 + 角色、父任务标题、下级 `完成/总数`。
+- “我的任务”只显示自己的任务；有未完成下级时完成按钮换成“等 N 个下级完成”。
+- “上游任务”与“全链路”只读，提供“基于此建我的任务”，打开新建弹窗并带上父任务。
+- 新建弹窗明确：任务归你和当前角色，不改派；父任务要等这条及所有下级完成。
+

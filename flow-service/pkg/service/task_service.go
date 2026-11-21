@@ -33,7 +33,7 @@ func (s *TaskService) ListMyTasks(ctx context.Context, req *flow_v1.ListMyTasksR
 	if scope == "" {
 		scope = "mine"
 	}
-	if scope != "mine" && scope != "created" && scope != "all" {
+	if scope != "mine" && scope != "created" && scope != "upstream" && scope != "all" {
 		return nil, ErrTaskScopeInvalid
 	}
 	if scope == "all" && (role == nil || (role.Code != "boss" && role.Code != "pjm")) {
@@ -51,21 +51,33 @@ func (s *TaskService) ListMyTasks(ctx context.Context, req *flow_v1.ListMyTasksR
 		resp.RoleName = role.Name
 	}
 
+	accountId, err := accountIdFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
 	limit, offset := limitAndOffset(req.GetCurrentPage(), req.GetPageSize())
 	q := s.host.DB.WithContext(ctx).Model(&model.Task{}).
 		Where(model.TaskColumnApplicationId, s.host.AppId).
 		Where(model.TaskColumnIsDeleted, false)
 	switch scope {
 	case "created":
-		accountId, err := accountIdFromContext(ctx)
-		if err != nil {
-			return nil, err
-		}
 		q = q.Where(model.TaskColumnCreatedBy, cast.ToString(accountId))
+	case "upstream":
+		if role == nil {
+			q = q.Where("1 = 0")
+		} else {
+			sub := s.host.DB.Table(model.WorkRole{}.TableName()).
+				Select(model.WorkRoleColumnId).
+				Where(model.WorkRoleColumnApplicationId, s.host.AppId).
+				Where(model.WorkRoleColumnSort+" < ?", role.Sort)
+			q = q.Where(model.TaskColumnRoleId+" IN (?)", sub)
+		}
 	case "all":
 		// 全链路只读：不按当前角色过滤，权限在上方已校验。
 	default:
-		q = q.Where(model.TaskColumnRoleId, role.Id)
+		// v1.2：任务归人，同时限定当前角色；下游不能替上游执行。
+		q = q.Where(model.TaskColumnOwnerId, accountId).
+			Where(model.TaskColumnRoleId, role.Id)
 	}
 	if kw := strings.TrimSpace(req.GetKeyword()); kw != "" {
 		q = q.Where(model.TaskColumnTitle+" LIKE ?", "%"+kw+"%")
@@ -96,8 +108,16 @@ func (s *TaskService) ListMyTasks(ctx context.Context, req *flow_v1.ListMyTasksR
 	}
 
 	ids := make([]int64, 0, len(tasks))
+	parentIds := make([]int64, 0, len(tasks))
+	ownerIds := make([]int64, 0, len(tasks))
 	for i := range tasks {
 		ids = append(ids, tasks[i].Id)
+		if tasks[i].ParentTaskId > 0 {
+			parentIds = append(parentIds, tasks[i].ParentTaskId)
+		}
+		if tasks[i].OwnerId > 0 {
+			ownerIds = append(ownerIds, tasks[i].OwnerId)
+		}
 	}
 	blockers, err := s.host.blockersOf(ctx, ids)
 	if err != nil {
@@ -107,13 +127,34 @@ func (s *TaskService) ListMyTasks(ctx context.Context, req *flow_v1.ListMyTasksR
 	if err != nil {
 		return nil, err
 	}
+	ownerNames, err := s.host.memberNameMapByAccountIDs(ctx, ownerIds)
+	if err != nil {
+		return nil, err
+	}
+	parentTitles, err := s.host.taskTitleMapByIDs(ctx, parentIds)
+	if err != nil {
+		return nil, err
+	}
+	childStats, err := s.host.childStatsOf(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
 
 	resp.Page = pageOf(req.GetCurrentPage(), req.GetPageSize(), total)
 	for i := range tasks {
-		resp.Tasks = append(resp.Tasks, taskToPb(&tasks[i], roleNames[tasks[i].RoleId], roleNameOf(roleNames, tasks[i].CreatedRoleId), blockers[tasks[i].Id]))
+		meta := taskMeta{
+			roleName:        roleNames[tasks[i].RoleId],
+			createdRoleName: roleNameOf(roleNames, tasks[i].CreatedRoleId),
+			ownerName:       ownerNames[tasks[i].OwnerId],
+			parentTitle:     parentTitles[tasks[i].ParentTaskId],
+		}
+		if st, ok := childStats[tasks[i].Id]; ok {
+			meta.childTotal, meta.childDone, meta.childOpen = st[0], st[1], st[2]
+		}
+		resp.Tasks = append(resp.Tasks, taskToPb(&tasks[i], meta, blockers[tasks[i].Id]))
 	}
-	if role != nil {
-		ready, blocked, err := s.host.taskStats(ctx, role.Id)
+	if role != nil && scope == "mine" {
+		ready, blocked, err := s.host.taskStatsForOwner(ctx, role.Id, accountId)
 		if err != nil {
 			return nil, err
 		}
@@ -139,7 +180,32 @@ func (s *TaskService) GetTask(ctx context.Context, req *common_v1.GetRequest) (*
 	if err != nil {
 		return nil, err
 	}
-	return taskToPb(t, roleNames[t.RoleId], roleNameOf(roleNames, t.CreatedRoleId), blockers[t.Id]), nil
+	meta := taskMeta{
+		roleName:        roleNames[t.RoleId],
+		createdRoleName: roleNameOf(roleNames, t.CreatedRoleId),
+	}
+	if t.OwnerId > 0 {
+		ownerNames, err := s.host.memberNameMapByAccountIDs(ctx, []int64{t.OwnerId})
+		if err != nil {
+			return nil, err
+		}
+		meta.ownerName = ownerNames[t.OwnerId]
+	}
+	if t.ParentTaskId > 0 {
+		parentTitles, err := s.host.taskTitleMapByIDs(ctx, []int64{t.ParentTaskId})
+		if err != nil {
+			return nil, err
+		}
+		meta.parentTitle = parentTitles[t.ParentTaskId]
+	}
+	childStats, err := s.host.childStatsOf(ctx, []int64{t.Id})
+	if err != nil {
+		return nil, err
+	}
+	if st, ok := childStats[t.Id]; ok {
+		meta.childTotal, meta.childDone, meta.childOpen = st[0], st[1], st[2]
+	}
+	return taskToPb(t, meta, blockers[t.Id]), nil
 }
 
 func (s *TaskService) CreateTask(ctx context.Context, req *flow_v1.CreateTaskRequest) (*flow_v1.Task, error) {
@@ -149,22 +215,45 @@ func (s *TaskService) CreateTask(ctx context.Context, req *flow_v1.CreateTaskReq
 	}
 	creatorRole := currentRole(m, roles)
 	role := creatorRole
-	if code := strings.TrimSpace(req.GetRoleCode()); code != "" {
-		role = findRole(roles, code)
-		if role == nil {
-			return nil, ErrRoleNotHeld
-		}
-	}
 	if role == nil {
 		return nil, ErrRoleNotFound
+	}
+	// v1.2：任务只能归当前人 + 当前角色，不允许把任务改派给别人。
+	if code := strings.TrimSpace(req.GetRoleCode()); code != "" {
+		held := findRole(roles, code)
+		if held == nil {
+			return nil, ErrRoleNotHeld
+		}
+		if held.Id != role.Id {
+			return nil, ErrTaskReassignForbidden
+		}
 	}
 	accountId, err := accountIdFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}
+
+	parentId := cast.ToInt64(req.GetParentTaskId())
+	var parent *model.Task
+	if parentId > 0 {
+		parent, err = s.host.taskByID(ctx, parentId)
+		if err != nil {
+			return nil, err
+		}
+		parentRole, err := s.host.roleByID(ctx, parent.RoleId)
+		if err != nil {
+			return nil, err
+		}
+		if parent.RoleId == role.Id || parentRole.Sort >= role.Sort {
+			return nil, ErrParentTaskInvalid
+		}
+	}
+
 	t := model.Task{
 		ApplicationId: s.host.AppId,
 		RoleId:        role.Id,
+		OwnerId:       accountId,
+		ParentTaskId:  parentId,
 		Title:         strings.TrimSpace(req.GetTitle()),
 		Brief:         req.GetBrief(),
 		Status:        model.TaskStatusOpen,
@@ -181,21 +270,28 @@ func (s *TaskService) CreateTask(ctx context.Context, req *flow_v1.CreateTaskReq
 		tx.Rollback()
 		return nil, err
 	}
-	if err := s.host.appendEvent(ctx, tx, accountId, model.EventActionTaskCreate, model.EntityTask, t.Id,
-		map[string]any{"role_id": t.RoleId, "title": t.Title,
-			"created_role_id": t.CreatedRoleId, "created_role_name": creatorRole.Name}); err != nil {
+	detail := map[string]any{"role_id": t.RoleId, "title": t.Title,
+		"created_role_id": t.CreatedRoleId, "created_role_name": creatorRole.Name,
+		"owner_id": t.OwnerId}
+	if t.ParentTaskId > 0 {
+		detail["parent_task_id"] = t.ParentTaskId
+	}
+	if err := s.host.appendEvent(ctx, tx, accountId, model.EventActionTaskCreate, model.EntityTask, t.Id, detail); err != nil {
 		tx.Rollback()
 		return nil, err
 	}
 	if err := tx.Commit().Error; err != nil {
 		return nil, err
 	}
-	return taskToPb(&t, role.Name, creatorRole.Name, nil), nil
+	meta := taskMeta{roleName: role.Name, createdRoleName: creatorRole.Name, ownerName: m.Name}
+	if parent != nil {
+		meta.parentTitle = parent.Title
+	}
+	return taskToPb(&t, meta, nil), nil
 }
 
 func (s *TaskService) CloseTask(ctx context.Context, req *common_v1.GetRequest) (*emptypb.Empty, error) {
-	m, roles, err := s.host.ensureMember(ctx)
-	if err != nil {
+	if _, _, err := s.host.ensureMember(ctx); err != nil {
 		return nil, err
 	}
 	accountId, err := accountIdFromContext(ctx)
@@ -206,14 +302,26 @@ func (s *TaskService) CloseTask(ctx context.Context, req *common_v1.GetRequest) 
 	if err != nil {
 		return nil, err
 	}
-	if role := currentRole(m, roles); role == nil || t.RoleId != role.Id {
-		return nil, ErrRoleMismatch
+	if t.OwnerId <= 0 || t.OwnerId != accountId {
+		return nil, ErrTaskOwnerMismatch
 	}
 	if t.Status == model.TaskStatusDone {
 		return &emptypb.Empty{}, nil
 	}
 	if t.Status != model.TaskStatusOpen {
 		return nil, ErrTaskEnded
+	}
+	// v1.2：父任务必须等直接下级任务全部完成（作废的下级视为已取消，不阻塞）。
+	var openChildren int64
+	if err := s.host.DB.WithContext(ctx).Model(&model.Task{}).
+		Where(model.TaskColumnParentTaskId, t.Id).
+		Where(model.TaskColumnStatus, model.TaskStatusOpen).
+		Where(model.TaskColumnIsDeleted, false).
+		Count(&openChildren).Error; err != nil {
+		return nil, err
+	}
+	if openChildren > 0 {
+		return nil, ErrChildTasksOpen
 	}
 	openQ, err := s.host.openQuestionCount(ctx, 0, t.Id)
 	if err != nil {
@@ -252,8 +360,7 @@ func (s *TaskService) CloseTask(ctx context.Context, req *common_v1.GetRequest) 
 }
 
 func (s *TaskService) DiscardTask(ctx context.Context, req *common_v1.GetRequest) (*emptypb.Empty, error) {
-	m, roles, err := s.host.ensureMember(ctx)
-	if err != nil {
+	if _, _, err := s.host.ensureMember(ctx); err != nil {
 		return nil, err
 	}
 	accountId, err := accountIdFromContext(ctx)
@@ -264,8 +371,8 @@ func (s *TaskService) DiscardTask(ctx context.Context, req *common_v1.GetRequest
 	if err != nil {
 		return nil, err
 	}
-	if role := currentRole(m, roles); role == nil || t.RoleId != role.Id {
-		return nil, ErrRoleMismatch
+	if t.OwnerId <= 0 || t.OwnerId != accountId {
+		return nil, ErrTaskOwnerMismatch
 	}
 	if t.Status == model.TaskStatusDiscarded {
 		return &emptypb.Empty{}, nil
@@ -325,11 +432,16 @@ func (s *TaskService) GetMyMetrics(ctx context.Context, _ *emptypb.Empty) (*flow
 	if role == nil {
 		return nil, ErrRoleNotFound
 	}
+	accountId, err := accountIdFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	taskBase := func() *gorm.DB {
 		return s.host.DB.WithContext(ctx).Table(model.Task{}.TableName()+" AS t").
 			Where("t.application_id = ?", s.host.AppId).
 			Where("t.role_id = ?", role.Id).
+			Where("t.owner_id = ?", accountId).
 			Where("t.is_deleted = ?", false)
 	}
 	var openTasks int64
@@ -500,7 +612,17 @@ func (h *Host) blockersOf(ctx context.Context, taskIds []int64) (map[int64][]*fl
 	return out, nil
 }
 
-func taskToPb(t *model.Task, roleName, createdRoleName string, blockers []*flow_v1.TaskBlocker) *flow_v1.Task {
+type taskMeta struct {
+	roleName        string
+	createdRoleName string
+	ownerName       string
+	parentTitle     string
+	childTotal      int32
+	childDone       int32
+	childOpen       int32
+}
+
+func taskToPb(t *model.Task, meta taskMeta, blockers []*flow_v1.TaskBlocker) *flow_v1.Task {
 	state := model.TaskStateReady
 	switch t.Status {
 	case model.TaskStatusDone:
@@ -515,7 +637,7 @@ func taskToPb(t *model.Task, roleName, createdRoleName string, blockers []*flow_
 	return &flow_v1.Task{
 		Id:              cast.ToString(t.Id),
 		RoleId:          cast.ToString(t.RoleId),
-		RoleName:        roleName,
+		RoleName:        meta.roleName,
 		Title:           t.Title,
 		Brief:           t.Brief,
 		Status:          t.Status,
@@ -524,11 +646,83 @@ func taskToPb(t *model.Task, roleName, createdRoleName string, blockers []*flow_
 		Blockers:        blockers,
 		CreatedBy:       t.CreatedBy,
 		CreatedRoleId:   cast.ToString(t.CreatedRoleId),
-		CreatedRoleName: createdRoleName,
+		CreatedRoleName: meta.createdRoleName,
 		UpdatedBy:       t.UpdatedBy,
 		CreateTime:      tsOf(t.CreateTime),
 		UpdateTime:      tsOf(t.UpdateTime),
+		ParentTaskId:    cast.ToString(t.ParentTaskId),
+		ParentTaskTitle: meta.parentTitle,
+		OwnerId:         cast.ToString(t.OwnerId),
+		OwnerName:       meta.ownerName,
+		ChildTotal:      meta.childTotal,
+		ChildDone:       meta.childDone,
+		ChildOpen:       meta.childOpen,
 	}
+}
+
+func (h *Host) memberNameMapByAccountIDs(ctx context.Context, accountIds []int64) (map[int64]string, error) {
+	out := make(map[int64]string, len(accountIds))
+	if len(accountIds) == 0 {
+		return out, nil
+	}
+	var members []model.Member
+	if err := h.DB.WithContext(ctx).Select([]string{model.MemberColumnAccountId, model.MemberColumnName}).
+		Where(model.MemberColumnAccountId+" IN ?", accountIds).
+		Where(model.MemberColumnIsDeleted, false).
+		Find(&members).Error; err != nil {
+		return nil, err
+	}
+	for i := range members {
+		out[members[i].AccountId] = members[i].Name
+	}
+	return out, nil
+}
+
+func (h *Host) taskTitleMapByIDs(ctx context.Context, ids []int64) (map[int64]string, error) {
+	out := make(map[int64]string, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	var tasks []model.Task
+	if err := h.DB.WithContext(ctx).Select([]string{model.TaskColumnId, model.TaskColumnTitle}).
+		Where(model.TaskColumnId+" IN ?", ids).
+		Where(model.TaskColumnApplicationId, h.AppId).
+		Where(model.TaskColumnIsDeleted, false).
+		Find(&tasks).Error; err != nil {
+		return nil, err
+	}
+	for i := range tasks {
+		out[tasks[i].Id] = tasks[i].Title
+	}
+	return out, nil
+}
+
+// childStatsOf 返回 parent_task_id 的直接下级任务数、已完成数、仍 open 数。
+func (h *Host) childStatsOf(ctx context.Context, parentIds []int64) (map[int64][3]int32, error) {
+	out := make(map[int64][3]int32, len(parentIds))
+	if len(parentIds) == 0 {
+		return out, nil
+	}
+	type row struct {
+		ParentTaskId int64
+		Total        int64
+		Done         int64
+		Open         int64
+	}
+	var rows []row
+	if err := h.DB.WithContext(ctx).Table(model.Task{}.TableName()).
+		Select("parent_task_id, COUNT(*) AS total, SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) AS done, SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) AS open", model.TaskStatusDone, model.TaskStatusOpen).
+		Where(model.TaskColumnApplicationId, h.AppId).
+		Where(model.TaskColumnParentTaskId+" IN ?", parentIds).
+		Where(model.TaskColumnIsDeleted, false).
+		Group(model.TaskColumnParentTaskId).
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, r := range rows {
+		out[r.ParentTaskId] = [3]int32{int32(r.Total), int32(r.Done), int32(r.Open)}
+	}
+	return out, nil
 }
 
 func roleNameOf(m map[int64]string, id int64) string {

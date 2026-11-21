@@ -218,11 +218,11 @@ func tools() []map[string]any {
 		},
 		{
 			"name":        "list_tasks",
-			"description": "列任务：scope=mine（当前角色队列）/created（我发起的，跨角色）/all（全链路，仅 boss/pjm）；state 可筛 ready/blocked/done/discarded。",
+			"description": "列任务：scope=mine（我当前角色名下的任务）/upstream（上游角色任务，只读，用来建子任务）/created（我发起的，跨角色）/all（全链路，仅 boss/pjm）；state 可筛 ready/blocked/done/discarded。",
 			"inputSchema": map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"scope":     map[string]any{"type": "string", "enum": []string{"mine", "created", "all"}, "description": "默认 mine"},
+					"scope":     map[string]any{"type": "string", "enum": []string{"mine", "upstream", "created", "all"}, "description": "默认 mine"},
 					"state":     map[string]any{"type": "string", "description": "ready / blocked / done / discarded，可空"},
 					"page_size": map[string]any{"type": "integer", "description": "默认 20"},
 				},
@@ -319,20 +319,20 @@ func tools() []map[string]any {
 		},
 		{
 			"name":        "create_task",
-			"description": "给某个工作角色建一条任务（不传 role_code 就落在当前角色）。任务归属角色，不归属人。",
+			"description": "在当前人 + 当前角色名下建一条自己的任务。下游角色基于上游父任务建子任务：先 list_tasks(scope=upstream) 找父任务，再用 parent_task_id 建自己的任务。不允许把任务改派给别的角色。",
 			"inputSchema": map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"title":     map[string]any{"type": "string", "description": "任务标题"},
-					"brief":     map[string]any{"type": "string", "description": "一句话说明做什么、交付什么"},
-					"role_code": map[string]any{"type": "string", "description": "归属角色 code，如 analyst / pm / dev；不传用当前角色"},
+					"title":          map[string]any{"type": "string", "description": "任务标题"},
+					"brief":          map[string]any{"type": "string", "description": "一句话说明做什么、交付什么"},
+					"parent_task_id": map[string]any{"type": "string", "description": "父任务 id；为空表示顶层任务（老板目标）。父任务必须属于上游角色。"},
 				},
 				"required": []string{"title"},
 			},
 		},
 		{
 			"name":        "close_task",
-			"description": "把当前角色的任务标记完成。仍有 open 问题会被驳回（3001002）。",
+			"description": "完成自己名下的任务。仍有 open 问题返回 3001002；有未完成的直接下级任务返回 3001029。",
 			"inputSchema": map[string]any{
 				"type":       "object",
 				"properties": map[string]any{"task_id": map[string]any{"type": "string"}},
@@ -341,7 +341,7 @@ func tools() []map[string]any {
 		},
 		{
 			"name":        "discard_task",
-			"description": "作废当前角色的任务（不再需要做了）。会同时丢掉该任务下未闭环的问题。",
+			"description": "作废自己名下的任务（不再需要做了）。会同时丢掉该任务下未闭环的问题。",
 			"inputSchema": map[string]any{
 				"type":       "object",
 				"properties": map[string]any{"task_id": map[string]any{"type": "string"}},
@@ -538,9 +538,11 @@ func (s *server) callTool(ctx context.Context, name string, args map[string]any)
 			return "", errors.New("title 必填")
 		}
 		payload := map[string]any{
-			"title":    title,
-			"brief":    argStr(args, "brief"),
-			"roleCode": argStr(args, "role_code"),
+			"title": title,
+			"brief": argStr(args, "brief"),
+		}
+		if parent := argStr(args, "parent_task_id"); parent != "" {
+			payload["parentTaskId"] = parent
 		}
 		body, err := s.post(ctx, "/flow/tasks", payload)
 		if err != nil {

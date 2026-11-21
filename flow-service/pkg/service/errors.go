@@ -63,7 +63,13 @@ var (
 	ErrReopenForbidden       = NewErrorWithCode("3001025", codes.PermissionDenied, errors.New("只有原提问人可重开该问题；老板角色保留兜底权"))
 	ErrTaskReopenEnded       = NewErrorWithCode("3001026", codes.FailedPrecondition, errors.New("任务已结束（已完成或已作废），不能重开其下的问题；请新建任务继续跟进"))
 	ErrAllTasksForbidden     = NewErrorWithCode("3001027", codes.PermissionDenied, errors.New("全链路任务视图仅老板 / 项目经理可查看"))
-	ErrTaskScopeInvalid      = NewErrorWithCode("3001028", codes.InvalidArgument, errors.New("任务视图 scope 仅支持 mine / created / all"))
+	ErrTaskScopeInvalid      = NewErrorWithCode("3001028", codes.InvalidArgument, errors.New("任务视图 scope 仅支持 mine / created / upstream / all"))
+
+	// v1.2 任务树：
+	ErrChildTasksOpen        = NewErrorWithCode("3001029", codes.FailedPrecondition, errors.New("还有未完成的下级任务，父任务不能完成；先让下级任务全部完成"))
+	ErrTaskReassignForbidden = NewErrorWithCode("3001030", codes.InvalidArgument, errors.New("任务只能建在当前角色名下，不能改派给其他角色；请切到目标角色后由该角色自己建任务"))
+	ErrParentTaskInvalid     = NewErrorWithCode("3001031", codes.InvalidArgument, errors.New("父任务必须是上游角色的任务，且不能是自己"))
+	ErrTaskOwnerMismatch     = NewErrorWithCode("3001032", codes.PermissionDenied, errors.New("该任务不归你（当前账号）所有，不能替你完成或作废"))
 
 	// 菜单/字典错误别名（沿用 contrib 既有业务码）
 	ErrMenuNotFound           = menu.ErrMenuNotFound

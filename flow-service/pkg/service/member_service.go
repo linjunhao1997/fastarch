@@ -135,7 +135,7 @@ func (s *MemberService) ListMembers(ctx context.Context, req *flow_v1.ListMember
 		return nil, err
 	}
 	var ms []model.Member
-	if err := q.Select(model.MemberFields).Order(model.MemberColumnId+" ASC").
+	if err := q.Select(model.MemberFields).Order(model.MemberColumnId + " ASC").
 		Limit(limit).Offset(offset).Find(&ms).Error; err != nil {
 		return nil, err
 	}
@@ -463,6 +463,27 @@ func (h *Host) memberToPb(ctx context.Context, m *model.Member, roles []model.Wo
 		pb.OpenQuestions = int32(openQ)
 	}
 	return pb, nil
+}
+
+// taskStatsForOwner 返回“当前人 + 当前角色”下 open 任务的可开工数与被阻塞数。
+func (h *Host) taskStatsForOwner(ctx context.Context, roleId, ownerId int64) (ready, blocked int64, err error) {
+	base := h.DB.WithContext(ctx).Model(&model.Task{}).
+		Where(model.TaskColumnRoleId, roleId).
+		Where(model.TaskColumnOwnerId, ownerId).
+		Where(model.TaskColumnStatus, model.TaskStatusOpen).
+		Where(model.TaskColumnIsDeleted, false)
+
+	var total int64
+	if err = base.Count(&total).Error; err != nil {
+		return 0, 0, err
+	}
+	var blockedCount int64
+	if err = base.Where("EXISTS (SELECT 1 FROM " + model.Question{}.TableName() +
+		" q WHERE q.task_id = " + model.Task{}.TableName() + ".id AND q.status = 'open' AND q.is_deleted = 0)").
+		Count(&blockedCount).Error; err != nil {
+		return 0, 0, err
+	}
+	return total - blockedCount, blockedCount, nil
 }
 
 // taskStats 返回当前角色下 open 任务的可开工数与被阻塞数（派生，不落库）。

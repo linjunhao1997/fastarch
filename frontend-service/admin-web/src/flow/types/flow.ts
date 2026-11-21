@@ -79,6 +79,14 @@ export interface Task {
   /** v1.1.1：派发这条任务时的工作角色 */
   createdRoleId?: string;
   createdRoleName?: string;
+  /** v1.2：归属人、父任务、直接下级进度 */
+  ownerId?: string;
+  ownerName?: string;
+  parentTaskId?: string;
+  parentTaskTitle?: string;
+  childTotal?: number;
+  childDone?: number;
+  childOpen?: number;
   updatedBy: string;
   createTime: string;
   updateTime: string;
@@ -89,8 +97,8 @@ export interface ListMyTasksParams {
   pageSize?: number;
   keyword?: string;
   state?: string;
-  /** mine=当前角色队列；created=我发起的；all=全链路（boss/pjm） */
-  scope?: 'mine' | 'created' | 'all';
+  /** mine=我当前角色的任务；upstream=上游角色任务；created=我发起的；all=全链路（boss/pjm） */
+  scope?: 'mine' | 'upstream' | 'created' | 'all';
 }
 
 export interface ListTasksResponse {
@@ -106,6 +114,8 @@ export interface CreateTaskRequest {
   title: string;
   brief?: string;
   roleCode?: string;
+  /** 父任务 id；为空表示顶层任务 */
+  parentTaskId?: string;
 }
 
 /** 当前角色闭环质量指标（只读，/flow/metrics） */

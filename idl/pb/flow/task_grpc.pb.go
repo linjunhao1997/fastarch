@@ -33,10 +33,10 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type TaskServiceClient interface {
-	// 当前角色的任务清单（self-scoped：角色取自 JWT + 当前角色，不接受入参指定别人）
+	// 当前人 + 当前角色的任务清单（self-scoped）
 	ListMyTasks(ctx context.Context, in *ListMyTasksRequest, opts ...grpc.CallOption) (*ListTasksResponse, error)
 	GetTask(ctx context.Context, in *common.GetRequest, opts ...grpc.CallOption) (*Task, error)
-	// 建任务（默认落在当前角色上）
+	// 建任务：只能建在当前人名下、当前角色下；parent_task_id 非空表示基于上游任务派生的子任务。
 	CreateTask(ctx context.Context, in *CreateTaskRequest, opts ...grpc.CallOption) (*Task, error)
 	// 完成任务（动作语义，宪法 XIV）
 	CloseTask(ctx context.Context, in *common.GetRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
@@ -112,10 +112,10 @@ func (c *taskServiceClient) GetMyMetrics(ctx context.Context, in *emptypb.Empty,
 // All implementations should embed UnimplementedTaskServiceServer
 // for forward compatibility
 type TaskServiceServer interface {
-	// 当前角色的任务清单（self-scoped：角色取自 JWT + 当前角色，不接受入参指定别人）
+	// 当前人 + 当前角色的任务清单（self-scoped）
 	ListMyTasks(context.Context, *ListMyTasksRequest) (*ListTasksResponse, error)
 	GetTask(context.Context, *common.GetRequest) (*Task, error)
-	// 建任务（默认落在当前角色上）
+	// 建任务：只能建在当前人名下、当前角色下；parent_task_id 非空表示基于上游任务派生的子任务。
 	CreateTask(context.Context, *CreateTaskRequest) (*Task, error)
 	// 完成任务（动作语义，宪法 XIV）
 	CloseTask(context.Context, *common.GetRequest) (*emptypb.Empty, error)

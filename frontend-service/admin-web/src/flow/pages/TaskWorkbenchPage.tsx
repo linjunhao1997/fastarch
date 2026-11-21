@@ -35,7 +35,7 @@ const STATE_META: Record<string, { color: string; label: string }> = {
   discarded: { color: 'red', label: '已作废' },
 };
 
-type Scope = 'mine' | 'created' | 'all';
+type Scope = 'mine' | 'upstream' | 'created' | 'all';
 
 const STATE_TABS = [
   { label: '全部', value: '' },
@@ -54,18 +54,17 @@ export default function TaskWorkbenchPage() {
   // 走 App.useApp() 的实例方法：静态 Modal.confirm / message 在本工程的挂载环境下不渲染（点了像没反应）
   const { message, modal } = App.useApp();
   const [state, setState] = useState('');
-  const [scopeOverride, setScopeOverride] = useState<Scope | null>(null);
+  const [scope, setScope] = useState<Scope>('mine');
   const [keyword, setKeyword] = useState('');
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
+  const [parentTask, setParentTask] = useState<Task | null>(null);
   const [detail, setDetail] = useState<Task | null>(null);
   const [form] = Form.useForm<CreateTaskRequest>();
 
   const meQuery = useQuery({ queryKey: ['flow', 'me'], queryFn: memberApi.me });
   const me = meQuery.data;
-  // 老板不接执行任务，默认落在「我的队列」会一直为空；boss 直接进「我发起的」。
-  const defaultScope: Scope = me?.currentRole?.code === 'boss' ? 'created' : 'mine';
-  const scope: Scope = scopeOverride ?? defaultScope;
+  const canAll = me?.currentRole?.code === 'boss' || me?.currentRole?.code === 'pjm';
 
   const tasksQuery = useQuery({
     queryKey: ['flow', 'tasks', me?.currentRoleId, scope, state, keyword, page],
@@ -80,17 +79,12 @@ export default function TaskWorkbenchPage() {
     enabled: !!me?.currentRoleId,
   });
   const metrics = metricsQuery.data;
-  const canAll = me?.currentRole?.code === 'boss' || me?.currentRole?.code === 'pjm';
-  const scopeTabs = canAll
-    ? [
-        { label: '我的队列', value: 'mine' },
-        { label: '我发起的', value: 'created' },
-        { label: '全链路', value: 'all' },
-      ]
-    : [
-        { label: '我的队列', value: 'mine' },
-        { label: '我发起的', value: 'created' },
-      ];
+  const scopeTabs = [
+    { label: '我的任务', value: 'mine' },
+    ...(me?.currentRole?.code !== 'boss' ? [{ label: '上游任务', value: 'upstream' }] : []),
+    { label: '我发起的', value: 'created' },
+    ...(canAll ? [{ label: '全链路', value: 'all' }] : []),
+  ];
   const groupedTasks = useMemo(() => {
     const groups = new Map<string, Task[]>();
     for (const task of data?.tasks ?? []) {
@@ -114,7 +108,7 @@ export default function TaskWorkbenchPage() {
     mutationFn: (code: string) => memberApi.switchRole(code),
     onSuccess: async (next) => {
       setPage(1);
-      setScopeOverride(null);
+      setScope('mine');
       await invalidate();
       message.success(`已切换为「${next.currentRole?.name ?? ''}」`);
     },
@@ -125,9 +119,10 @@ export default function TaskWorkbenchPage() {
     mutationFn: (values: CreateTaskRequest) => taskApi.create(values),
     onSuccess: async () => {
       setCreateOpen(false);
+      setParentTask(null);
       form.resetFields();
       await invalidate();
-      message.success('任务已创建，落在当前角色上');
+      message.success('任务已建在你当前角色名下');
     },
     onError: (e: Error) => message.error(e.message),
   });
@@ -168,13 +163,24 @@ export default function TaskWorkbenchPage() {
         ),
       },
       {
-        title: '链路',
-        key: 'chain',
-        width: 210,
+        title: '归属 / 上游',
+        key: 'lineage',
+        width: 250,
         render: (_, record) => (
-          <Text style={{ fontSize: 12 }}>
-            {record.createdRoleName || '—'} → <Text strong>{record.roleName || '—'}</Text>
-          </Text>
+          <Space direction="vertical" size={2}>
+            <Text style={{ fontSize: 12 }}>
+              {record.ownerName || '—'} · <Text strong>{record.roleName || '—'}</Text>
+            </Text>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              {record.parentTaskTitle ? `↑ ${record.parentTaskTitle}` : '顶层任务'}
+            </Text>
+            {record.childTotal ? (
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                下级 {record.childDone}/{record.childTotal} 完成
+                {record.childOpen ? `，${record.childOpen} 个进行中` : ''}
+              </Text>
+            ) : null}
+          </Space>
         ),
       },
       {
@@ -223,8 +229,11 @@ export default function TaskWorkbenchPage() {
       {
         title: '操作',
         key: 'action',
-        width: 190,
-        render: (_, record) => (
+        width: 250,
+        render: (_, record) => {
+          const pendingChildren =
+            record.childOpen ?? Math.max(0, (record.childTotal ?? 0) - (record.childDone ?? 0));
+          return (
           <Space size={0}>
             <Button type="link" size="small" onClick={() => setDetail(record)}>详情</Button>
             {scope === 'mine' && record.state === 'blocked' ? (
@@ -232,7 +241,7 @@ export default function TaskWorkbenchPage() {
                 <Button type="link" size="small">去闭环</Button>
               </Link>
             ) : null}
-            {scope === 'mine' && record.state === 'ready' ? (
+            {scope === 'mine' && record.state === 'ready' && pendingChildren === 0 ? (
               <Button
                 type="link"
                 size="small"
@@ -251,6 +260,23 @@ export default function TaskWorkbenchPage() {
                 }
               >
                 完成
+              </Button>
+            ) : null}
+            {scope === 'mine' && record.state === 'ready' && pendingChildren > 0 ? (
+              <Text type="secondary" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+                等 {pendingChildren} 个下级完成
+              </Text>
+            ) : null}
+            {scope !== 'mine' && record.status === 'open' && record.roleId !== me?.currentRoleId ? (
+              <Button
+                type="link"
+                size="small"
+                onClick={() => {
+                  setParentTask(record);
+                  setCreateOpen(true);
+                }}
+              >
+                基于此建我的任务
               </Button>
             ) : null}
             {scope === 'mine' && record.status === 'open' ? (
@@ -278,10 +304,11 @@ export default function TaskWorkbenchPage() {
               </Button>
             ) : null}
           </Space>
-        ),
+          );
+        },
       },
     ],
-    [closeMutation, discardMutation, modal, scope],
+    [closeMutation, discardMutation, modal, scope, me?.currentRoleId, form],
   );
 
   return (
@@ -363,26 +390,15 @@ export default function TaskWorkbenchPage() {
         />
       ) : null}
 
-      {scope === 'mine' && data && data.page.total === 0 && canAll ? (
-        <Alert
-          type="info"
-          showIcon
-          message="当前角色没有待办任务"
-          description={
-            <Text type="secondary">
-              老板/项目经理通常不接执行任务，这里为空是正常的：点上方「我发起的」看自己派下去的活，点「全链路」按角色看全局进展。
-            </Text>
-          }
-        />
-      ) : null}
-
       <Card
         title={
           scope === 'created'
             ? '我发起的任务'
             : scope === 'all'
-              ? '全链路任务（按角色）'
-              : `${data?.roleName || '当前角色'} 的任务`
+              ? '全链路任务树（按角色）'
+              : scope === 'upstream'
+                ? '上游任务（只读，可基于它建自己的任务）'
+                : '我的任务'
         }
         extra={
           <Space>
@@ -395,7 +411,14 @@ export default function TaskWorkbenchPage() {
                 setPage(1);
               }}
             />
-            <Button type="primary" onClick={() => setCreateOpen(true)} disabled={!me?.currentRole}>
+            <Button
+              type="primary"
+              onClick={() => {
+                setParentTask(null);
+                setCreateOpen(true);
+              }}
+              disabled={!me?.currentRole}
+            >
               新建任务
             </Button>
           </Space>
@@ -407,13 +430,13 @@ export default function TaskWorkbenchPage() {
               options={scopeTabs}
               value={scope}
               onChange={(value) => {
-                setScopeOverride(value as Scope);
+                setScope(value as Scope);
                 setPage(1);
               }}
             />
             {scope !== 'mine' ? (
               <Text type="secondary" style={{ fontSize: 12 }}>
-                只读视图：任务仍归当前角色所有，完成/作废请切回对应角色。
+                只读：任务归创建者所有；要接着做，请基于它新建自己的子任务，不能替别人完成。
               </Text>
             ) : null}
           </Space>
@@ -460,12 +483,19 @@ export default function TaskWorkbenchPage() {
       </Card>
 
       <Modal
-        title="新建任务"
+        title={parentTask ? '基于上游任务新建我的任务' : '新建我的任务'}
         open={createOpen}
-        onCancel={() => setCreateOpen(false)}
+        onCancel={() => {
+          setCreateOpen(false);
+          setParentTask(null);
+          form.resetFields();
+        }}
         onOk={async () => {
           const values = await form.validateFields();
-          await createMutation.mutateAsync({ ...values, roleCode: me?.currentRole?.code });
+          await createMutation.mutateAsync({
+            ...values,
+            parentTaskId: parentTask?.id,
+          });
         }}
         confirmLoading={createMutation.isPending}
         destroyOnClose
@@ -474,14 +504,23 @@ export default function TaskWorkbenchPage() {
           type="info"
           showIcon
           style={{ marginBottom: 16 }}
-          message={`任务会落在「${me?.currentRole?.name ?? ''}」这个角色上，谁担任这个角色谁就能看到。`}
+          message={
+            parentTask
+              ? `父任务：${parentTask.title}`
+              : `任务归你（${me?.currentRole?.name ?? '当前角色'}）所有，不会改派给别人。`
+          }
+          description={
+            parentTask
+              ? '新任务归你和当前角色，父任务不会改派；父任务要等这条及所有下级任务完成后才能完成。'
+              : '每级角色只建自己的任务；下游要接着做，请到「上游任务」里基于父任务新建。'
+          }
         />
         <Form form={form} layout="vertical" preserve={false}>
           <Form.Item name="title" label="任务标题" rules={[{ required: true, message: '请写清要做什么' }]}>
-            <Input placeholder="例如：实现任务工作台的前端页面" maxLength={120} />
+            <Input placeholder="例如：基于老板目标拆解需求边界" maxLength={120} />
           </Form.Item>
           <Form.Item name="brief" label="任务说明">
-            <Input.TextArea rows={4} placeholder="输入产出要求、验收标准、依赖的上游产物链接…" />
+            <Input.TextArea rows={4} placeholder="写清你的产出、验收标准，以及你从父任务承接了什么…" />
           </Form.Item>
         </Form>
       </Modal>
@@ -499,10 +538,32 @@ export default function TaskWorkbenchPage() {
                 <Tag color={STATE_META[detail.state]?.color}>{STATE_META[detail.state]?.label ?? detail.state}</Tag>
               </Descriptions.Item>
               <Descriptions.Item label="角色">{detail.roleName}</Descriptions.Item>
+              <Descriptions.Item label="负责人">{detail.ownerName || '—'}</Descriptions.Item>
+              <Descriptions.Item label="父任务">
+                {detail.parentTaskTitle ? `${detail.parentTaskTitle}（#${detail.parentTaskId}）` : '顶层任务'}
+              </Descriptions.Item>
+              {detail.childTotal ? (
+                <Descriptions.Item label="下级任务">
+                  {detail.childDone}/{detail.childTotal} 已完成
+                  {detail.childOpen ? `，${detail.childOpen} 个进行中` : ''}；未全部完成前父任务不能完成
+                </Descriptions.Item>
+              ) : null}
               <Descriptions.Item label="更新时间">
                 {detail.updateTime ? new Date(detail.updateTime).toLocaleString() : '-'}
               </Descriptions.Item>
             </Descriptions>
+            {detail.roleId !== me?.currentRoleId && detail.status === 'open' ? (
+              <Button
+                type="primary"
+                onClick={() => {
+                  setParentTask(detail);
+                  setDetail(null);
+                  setCreateOpen(true);
+                }}
+              >
+                基于此任务建我的任务
+              </Button>
+            ) : null}
             <div>
               <Text strong>任务说明</Text>
               <Paragraph style={{ marginTop: 8, whiteSpace: 'pre-wrap' }}>{detail.brief || '（无）'}</Paragraph>

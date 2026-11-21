@@ -12,11 +12,12 @@ import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 import "buf/validate/validate.proto";
 
-// 任务服务（flow 宿主）：任务只归属「工作角色」，不归属人。
+// 任务服务（flow 宿主）：任务是树节点，归创建它的「人 + 角色」所有。
+// 下游角色基于父任务新建自己的子任务，不能改派、不能替上游执行。
 // t_task.status 只有 open/done/discarded；能不能开工（ready/blocked）由问题表现算，
 // 不落库（宪法 V 派生而非复制）。
 service TaskService {
-  // 当前角色的任务清单（self-scoped：角色取自 JWT + 当前角色，不接受入参指定别人）
+  // 当前人 + 当前角色的任务清单（self-scoped）
   rpc ListMyTasks(ListMyTasksRequest) returns (ListTasksResponse) {
     option (google.api.http) = {
       get: "/flow/tasks"
@@ -29,7 +30,7 @@ service TaskService {
     };
   }
 
-  // 建任务（默认落在当前角色上）
+  // 建任务：只能建在当前人名下、当前角色下；parent_task_id 非空表示基于上游任务派生的子任务。
   rpc CreateTask(CreateTaskRequest) returns (Task) {
     option (google.api.http) = {
       post: "/flow/tasks"
@@ -85,6 +86,14 @@ message Task {
   // v1.1.1 角色归因：谁派发的（工作角色），与“现在在谁手里”分开
   string created_role_id = 14;
   string created_role_name = 15;
+  // v1.2 任务树：归属人、父任务、下级进度
+  string parent_task_id = 16;
+  string parent_task_title = 17;
+  string owner_id = 18;
+  string owner_name = 19;
+  int32 child_total = 20;
+  int32 child_done = 21;
+  int32 child_open = 22;
 }
 
 message ListMyTasksRequest {
@@ -93,8 +102,8 @@ message ListMyTasksRequest {
   string keyword = 3;
   // 可选派生状态过滤：ready / blocked / done / discarded
   string state = 4;
-  // v1.1.1 视图范围：""/mine=当前角色队列；created=我发起的（跨角色）；
-  // all=全链路（仅 boss/pjm，只读）
+  // v1.1.1 视图范围：""/mine=当前人+当前角色的任务；created=我发起的（跨角色）；
+  // upstream=上游角色的任务（只读，用于建子任务）；all=全链路（仅 boss/pjm，只读）
   string scope = 5;
 }
 
@@ -111,8 +120,10 @@ message ListTasksResponse {
 message CreateTaskRequest {
   string title = 1 [(buf.validate.field).string.min_len = 1];
   string brief = 2;
-  // 可选：不传则落在当前角色；传了必须是本人可担任的角色
+  // 已废弃：不再允许改派给其他角色；传了非当前角色会被拒绝。
   string role_code = 3;
+  // 父任务 id；为空表示顶层任务。父任务必须属于上游角色。
+  string parent_task_id = 4;
 }
 
 // 当前角色的闭环质量指标（只读）。

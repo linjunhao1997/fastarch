@@ -41,7 +41,7 @@
     },
     "/flow/tasks": {
       "get": {
-        "summary": "当前角色的任务清单（self-scoped：角色取自 JWT + 当前角色，不接受入参指定别人）",
+        "summary": "当前人 + 当前角色的任务清单（self-scoped）",
         "operationId": "TaskService_ListMyTasks",
         "responses": {
           "200": {
@@ -87,7 +87,7 @@
           },
           {
             "name": "scope",
-            "description": "v1.1.1 视图范围：\"\"/mine=当前角色队列；created=我发起的（跨角色）；\nall=全链路（仅 boss/pjm，只读）",
+            "description": "v1.1.1 视图范围：\"\"/mine=当前人+当前角色的任务；created=我发起的（跨角色）；\nupstream=上游角色的任务（只读，用于建子任务）；all=全链路（仅 boss/pjm，只读）",
             "in": "query",
             "required": false,
             "type": "string"
@@ -98,7 +98,7 @@
         ]
       },
       "post": {
-        "summary": "建任务（默认落在当前角色上）",
+        "summary": "建任务：只能建在当前人名下、当前角色下；parent_task_id 非空表示基于上游任务派生的子任务。",
         "operationId": "TaskService_CreateTask",
         "responses": {
           "200": {
@@ -267,7 +267,11 @@
         },
         "roleCode": {
           "type": "string",
-          "title": "可选：不传则落在当前角色；传了必须是本人可担任的角色"
+          "title": "已废弃：不再允许改派给其他角色；传了非当前角色会被拒绝。"
+        },
+        "parentTaskId": {
+          "type": "string",
+          "title": "父任务 id；为空表示顶层任务。父任务必须属于上游角色。"
         }
       }
     },
@@ -452,6 +456,31 @@
         },
         "createdRoleName": {
           "type": "string"
+        },
+        "parentTaskId": {
+          "type": "string",
+          "title": "v1.2 任务树：归属人、父任务、下级进度"
+        },
+        "parentTaskTitle": {
+          "type": "string"
+        },
+        "ownerId": {
+          "type": "string"
+        },
+        "ownerName": {
+          "type": "string"
+        },
+        "childTotal": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "childDone": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "childOpen": {
+          "type": "integer",
+          "format": "int32"
         }
       }
     },
