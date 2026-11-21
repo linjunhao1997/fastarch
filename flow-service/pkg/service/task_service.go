@@ -247,6 +247,13 @@ func (s *TaskService) CreateTask(ctx context.Context, req *flow_v1.CreateTaskReq
 		if parent.RoleId == role.Id || parentRole.Sort >= role.Sort {
 			return nil, ErrParentTaskInvalid
 		}
+		openQ, err := s.host.openQuestionCount(ctx, 0, parent.Id)
+		if err != nil {
+			return nil, err
+		}
+		if openQ > 0 {
+			return nil, ErrParentTaskBlocked
+		}
 	}
 
 	t := model.Task{

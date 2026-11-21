@@ -319,7 +319,7 @@ func tools() []map[string]any {
 		},
 		{
 			"name":        "create_task",
-			"description": "在当前人 + 当前角色名下建一条自己的任务。下游角色基于上游父任务建子任务：先 list_tasks(scope=upstream) 找父任务，再用 parent_task_id 建自己的任务。不允许把任务改派给别的角色。",
+			"description": "在当前人 + 当前角色名下建一条自己的任务。下游角色基于上游父任务建子任务：先 list_tasks(scope=upstream) 找父任务，再用 parent_task_id 建自己的任务。父任务有未闭环问题时返回 3001033；不允许把任务改派给别的角色。",
 			"inputSchema": map[string]any{
 				"type": "object",
 				"properties": map[string]any{

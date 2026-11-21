@@ -70,6 +70,7 @@ var (
 	ErrTaskReassignForbidden = NewErrorWithCode("3001030", codes.InvalidArgument, errors.New("任务只能建在当前角色名下，不能改派给其他角色；请切到目标角色后由该角色自己建任务"))
 	ErrParentTaskInvalid     = NewErrorWithCode("3001031", codes.InvalidArgument, errors.New("父任务必须是上游角色的任务，且不能是自己"))
 	ErrTaskOwnerMismatch     = NewErrorWithCode("3001032", codes.PermissionDenied, errors.New("该任务不归你（当前账号）所有，不能替你完成或作废"))
+	ErrParentTaskBlocked     = NewErrorWithCode("3001033", codes.FailedPrecondition, errors.New("父任务还有未闭环问题，不能基于它新建子任务；先等父任务的问题闭环"))
 
 	// 菜单/字典错误别名（沿用 contrib 既有业务码）
 	ErrMenuNotFound           = menu.ErrMenuNotFound

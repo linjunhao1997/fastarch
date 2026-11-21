@@ -267,7 +267,7 @@ export default function TaskWorkbenchPage() {
                 等 {pendingChildren} 个下级完成
               </Text>
             ) : null}
-            {scope !== 'mine' && record.status === 'open' && record.roleId !== me?.currentRoleId ? (
+            {scope !== 'mine' && record.status === 'open' && record.roleId !== me?.currentRoleId && record.state !== 'blocked' ? (
               <Button
                 type="link"
                 size="small"
@@ -278,6 +278,11 @@ export default function TaskWorkbenchPage() {
               >
                 基于此建我的任务
               </Button>
+            ) : null}
+            {scope !== 'mine' && record.status === 'open' && record.roleId !== me?.currentRoleId && record.state === 'blocked' ? (
+              <Text type="warning" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+                父任务有问题待闭环
+              </Text>
             ) : null}
             {scope === 'mine' && record.status === 'open' ? (
               <Button
@@ -552,7 +557,7 @@ export default function TaskWorkbenchPage() {
                 {detail.updateTime ? new Date(detail.updateTime).toLocaleString() : '-'}
               </Descriptions.Item>
             </Descriptions>
-            {detail.roleId !== me?.currentRoleId && detail.status === 'open' ? (
+            {detail.roleId !== me?.currentRoleId && detail.status === 'open' && detail.state !== 'blocked' ? (
               <Button
                 type="primary"
                 onClick={() => {
@@ -563,6 +568,14 @@ export default function TaskWorkbenchPage() {
               >
                 基于此任务建我的任务
               </Button>
+            ) : null}
+            {detail.roleId !== me?.currentRoleId && detail.state === 'blocked' ? (
+              <Alert
+                type="warning"
+                showIcon
+                message="这个任务还有未闭环问题，先别往下派生"
+                description="等父任务的问题闭环后，再基于它新建你自己的子任务。"
+              />
             ) : null}
             <div>
               <Text strong>任务说明</Text>
