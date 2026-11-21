@@ -56,7 +56,7 @@ service MemberService {
 // 工作角色（环节职责，不含任何权限语义）
 message WorkRole {
   string id = 1;
-  string code = 2;   // dev / qa / arch / pm / pjm / ops ...
+  string code = 2;   // boss / analyst / pm / arch / dev / qa / ops
   string name = 3;   // 开发 / 测试 / 架构师 / 产品经理 ...
   string stage = 4;  // 环节名：编码实现
   int32 sort = 5;

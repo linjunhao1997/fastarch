@@ -12,15 +12,16 @@
 | 归属角色 | `t_task.role_id`，创建时所用角色，不再改派 |
 | 父任务 | `t_task.parent_task_id`，0=顶层，非 0=基于上游父任务派生 |
 | 契约 | `Task.parent_task_id/parent_task_title/owner_id/owner_name/child_total/child_done/child_open` |
-| 视图 | `mine`（本人+当前角色）/`upstream`（上游角色，只读）/`created`/`all`（boss+pjm） |
+| 视图 | `mine`（本人+当前角色）/`upstream`（上游角色，只读）/`created`/`all`（boss） |
 
 ## 2. 迁移
 
 ```text
-schema_migrations: version=3, dirty=0
+schema_migrations: version=4, dirty=0
 t_task.owner_id        default 0, indexed
 t_task.parent_task_id  default 0, indexed
 历史任务按“持有该角色的成员”回填 owner_id
+000004 停用 pjm，并清掉成员担任关系、回退当前角色
 ```
 
 ## 3. 建任务规则（实测）

@@ -31,7 +31,7 @@ type WorkRole struct {
 	unknownFields protoimpl.UnknownFields
 
 	Id    string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Code  string `protobuf:"bytes,2,opt,name=code,proto3" json:"code,omitempty"`   // dev / qa / arch / pm / pjm / ops ...
+	Code  string `protobuf:"bytes,2,opt,name=code,proto3" json:"code,omitempty"`   // boss / analyst / pm / arch / dev / qa / ops
 	Name  string `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`   // 开发 / 测试 / 架构师 / 产品经理 ...
 	Stage string `protobuf:"bytes,4,opt,name=stage,proto3" json:"stage,omitempty"` // 环节名：编码实现
 	Sort  int32  `protobuf:"varint,5,opt,name=sort,proto3" json:"sort,omitempty"`

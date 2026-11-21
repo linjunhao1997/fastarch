@@ -376,7 +376,7 @@
         },
         "code": {
           "type": "string",
-          "description": "dev / qa / arch / pm / pjm / ops ..."
+          "title": "boss / analyst / pm / arch / dev / qa / ops"
         },
         "name": {
           "type": "string",

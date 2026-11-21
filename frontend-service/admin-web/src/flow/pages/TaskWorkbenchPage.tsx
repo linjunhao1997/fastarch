@@ -36,7 +36,7 @@ const STATE_META: Record<string, { color: string; label: string }> = {
 };
 
 /** 规划类角色建完任务后不是自己开工，而是等下游拆解。 */
-const PLANNING_ROLE_CODES = new Set(['boss', 'analyst', 'pm', 'arch', 'pjm']);
+const PLANNING_ROLE_CODES = new Set(['boss', 'analyst', 'pm', 'arch']);
 
 function taskStateMeta(task: Task, roleCode?: string) {
   const base = STATE_META[task.state] ?? { color: 'default', label: task.state };
@@ -79,7 +79,7 @@ export default function TaskWorkbenchPage() {
     () => new Map((me?.roles ?? []).map((r) => [r.id, r.code] as const)),
     [me?.roles],
   );
-  const canAll = me?.currentRole?.code === 'boss' || me?.currentRole?.code === 'pjm';
+  const canAll = me?.currentRole?.code === 'boss';
 
   const tasksQuery = useQuery({
     queryKey: ['flow', 'tasks', me?.currentRoleId, scope, state, keyword, page],

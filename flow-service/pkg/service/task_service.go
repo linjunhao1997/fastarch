@@ -34,7 +34,7 @@ func (s *TaskService) ListMyTasks(ctx context.Context, req *flow_v1.ListMyTasksR
 	if scope != "mine" && scope != "created" && scope != "upstream" && scope != "all" {
 		return nil, ErrTaskScopeInvalid
 	}
-	if scope == "all" && (role == nil || (role.Code != "boss" && role.Code != "pjm")) {
+	if scope == "all" && (role == nil || role.Code != "boss") {
 		return nil, ErrAllTasksForbidden
 	}
 	if scope == "mine" && role == nil {

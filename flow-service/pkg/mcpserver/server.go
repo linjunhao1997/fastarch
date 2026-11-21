@@ -213,7 +213,7 @@ func tools() []map[string]any {
 		},
 		{
 			"name":        "list_tasks",
-			"description": "列任务：scope=mine（我当前角色名下的任务）/upstream（上游角色任务，只读，用来建子任务）/created（我发起的，跨角色）/all（全部，仅 boss/pjm）；state 可筛 ready/blocked/done/discarded。",
+			"description": "列任务：scope=mine（我当前角色名下的任务）/upstream（上游角色任务，只读，用来建子任务）/created（我发起的，跨角色）/all（全部，仅 boss）；state 可筛 ready/blocked/done/discarded。",
 			"inputSchema": map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -267,7 +267,7 @@ func tools() []map[string]any {
 				"type": "object",
 				"properties": map[string]any{
 					"task_id":      map[string]any{"type": "string"},
-					"to_role_code": map[string]any{"type": "string", "description": "问谁：pm / arch / pjm / ops ..."},
+					"to_role_code": map[string]any{"type": "string", "description": "问谁：analyst / pm / arch / dev / qa / ops ..."},
 					"body":         map[string]any{"type": "string", "description": "问题描述，越具体越好"},
 					"answer_kind":  map[string]any{"type": "string", "enum": []string{"decision", "evidence"}, "description": "默认 decision"},
 					"options": map[string]any{
@@ -293,7 +293,7 @@ func tools() []map[string]any {
 				"type": "object",
 				"properties": map[string]any{
 					"question_id":  map[string]any{"type": "string", "description": "要上报的问题 id（必须是发给当前角色的 open 问题）"},
-					"to_role_code": map[string]any{"type": "string", "description": "上报给谁：boss / pjm / ops ..."},
+					"to_role_code": map[string]any{"type": "string", "description": "上报给谁：boss / qa / ops ..."},
 					"body":         map[string]any{"type": "string", "description": "为什么要上报、卡在哪，越具体越好"},
 					"options": map[string]any{
 						"type": "array",

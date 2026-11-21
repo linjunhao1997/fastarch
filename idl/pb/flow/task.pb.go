@@ -333,7 +333,7 @@ type ListMyTasksRequest struct {
 	// 可选派生状态过滤：ready / blocked / done / discarded
 	State string `protobuf:"bytes,4,opt,name=state,proto3" json:"state,omitempty"`
 	// v1.1.1 视图范围：""/mine=当前人+当前角色的任务；created=我发起的（跨角色）；
-	// upstream=上游角色的任务（只读，用于建子任务）；all=全链路（仅 boss/pjm，只读）
+	// upstream=上游角色的任务（只读，用于建子任务）；all=全部（仅 boss，只读）
 	Scope string `protobuf:"bytes,5,opt,name=scope,proto3" json:"scope,omitempty"`
 }
 
