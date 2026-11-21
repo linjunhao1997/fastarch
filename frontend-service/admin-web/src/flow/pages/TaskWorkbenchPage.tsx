@@ -77,7 +77,7 @@ export default function TaskWorkbenchPage() {
     { label: '我的任务', value: 'mine' },
     ...(me?.currentRole?.code !== 'boss' ? [{ label: '上游任务', value: 'upstream' }] : []),
     { label: '我发起的', value: 'created' },
-    ...(canAll ? [{ label: '全链路', value: 'all' }] : []),
+    ...(canAll ? [{ label: '全部', value: 'all' }] : []),
   ];
   const groupedTasks = useMemo(() => {
     const groups = new Map<string, Task[]>();
@@ -157,25 +157,11 @@ export default function TaskWorkbenchPage() {
         ),
       },
       {
-        title: '归属 / 上游',
-        key: 'lineage',
-        width: 250,
-        render: (_, record) => (
-          <Space direction="vertical" size={2}>
-            <Text style={{ fontSize: 12 }}>
-              {record.ownerName || '—'} · <Text strong>{record.roleName || '—'}</Text>
-            </Text>
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              {record.parentTaskTitle ? `↑ ${record.parentTaskTitle}` : '顶层任务'}
-            </Text>
-            {record.childTotal ? (
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                下级 {record.childDone}/{record.childTotal} 完成
-                {record.childOpen ? `，${record.childOpen} 个进行中` : ''}
-              </Text>
-            ) : null}
-          </Space>
-        ),
+        title: '处理角色',
+        dataIndex: 'roleName',
+        key: 'roleName',
+        width: 160,
+        render: (value: string) => <Text strong>{value || '—'}</Text>,
       },
       {
         title: '状态',
@@ -336,7 +322,7 @@ export default function TaskWorkbenchPage() {
                 ) : null}
               </Space>
               <Text type="secondary" style={{ fontSize: 12 }}>
-                一人可担任多个角色；任务归属于角色，不归属于人。切换角色后看到的是该角色的队列。
+                一人可担任多个角色；任务归人，切换角色后只显示该角色名下的任务。
               </Text>
             </Space>
           </Col>
@@ -368,7 +354,7 @@ export default function TaskWorkbenchPage() {
           scope === 'created'
             ? '我发起的任务'
             : scope === 'all'
-              ? '全链路任务树（按角色）'
+              ? '全部任务树（按角色）'
               : scope === 'upstream'
                 ? '上游任务（只读，可基于它建自己的任务）'
                 : '我的任务'

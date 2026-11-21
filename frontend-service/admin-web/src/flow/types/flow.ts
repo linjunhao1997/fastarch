@@ -97,7 +97,7 @@ export interface ListMyTasksParams {
   pageSize?: number;
   keyword?: string;
   state?: string;
-  /** mine=我当前角色的任务；upstream=上游角色任务；created=我发起的；all=全链路（boss/pjm） */
+  /** mine=我当前角色的任务；upstream=上游角色任务；created=我发起的；all=全部（boss/pjm） */
   scope?: 'mine' | 'upstream' | 'created' | 'all';
 }
 

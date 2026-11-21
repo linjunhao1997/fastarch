@@ -191,7 +191,7 @@ MCP 只是 HTTP 客户端：身份与判权仍由 JWT + IAM `CheckPermission` �
 | 3001024 | 只有已闭环的问题才能重开 |
 | 3001025 | 不是原提问人，且当前角色不是 boss，不能重开 |
 | 3001026 | 任务已结束（done/discarded），不能重开其下问题 |
-| 3001027 | 全链路任务视图仅老板 / 项目经理可查看 |
+| 3001027 | 全部任务视图仅老板 / 项目经理可查看 |
 | 3001028 | 任务视图 scope 仅支持 mine / created / all |
 
 ## 8. 已知边界（MVP 取舍）
@@ -259,7 +259,7 @@ Invoke-RestMethod -Uri 'http://127.0.0.1:8082/flow/mcp' -Method Post -ContentTyp
 | --- | --- | --- |
 | `t_task` / `Task` | `created_role_id` / `created_role_name` | `CreateTask` 时取**创建动作发生时的当前角色** |
 | `t_question` / `Question` | `answered_role_id` / `answered_role_name` | `AnswerQuestion` 时取**当前回答角色**；`reopen` 清 0 |
-| `ListMyTasksRequest` | `scope` | `mine`（默认）/ `created`（我发起的）/ `all`（全链路，仅 boss/pjm） |
+| `ListMyTasksRequest` | `scope` | `mine`（默认）/ `created`（我发起的）/ `all`（全部，仅 boss/pjm） |
 
 迁移 `000002_role_attribution` 只加两列，旧数据保持 0，前端显示“—”；不改变 ready/blocked 派生。
 
@@ -267,14 +267,14 @@ Invoke-RestMethod -Uri 'http://127.0.0.1:8082/flow/mcp' -Method Post -ContentTyp
 
 - **我的队列（mine）**：当前角色名下的任务，可完成/作废/去闭环。
 - **我发起的（created）**：`created_by = 当前账号` 的任务，跨角色可见，只读；解决“老板派完就看不见”。老板登录时默认落在这个视图，不再先看到空的“我的队列”；老板/项目经理的空队列会给出切换提示。
-- **全链路（all）**：老板 / 项目经理可见，按 `role_name` 分组，只读；其他角色调用返回 3001027。
+- **全部（all）**：老板 / 项目经理可见，按 `role_name` 分组，只读；其他角色调用返回 3001027。
 - 任务表新增“链路”列：`创建角色 → 当前角色`，一眼看出这一跳是谁派的、现在在谁手里。
 - 问题卡片与留痕抽屉显示“回答角色：老板（boss）”，同账号多角色不再靠猜。
 
 ### 11.4 MCP 与页面
 
-- MCP 增 `list_tasks(scope/state/page_size)`，工具数 16；agent 也能看“我发起的”和全链路。
-- 任务工作台顶部 Segmented 切换视图；全链路按角色分组展示；非 mine 视图隐藏完成/作废/去闭环，避免越权操作。
+- MCP 增 `list_tasks(scope/state/page_size)`，工具数 16；agent 也能看“我发起的”和全部。
+- 任务工作台顶部 Segmented 切换视图；全部按角色分组展示；非 mine 视图隐藏完成/作废/去闭环，避免越权操作。
 - 问题中心已闭环卡片 + 留痕事件都显示回答角色；旧事件没有 `answer_role_id` 时显示“—”。
 
 ### 11.5 验收
@@ -307,7 +307,7 @@ v1.1.1 的任务仍只挂 `role_id`，`CreateTask` 允许用 `role_code` 把任�
 - **我的任务（mine）**：`owner_id=当前账号 AND role_id=当前角色`；老板看到自己建的父任务。
 - **上游任务（upstream）**：`role.sort < 当前角色.sort` 的任务，只读；用于基于父任务建子任务。
 - **我发起的（created）**：`created_by=当前账号`，跨角色。
-- **全链路（all）**：boss/pjm 只读，按角色分组。
+- **全部（all）**：boss/pjm 只读，按角色分组。
 
 ### 12.4 完成门槛
 
@@ -319,7 +319,7 @@ v1.1.1 的任务仍只挂 `role_id`，`CreateTask` 允许用 `role_code` 把任�
 
 - 任务表“归属 / 上游”列显示：负责人 + 角色、父任务标题、下级 `完成/总数`。
 - “我的任务”只显示自己的任务；有未完成下级时完成按钮换成“等 N 个下级完成”。
-- “上游任务”与“全链路”只读，提供“基于此建我的任务”，打开新建弹窗并带上父任务。
+- “上游任务”与“全部”只读，提供“基于此建我的任务”，打开新建弹窗并带上父任务。
 - 新建弹窗明确：任务归你和当前角色，不改派；父任务要等这条及所有下级完成。
 - 顶部只保留可开工 / 被阻塞 / 待我闭环；平均闭环、P50 闭环、重开率、闭环后停滞已下线（含 `/flow/metrics` 与 MCP `metrics`）。
 

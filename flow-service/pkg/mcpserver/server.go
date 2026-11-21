@@ -213,7 +213,7 @@ func tools() []map[string]any {
 		},
 		{
 			"name":        "list_tasks",
-			"description": "列任务：scope=mine（我当前角色名下的任务）/upstream（上游角色任务，只读，用来建子任务）/created（我发起的，跨角色）/all（全链路，仅 boss/pjm）；state 可筛 ready/blocked/done/discarded。",
+			"description": "列任务：scope=mine（我当前角色名下的任务）/upstream（上游角色任务，只读，用来建子任务）/created（我发起的，跨角色）/all（全部，仅 boss/pjm）；state 可筛 ready/blocked/done/discarded。",
 			"inputSchema": map[string]any{
 				"type": "object",
 				"properties": map[string]any{

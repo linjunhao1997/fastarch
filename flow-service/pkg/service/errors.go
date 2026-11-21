@@ -62,7 +62,7 @@ var (
 	ErrQuestionNotAnswered   = NewErrorWithCode("3001024", codes.FailedPrecondition, errors.New("只有已闭环的问题才能重开"))
 	ErrReopenForbidden       = NewErrorWithCode("3001025", codes.PermissionDenied, errors.New("只有原提问人可重开该问题；老板角色保留兜底权"))
 	ErrTaskReopenEnded       = NewErrorWithCode("3001026", codes.FailedPrecondition, errors.New("任务已结束（已完成或已作废），不能重开其下的问题；请新建任务继续跟进"))
-	ErrAllTasksForbidden     = NewErrorWithCode("3001027", codes.PermissionDenied, errors.New("全链路任务视图仅老板 / 项目经理可查看"))
+	ErrAllTasksForbidden     = NewErrorWithCode("3001027", codes.PermissionDenied, errors.New("全部任务视图仅老板 / 项目经理可查看"))
 	ErrTaskScopeInvalid      = NewErrorWithCode("3001028", codes.InvalidArgument, errors.New("任务视图 scope 仅支持 mine / created / upstream / all"))
 
 	// v1.2 任务树：
