@@ -35,11 +35,22 @@ const STATE_META: Record<string, { color: string; label: string }> = {
   discarded: { color: 'red', label: '已作废' },
 };
 
+/** 规划类角色建完任务后不是自己开工，而是等下游拆解。 */
+const PLANNING_ROLE_CODES = new Set(['boss', 'analyst', 'pm', 'arch', 'pjm']);
+
+function taskStateMeta(task: Task, roleCode?: string) {
+  const base = STATE_META[task.state] ?? { color: 'default', label: task.state };
+  if (task.state !== 'ready') return base;
+  if ((task.childTotal ?? 0) > 0) return { color: 'cyan', label: '进行中' };
+  if (roleCode && PLANNING_ROLE_CODES.has(roleCode)) return { color: 'blue', label: '待拆解' };
+  return base;
+}
+
 type Scope = 'mine' | 'upstream' | 'created' | 'all';
 
 const STATE_TABS = [
   { label: '全部', value: '' },
-  { label: '可开工', value: 'ready' },
+  { label: '待处理', value: 'ready' },
   { label: '被阻塞', value: 'blocked' },
   { label: '已完成', value: 'done' },
   { label: '已作废', value: 'discarded' },
@@ -64,6 +75,10 @@ export default function TaskWorkbenchPage() {
 
   const meQuery = useQuery({ queryKey: ['flow', 'me'], queryFn: memberApi.me });
   const me = meQuery.data;
+  const roleCodeById = useMemo(
+    () => new Map((me?.roles ?? []).map((r) => [r.id, r.code] as const)),
+    [me?.roles],
+  );
   const canAll = me?.currentRole?.code === 'boss' || me?.currentRole?.code === 'pjm';
 
   const tasksQuery = useQuery({
@@ -168,16 +183,19 @@ export default function TaskWorkbenchPage() {
         dataIndex: 'state',
         key: 'state',
         width: 140,
-        render: (value: string, record) => (
-          <Space direction="vertical" size={2}>
-            <Tag color={STATE_META[value]?.color ?? 'default'}>{STATE_META[value]?.label ?? value}</Tag>
-            {record.state === 'blocked' ? (
-              <Text type="secondary" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
-                {record.openQuestions} 个问题未闭环
-              </Text>
-            ) : null}
-          </Space>
-        ),
+        render: (_value: string, record) => {
+          const meta = taskStateMeta(record, roleCodeById.get(record.roleId));
+          return (
+            <Space direction="vertical" size={2}>
+              <Tag color={meta.color}>{meta.label}</Tag>
+              {record.state === 'blocked' ? (
+                <Text type="secondary" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+                  {record.openQuestions} 个问题未闭环
+                </Text>
+              ) : null}
+            </Space>
+          );
+        },
       },
       {
         title: '卡在哪',
@@ -293,7 +311,7 @@ export default function TaskWorkbenchPage() {
         },
       },
     ],
-    [closeMutation, discardMutation, modal, scope, me?.currentRoleId, form],
+    [closeMutation, discardMutation, modal, scope, me?.currentRoleId, roleCodeById, form],
   );
 
   return (
@@ -328,7 +346,7 @@ export default function TaskWorkbenchPage() {
           </Col>
           <Col>
             <Space size={32}>
-              <Statistic title="可开工" value={data?.readyCount ?? 0} valueStyle={{ color: '#389e0d' }} />
+              <Statistic title="待处理" value={data?.readyCount ?? 0} valueStyle={{ color: '#389e0d' }} />
               <Statistic title="被阻塞" value={data?.blockedCount ?? 0} valueStyle={{ color: '#d46b08' }} />
               <Statistic title="待我闭环" value={me?.openQuestions ?? 0} />
             </Space>
