@@ -35,6 +35,8 @@ const STATE_META: Record<string, { color: string; label: string }> = {
   discarded: { color: 'red', label: '已作废' },
 };
 
+type Scope = 'mine' | 'created' | 'all';
+
 const STATE_TABS = [
   { label: '全部', value: '' },
   { label: '可开工', value: 'ready' },
@@ -52,7 +54,7 @@ export default function TaskWorkbenchPage() {
   // 走 App.useApp() 的实例方法：静态 Modal.confirm / message 在本工程的挂载环境下不渲染（点了像没反应）
   const { message, modal } = App.useApp();
   const [state, setState] = useState('');
-  const [scope, setScope] = useState<'mine' | 'created' | 'all'>('mine');
+  const [scopeOverride, setScopeOverride] = useState<Scope | null>(null);
   const [keyword, setKeyword] = useState('');
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
@@ -61,6 +63,9 @@ export default function TaskWorkbenchPage() {
 
   const meQuery = useQuery({ queryKey: ['flow', 'me'], queryFn: memberApi.me });
   const me = meQuery.data;
+  // 老板不接执行任务，默认落在「我的队列」会一直为空；boss 直接进「我发起的」。
+  const defaultScope: Scope = me?.currentRole?.code === 'boss' ? 'created' : 'mine';
+  const scope: Scope = scopeOverride ?? defaultScope;
 
   const tasksQuery = useQuery({
     queryKey: ['flow', 'tasks', me?.currentRoleId, scope, state, keyword, page],
@@ -109,7 +114,7 @@ export default function TaskWorkbenchPage() {
     mutationFn: (code: string) => memberApi.switchRole(code),
     onSuccess: async (next) => {
       setPage(1);
-      setScope('mine');
+      setScopeOverride(null);
       await invalidate();
       message.success(`已切换为「${next.currentRole?.name ?? ''}」`);
     },
@@ -358,6 +363,19 @@ export default function TaskWorkbenchPage() {
         />
       ) : null}
 
+      {scope === 'mine' && data && data.page.total === 0 && canAll ? (
+        <Alert
+          type="info"
+          showIcon
+          message="当前角色没有待办任务"
+          description={
+            <Text type="secondary">
+              老板/项目经理通常不接执行任务，这里为空是正常的：点上方「我发起的」看自己派下去的活，点「全链路」按角色看全局进展。
+            </Text>
+          }
+        />
+      ) : null}
+
       <Card
         title={
           scope === 'created'
@@ -389,7 +407,7 @@ export default function TaskWorkbenchPage() {
               options={scopeTabs}
               value={scope}
               onChange={(value) => {
-                setScope(value as 'mine' | 'created' | 'all');
+                setScopeOverride(value as Scope);
                 setPage(1);
               }}
             />
