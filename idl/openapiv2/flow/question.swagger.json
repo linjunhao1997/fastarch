@@ -1,0 +1,462 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "flow/question.proto",
+    "version": "version not set"
+  },
+  "tags": [
+    {
+      "name": "QuestionService"
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/flow/questions": {
+      "get": {
+        "summary": "待我（当前角色）回答的问题，自带 AI 预填选项",
+        "operationId": "QuestionService_ListMyQuestions",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListQuestionsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "currentPage",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "status",
+            "description": "open（默认）/ answered / all",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "scope",
+            "description": "mine = 待我回答（默认）；raised = 我提出的",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "taskId",
+            "description": "只看某个任务下的问题；0 表示不限",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          }
+        ],
+        "tags": [
+          "QuestionService"
+        ]
+      },
+      "post": {
+        "summary": "提问：问题一落库，对应任务立刻变 blocked（派生，无需更新任务）",
+        "operationId": "QuestionService_RaiseQuestion",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Question"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1RaiseQuestionRequest"
+            }
+          }
+        ],
+        "tags": [
+          "QuestionService"
+        ]
+      }
+    },
+    "/flow/questions/{id}/answer": {
+      "post": {
+        "summary": "闭环：选预填选项或补充说明；evidence 类必须带证据，否则 3001001",
+        "operationId": "QuestionService_AnswerQuestion",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Question"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "optionId": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "evidence": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        ],
+        "tags": [
+          "QuestionService"
+        ]
+      }
+    },
+    "/flow/questions/{id}/escalate": {
+      "post": {
+        "summary": "升级：被问的人也答不了，向上挂子问题；父问题保持 open",
+        "operationId": "QuestionService_EscalateQuestion",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Question"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "toRoleCode": {
+                  "type": "string"
+                },
+                "body": {
+                  "type": "string"
+                },
+                "options": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "$ref": "#/definitions/v1QuestionOption"
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "tags": [
+          "QuestionService"
+        ]
+      }
+    },
+    "/flow/questions/{id}/reopen": {
+      "post": {
+        "summary": "重开：已闭环问题被打回 -\u003e status 回 open，任务因派生自动重新 blocked。\n仅原提问人可发起；老板角色保留兜底权（3001024/3001025/3001026）。",
+        "operationId": "QuestionService_ReopenQuestion",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Question"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "reason": {
+                  "type": "string",
+                  "title": "为什么打回：写清哪条答案不可靠、期望补什么，最长 512"
+                }
+              }
+            }
+          }
+        ],
+        "tags": [
+          "QuestionService"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "rpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    },
+    "v1ListQuestionsResponse": {
+      "type": "object",
+      "properties": {
+        "page": {
+          "$ref": "#/definitions/v1Page"
+        },
+        "questions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Question"
+          }
+        },
+        "openCount": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "v1Page": {
+      "type": "object",
+      "properties": {
+        "total": {
+          "type": "string",
+          "format": "int64",
+          "title": "总记录数"
+        },
+        "currentPage": {
+          "type": "string",
+          "format": "int64",
+          "title": "当前页码"
+        },
+        "pageSize": {
+          "type": "string",
+          "format": "int64",
+          "title": "每页记录数"
+        },
+        "totalPages": {
+          "type": "string",
+          "format": "int64",
+          "title": "总页数"
+        }
+      },
+      "title": "分页信息（所有服务的列表响应复用）"
+    },
+    "v1Question": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "taskId": {
+          "type": "string"
+        },
+        "taskTitle": {
+          "type": "string"
+        },
+        "fromRoleId": {
+          "type": "string"
+        },
+        "fromRoleName": {
+          "type": "string"
+        },
+        "toRoleId": {
+          "type": "string"
+        },
+        "toRoleName": {
+          "type": "string"
+        },
+        "askedBy": {
+          "type": "string",
+          "title": "提出人 account_id"
+        },
+        "body": {
+          "type": "string"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1QuestionOption"
+          }
+        },
+        "answer": {
+          "type": "string"
+        },
+        "picked": {
+          "type": "string"
+        },
+        "answerKind": {
+          "type": "string",
+          "title": "decision / evidence"
+        },
+        "evidence": {
+          "type": "string",
+          "title": "执行类闭环证据"
+        },
+        "status": {
+          "type": "string",
+          "title": "open / answered"
+        },
+        "parentQuestionId": {
+          "type": "string"
+        },
+        "reopenCount": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "selfAnswer": {
+          "type": "boolean",
+          "title": "自问自答（不进正常指标）"
+        },
+        "answeredBy": {
+          "type": "string"
+        },
+        "answeredAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "createTime": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "v1QuestionOption": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "title": "A / B / C"
+        },
+        "label": {
+          "type": "string"
+        },
+        "rec": {
+          "type": "boolean",
+          "title": "是否 AI 推荐"
+        }
+      },
+      "title": "AI 预填选项：结构由 agent 生成，人工只需选一个"
+    },
+    "v1RaiseQuestionRequest": {
+      "type": "object",
+      "properties": {
+        "taskId": {
+          "type": "string",
+          "format": "int64"
+        },
+        "toRoleCode": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        },
+        "answerKind": {
+          "type": "string",
+          "title": "decision（默认，一句话可关）/ evidence（必须带证据才算闭环）"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1QuestionOption"
+          }
+        }
+      }
+    }
+  }
+}

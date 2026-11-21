@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package flow.v1;
+
+option go_package = "github.com/linjunhao1997/idl/pb/flow;flow_v1";
+option java_multiple_files = true;
+option java_package = "com.flow.v1";
+
+import "google/api/annotations.proto";
+
+// 留痕服务（flow 宿主）：只增不改的流水，回答"这事谁在什么时候改的"。
+service LogService {
+  rpc ListEvents(ListEventsRequest) returns (ListEventsResponse) {
+    option (google.api.http) = {
+      get: "/flow/events"
+    };
+  }
+}
+
+message Event {
+  string id = 1;
+  string at = 2;          // yyyy-MM-dd HH:mm:ss
+  string actor = 3;       // account_id
+  string actor_name = 4;  // 姓名快照
+  string action = 5;      // 提出问题 / 闭环问题 / 升级链回填 / 完成任务 ...
+  string entity = 6;      // task / question / member
+  string entity_id = 7;
+  string detail = 8;
+}
+
+message ListEventsRequest {
+  int64 limit = 1;      // 默认 20，上限 100
+  string entity = 2;    // 可选：task / question / member
+  int64 entity_id = 3;
+}
+
+message ListEventsResponse {
+  repeated Event events = 1;
+}

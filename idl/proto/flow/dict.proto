@@ -1,0 +1,68 @@
+syntax = "proto3";
+
+package flow.v1;
+
+option go_package = "github.com/linjunhao1997/idl/pb/flow;flow_v1";
+option java_multiple_files = true;
+option java_package = "com.flow.v1";
+
+import "common/dict/dict.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/empty.proto";
+
+// 字典管理服务（flow 宿主）：共享 common.dict.v1，service 自持（ADR 0003）。
+// 方法签名与 iam.v1.DictService 一致，contrib 实现可同时满足两个接口；
+// HTTP 路径以 /flow 服务前缀挂载。
+service DictService {
+  rpc CreateDictType(common.dict.v1.CreateDictTypeRequest) returns (common.dict.v1.DictType) {
+    option (google.api.http) = {
+      post: "/flow/dict/types"
+      body: "*"
+    };
+  }
+
+  rpc UpdateDictType(common.dict.v1.UpdateDictTypeRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      patch: "/flow/dict/types/{id}"
+      body: "*"
+    };
+  }
+
+  rpc DeleteDictType(common.dict.v1.DeleteDictTypeRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/flow/dict/types/{id}"
+    };
+  }
+
+  rpc ListDictTypes(common.dict.v1.ListDictTypesRequest) returns (common.dict.v1.ListDictTypesResponse) {
+    option (google.api.http) = {
+      get: "/flow/dict/types"
+    };
+  }
+
+  rpc CreateDictItem(common.dict.v1.CreateDictItemRequest) returns (common.dict.v1.DictItem) {
+    option (google.api.http) = {
+      post: "/flow/dict/items"
+      body: "*"
+    };
+  }
+
+  rpc UpdateDictItem(common.dict.v1.UpdateDictItemRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      patch: "/flow/dict/items/{id}"
+      body: "*"
+    };
+  }
+
+  rpc DeleteDictItem(common.dict.v1.DeleteDictItemRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/flow/dict/items/{id}"
+    };
+  }
+
+  rpc ListDictItems(common.dict.v1.ListDictItemsRequest) returns (common.dict.v1.ListDictItemsResponse) {
+    option (google.api.http) = {
+      get: "/flow/dict/items"
+    };
+  }
+}

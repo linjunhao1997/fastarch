@@ -1,0 +1,467 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "flow/task.proto",
+    "version": "version not set"
+  },
+  "tags": [
+    {
+      "name": "TaskService"
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/flow/metrics": {
+      "get": {
+        "summary": "当前角色的闭环质量指标（只读；口径见 docs/flow-workbench-implementation.md v1.1）",
+        "operationId": "TaskService_GetMyMetrics",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1FlowMetrics"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "TaskService"
+        ]
+      }
+    },
+    "/flow/tasks": {
+      "get": {
+        "summary": "当前角色的任务清单（self-scoped：角色取自 JWT + 当前角色，不接受入参指定别人）",
+        "operationId": "TaskService_ListMyTasks",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListTasksResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "currentPage",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "keyword",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "state",
+            "description": "可选派生状态过滤：ready / blocked / done / discarded",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "TaskService"
+        ]
+      },
+      "post": {
+        "summary": "建任务（默认落在当前角色上）",
+        "operationId": "TaskService_CreateTask",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Task"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1CreateTaskRequest"
+            }
+          }
+        ],
+        "tags": [
+          "TaskService"
+        ]
+      }
+    },
+    "/flow/tasks/{id}": {
+      "get": {
+        "operationId": "TaskService_GetTask",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Task"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "int64"
+          }
+        ],
+        "tags": [
+          "TaskService"
+        ]
+      }
+    },
+    "/flow/tasks/{id}/close": {
+      "post": {
+        "summary": "完成任务（动作语义，宪法 XIV）",
+        "operationId": "TaskService_CloseTask",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "int64"
+          }
+        ],
+        "tags": [
+          "TaskService"
+        ]
+      }
+    },
+    "/flow/tasks/{id}/discard": {
+      "post": {
+        "summary": "作废任务：被阻塞且不再需要的任务直接丢弃，不占队列",
+        "operationId": "TaskService_DiscardTask",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "int64"
+          }
+        ],
+        "tags": [
+          "TaskService"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "rpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    },
+    "v1CreateTaskRequest": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "brief": {
+          "type": "string"
+        },
+        "roleCode": {
+          "type": "string",
+          "title": "可选：不传则落在当前角色；传了必须是本人可担任的角色"
+        }
+      }
+    },
+    "v1FlowMetrics": {
+      "type": "object",
+      "properties": {
+        "roleId": {
+          "type": "string"
+        },
+        "roleName": {
+          "type": "string"
+        },
+        "openTasks": {
+          "type": "integer",
+          "format": "int32",
+          "title": "当前角色 open 任务总数"
+        },
+        "readyTasks": {
+          "type": "integer",
+          "format": "int32",
+          "title": "派生：无 open 问题"
+        },
+        "blockedTasks": {
+          "type": "integer",
+          "format": "int32",
+          "title": "派生：至少一条 open 问题"
+        },
+        "openQuestions": {
+          "type": "integer",
+          "format": "int32",
+          "title": "发给当前角色、待回答"
+        },
+        "answeredQuestions": {
+          "type": "integer",
+          "format": "int32",
+          "title": "发给当前角色、已闭环"
+        },
+        "reopenedQuestions": {
+          "type": "integer",
+          "format": "int32",
+          "title": "上述已闭环问题的 reopen_count 之和"
+        },
+        "avgAnswerMinutes": {
+          "type": "number",
+          "format": "double",
+          "title": "平均闭环时长（分钟）"
+        },
+        "p50AnswerMinutes": {
+          "type": "number",
+          "format": "double",
+          "title": "闭环时长中位数（分钟）"
+        },
+        "reopenRate": {
+          "type": "number",
+          "format": "double",
+          "title": "reopened / answered（0–1）"
+        },
+        "selfAnswerRate": {
+          "type": "number",
+          "format": "double",
+          "title": "同账号闭环 / answered（0–1）"
+        },
+        "stalledTasks": {
+          "type": "integer",
+          "format": "int32",
+          "title": "open 任务中，存在闭环已超 7 天的问题（“闭环了但没推进”）"
+        }
+      },
+      "title": "当前角色的闭环质量指标（只读）。\n任务维度看“队列是否在转”，问题维度看“闭环是否可信”。"
+    },
+    "v1ListTasksResponse": {
+      "type": "object",
+      "properties": {
+        "page": {
+          "$ref": "#/definitions/v1Page"
+        },
+        "tasks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Task"
+          }
+        },
+        "readyCount": {
+          "type": "integer",
+          "format": "int32",
+          "title": "当前角色概览（前端首屏横幅直接用，不另发请求）"
+        },
+        "blockedCount": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "roleId": {
+          "type": "string"
+        },
+        "roleName": {
+          "type": "string"
+        }
+      }
+    },
+    "v1Page": {
+      "type": "object",
+      "properties": {
+        "total": {
+          "type": "string",
+          "format": "int64",
+          "title": "总记录数"
+        },
+        "currentPage": {
+          "type": "string",
+          "format": "int64",
+          "title": "当前页码"
+        },
+        "pageSize": {
+          "type": "string",
+          "format": "int64",
+          "title": "每页记录数"
+        },
+        "totalPages": {
+          "type": "string",
+          "format": "int64",
+          "title": "总页数"
+        }
+      },
+      "title": "分页信息（所有服务的列表响应复用）"
+    },
+    "v1Task": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "roleId": {
+          "type": "string"
+        },
+        "roleName": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "brief": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "title": "落库终态：open / done / discarded"
+        },
+        "state": {
+          "type": "string",
+          "title": "派生：ready / blocked / done / discarded"
+        },
+        "openQuestions": {
+          "type": "integer",
+          "format": "int32",
+          "title": "未闭环问题数"
+        },
+        "blockers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1TaskBlocker"
+          }
+        },
+        "createdBy": {
+          "type": "string"
+        },
+        "updatedBy": {
+          "type": "string"
+        },
+        "createTime": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updateTime": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "v1TaskBlocker": {
+      "type": "object",
+      "properties": {
+        "questionId": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        },
+        "toRoleName": {
+          "type": "string"
+        },
+        "answerKind": {
+          "type": "string",
+          "title": "decision / evidence"
+        },
+        "createdAt": {
+          "type": "string"
+        }
+      },
+      "title": "卡住任务的问题摘要（只读回传）"
+    }
+  }
+}

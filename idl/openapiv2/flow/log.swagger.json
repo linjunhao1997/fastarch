@@ -1,0 +1,142 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "flow/log.proto",
+    "version": "version not set"
+  },
+  "tags": [
+    {
+      "name": "LogService"
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/flow/events": {
+      "get": {
+        "operationId": "LogService_ListEvents",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListEventsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "limit",
+            "description": "默认 20，上限 100",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "entity",
+            "description": "可选：task / question / member",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "entityId",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          }
+        ],
+        "tags": [
+          "LogService"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "rpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    },
+    "v1Event": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "at": {
+          "type": "string",
+          "title": "yyyy-MM-dd HH:mm:ss"
+        },
+        "actor": {
+          "type": "string",
+          "title": "account_id"
+        },
+        "actorName": {
+          "type": "string",
+          "title": "姓名快照"
+        },
+        "action": {
+          "type": "string",
+          "description": "提出问题 / 闭环问题 / 升级链回填 / 完成任务 ..."
+        },
+        "entity": {
+          "type": "string",
+          "title": "task / question / member"
+        },
+        "entityId": {
+          "type": "string"
+        },
+        "detail": {
+          "type": "string"
+        }
+      }
+    },
+    "v1ListEventsResponse": {
+      "type": "object",
+      "properties": {
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Event"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,117 @@
+syntax = "proto3";
+
+package flow.v1;
+
+option go_package = "github.com/linjunhao1997/idl/pb/flow;flow_v1";
+option java_multiple_files = true;
+option java_package = "com.flow.v1";
+
+import "common/common.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/empty.proto";
+import "buf/validate/validate.proto";
+
+// 成员服务（flow 宿主）：确认"我是谁、当前扮演哪个角色、还能切哪些角色"。
+// 身份唯一来源是 IAM 签发的 JWT（accountId）；本服务只维护「工作角色」，
+// 与 IAM 的授权角色（t_role，挂权限码）是两套概念，不可混用。
+service MemberService {
+  // 我是谁：身份 + 当前角色 + 可担任角色（首次调用自动建档）
+  rpc GetMe(google.protobuf.Empty) returns (Member) {
+    option (google.api.http) = {
+      get: "/flow/me"
+    };
+  }
+
+  // 我当前可以担任的角色清单
+  rpc ListMyRoles(google.protobuf.Empty) returns (ListMyRolesResponse) {
+    option (google.api.http) = {
+      get: "/flow/me/roles"
+    };
+  }
+
+  // 切换当前角色（一人多角色）；只允许切到自己持有的角色
+  rpc SwitchRole(SwitchRoleRequest) returns (Member) {
+    option (google.api.http) = {
+      post: "/flow/me/role"
+      body: "*"
+    };
+  }
+
+  // 成员与角色：当前是老板（boss）角色的人才有权查看与分配。
+  rpc ListMembers(ListMembersRequest) returns (ListMembersResponse) {
+    option (google.api.http) = {
+      get: "/flow/members"
+    };
+  }
+
+  // 给某个成员设定"能担任哪些工作角色"（整体替换语义，传全集）。
+  rpc AssignMemberRoles(AssignMemberRolesRequest) returns (MemberBrief) {
+    option (google.api.http) = {
+      post: "/flow/members/{id}/roles"
+      body: "*"
+    };
+  }
+}
+
+// 工作角色（环节职责，不含任何权限语义）
+message WorkRole {
+  string id = 1;
+  string code = 2;   // dev / qa / arch / pm / pjm / ops ...
+  string name = 3;   // 开发 / 测试 / 架构师 / 产品经理 ...
+  string stage = 4;  // 环节名：编码实现
+  int32 sort = 5;
+}
+
+message Member {
+  string id = 1;
+  string account_id = 2;       // IAM 账号 id（string 编码）
+  string name = 3;
+  string title = 4;
+  string current_role_id = 5;
+  WorkRole current_role = 6;
+  repeated WorkRole roles = 7;
+  // 当前角色的任务概览（与工作台首屏同源，省一次请求）
+  int32 ready_tasks = 8;
+  int32 blocked_tasks = 9;
+  int32 open_questions = 10;
+}
+
+message ListMyRolesResponse {
+  repeated WorkRole roles = 1;
+}
+
+message SwitchRoleRequest {
+  string role_code = 1; // 角色 code 或中文名
+}
+
+// MemberBrief 是成员卡片：不含任务统计（列表页一次拉全部成员，省掉 N 次统计）。
+message MemberBrief {
+  string id = 1;
+  string account_id = 2;
+  string name = 3;
+  string title = 4;
+  string current_role_id = 5;
+  WorkRole current_role = 6;
+  repeated WorkRole roles = 7;
+}
+
+message ListMembersRequest {
+  int64 current_page = 1;
+  int64 page_size = 2;
+  string keyword = 3;
+}
+
+message ListMembersResponse {
+  common.v1.Page page = 1;
+  repeated MemberBrief members = 2;
+  // 全部启用角色，供前端渲染勾选项（不按成员裁剪）
+  repeated WorkRole all_roles = 3;
+  // 调用者当前角色 code：前端据此决定是否可编辑（boss 才能改）
+  string current_role_code = 4;
+}
+
+message AssignMemberRolesRequest {
+  int64 id = 1 [(buf.validate.field).required = true];
+  // 目标角色 code 全集；至少一个，且必须是启用角色
+  repeated string role_codes = 2 [(buf.validate.field).repeated.min_items = 1];
+}

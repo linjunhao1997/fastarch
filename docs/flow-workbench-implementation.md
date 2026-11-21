@@ -1,0 +1,262 @@
+# 任务工作台（flow-service）实现说明与验证手册
+
+> 配套方案：`docs/flow-workbench-proposal.md`（设计与取舍）。本文只讲**怎么跑、怎么验**。
+
+## 1. 已落地的东西
+
+| 层 | 内容 |
+| --- | --- |
+| 契约 | `idl/proto/flow/{member,task,question,log,menu,dict}.proto`，已 buf 生成网关与 swagger |
+| IAM | `000017_flow.up.sql`：注册应用 `flow`(id=3) + 22 个 `flow.*` 权限码 |
+| 后端 | `flow-service/`：6 个服务、5 张业务表 + 1 张关系表、种子数据、MCP stdio 服务 |
+| 前端 | `admin-web/src/flow/`：任务工作台 `/flow/tasks`、问题中心 `/flow/questions`，并注册为第三个控制台 |
+| 菜单 | flow 库内种子：`/flow/tasks`、`/flow/questions`（前端按菜单树渲染侧边栏） |
+
+**状态不落库**：`t_task.status` 只有 `open/done/discarded`；`ready/blocked` 由 `EXISTS(open question)` 在查询期派生。闭环只改 `t_question` 一行，任务自动解冻，无需任何同步代码。
+
+## 2. 启动顺序（本地）
+
+前置：MySQL 3306、Redis（当前服务未强依赖）、IAM 已初始化过 `fastarch_dev`。
+
+```powershell
+# 0) 建 flow 自己的库（只需一次）
+cd D:\fastarch\flow-service
+go run ./tools/dbctl -create flow_dev
+
+# 1) IAM（应用迁移 000017 + 判权 + 登录）
+cd D:\fastarch\iam-service
+go run . grpc      # :9090
+go run . http      # :8080（另开一个终端）
+
+# 2) flow
+cd D:\fastarch\flow-service
+go run . grpc      # :9092，首次启动自动建表 + 种子
+go run . http      # :8082（另开一个终端）
+
+# 3) 前端
+cd D:\fastarch\frontend-service\admin-web
+pnpm dev           # 浏览器打开 http://localhost:5173
+```
+
+> 前端是单工程多控制台：登录后进入「控制台选择」页，能看到第三张卡「任务工作台」。
+> 若 5173 报 `EACCES`（Windows 保留端口/权限问题），换端口：`pnpm dev --port 5180 --host 127.0.0.1`。
+> `/flow/` 代理已配置到 8082；`/flow/tasks` 同时是页面路由，vite 已按 `Accept: text/html` 放行给 SPA。
+
+## 3. 我（单人兼全部角色）怎么用
+
+`conf/config.yaml` 默认：
+
+```yaml
+flow:
+  bootstrap_all_roles: true   # 首次登录自动建档并授予全部 8 个角色
+  default_role_code: "dev"
+```
+
+所以用 admin 登录后第一次访问 `/flow/me` 会自动建档：持有
+`boss / analyst / pm / arch / pjm / dev / qa / ops`，当前角色 `dev`。
+
+**注意**：正式环境把 `bootstrap_all_roles` 改成 `false`，角色改由管理员分配（接口已按"只允许切到自己持有的角色"实现）。
+
+## 4. 已插入的“我这条需求”
+
+`000001_init.up.sql` 里把它作为 **任务 #1（dev 角色）** 落库，brief 就是完整需求与 4 条验收。
+
+| 数据 | 内容 |
+| --- | --- |
+| 任务 #1 | 实现任务工作台前后端并接入 MCP 验证（dev）→ 被 2 个问题阻塞 |
+| 问题 #1 | 首屏展示范围？→ 问 **pm**，3 个预填选项，A 推荐 |
+| 问题 #2 | MCP 身份方案？→ 问 **arch**，2 个预填选项，A 推荐 |
+| 任务 #2 | 补齐接口联调记录（dev）→ **ready**，可开工 |
+| 任务 #3 | 回归主流程（qa）→ 被问题 #3 阻塞，问 **dev** 且 **必须给证据** |
+| 任务 #4 | 汇总需求与技术方案（pjm）→ ready |
+
+这组数据就是给「一人多角色 + 阻塞/解冻 + 证据门槛」准备的最小验证集。
+
+## 5. 接 MCP 验证（重点）
+
+MCP 接入点是 flow-service 自己的接口：`POST /flow/mcp`，与业务网关同端口（8082），无状态、
+多人共用。**身份由每个请求自己的个人凭证（AK/SK）决定，服务端不保存任何人的 SK 明文。**
+
+### 5.1 创建「你自己的」个人凭证
+
+在 IAM 控制台「访问凭证」页（`/iam/...` 访问凭证列表）点新建：绑定你自己、归属应用选 `flow`，
+创建成功后**一次性显示 SK**（之后只能重置，不再显示）。等价 API：
+
+```powershell
+$body = @{ userId = <你的用户id>; remark = 'mcp-agent'; applicationId = 3 } | ConvertTo-Json
+Invoke-RestMethod -Uri "http://127.0.0.1:8080/authentication/access-credentials" `
+  -Method Post -Body $body -ContentType 'application/json' `
+  -Headers @{ Authorization = "Bearer <admin 或你自己的登录 token>" }
+```
+
+**接入权限是 `flow.mcp.connect`**（迁移 `iam-service/.../000020_flow_mcp_connect.up.sql`）：
+没这个码的账号连 MCP 都进不来（403）。它与工具权限码正交——连得上 ≠ 能看任务，
+具体工具仍按 `flow.member.get` / `flow.task.list` 等各自判权。按账号授予（角色 → 权限）。
+
+### 5.2 MCP 客户端配置（HTTP，推荐）
+
+只需要把 AK/SK 填进请求头，不需要换取或管理任何 token：
+
+```powershell
+claude mcp add --transport http flow-workbench http://127.0.0.1:8082/flow/mcp `
+  --header "x-fa-access-key: <你的 AK>" --header "x-fa-secret-key: <你的 SK>"
+```
+
+其他客户端等价写法：
+
+```json
+{
+  "mcpServers": {
+    "flow-workbench": {
+      "type": "http",
+      "url": "http://127.0.0.1:8082/flow/mcp",
+      "headers": {
+        "x-fa-access-key": "<你的 AK>",
+        "x-fa-secret-key": "<你的 SK>"
+      }
+    }
+  }
+}
+```
+
+服务端处理：`/flow/mcp` 拿 AK/SK 调 IAM `AuthenticationService/CredentialAuth` 识别出是哪个账号
+（校验凭证启用状态、过期时间、SK 常数时间比对），再用该账号身份判 `flow.mcp.connect`，
+随后以同一身份调用 flow 网关取数据。换来的短期 token 只在进程内缓存 5 分钟、不落库、不返回给调用方。
+换人接入只需要换他自己的 AK/SK，flow-service 不用改配置、不用重启。
+
+### 5.3 stdio 模式（本地临时验证，可选）
+
+```json
+{
+  "mcpServers": {
+    "flow-workbench": {
+      "command": "go",
+      "args": ["run", ".", "mcp"],
+      "cwd": "D:\\fastarch\\flow-service",
+      "env": { "FLOW_TOKEN_FILE": "C:\\Users\\<你>\\.fastarch\\flow.token" }
+    }
+  }
+}
+```
+
+stdio 模式只认调用者环境里的 token（`FLOW_TOKEN` / token 文件），服务端配置不再接受任何人的 token。
+**只有一个 MCP 服务、15 个工具**（不是多个 MCP）：
+
+| 工具 | 作用 | 对应接口 |
+| --- | --- | --- |
+| `whoami` | 我是谁 / 当前角色 / 可担任角色 / 可开工与被阻塞数 | `GET /flow/me` |
+| `switch_role` | 切换当前工作角色 | `POST /flow/me/role` |
+| `check_ready` | 传 task_id 查单条；不传列当前角色 ready 任务 | `GET /flow/tasks/{id}` |
+| `my_questions` | 待我回答 / 我提出的问题（带预填选项） | `GET /flow/questions` |
+| `answer_question` | 闭环问题（选项 / 结论 / 证据） | `POST /flow/questions/{id}/answer` |
+| `reopen_question` | 答错打回：仅原提问人或 boss；任务自动重新 blocked | `POST /flow/questions/{id}/reopen` |
+| `metrics` | 当前角色闭环质量指标（只读） | `GET /flow/metrics` |
+| `raise_question` | 抛阻塞问题给上游角色 | `POST /flow/questions` |
+| `history` | 留痕查询 | `GET /flow/events` |
+
+MCP 只是 HTTP 客户端：身份与判权仍由 JWT + IAM `CheckPermission` 在服务端裁决，不存在第二套权限逻辑。
+
+接入层的失败码：`-32001` 缺 AK/SK（401）、`-32002` 凭证无效/停用/过期/SK 不匹配（401）、
+`-32003` 无 `flow.mcp.connect` 权限（403）、`-32004` IAM 判权或凭证认证不可用（503，fail-closed）、
+`-32005` 凭证认证未返回 token（500）、`-32006` 兜底 Bearer token 无效（401）。
+
+### 5.3 建议的验证脚本（对着 agent 说即可）
+
+1. `whoami` → 应显示 admin、当前角色 dev、8 个角色、可开工 1 / 被阻塞 1（任务 #2 ready、#1 blocked）。
+2. `check_ready {task_id:"1"}` → `state=blocked`，blockers 里两条问题（问 pm、问 arch）。
+3. `switch_role {role_code:"pm"}` → `my_questions` 看到“首屏展示范围”，选 `A` 闭环。
+4. `switch_role {role_code:"arch"}` → 答掉第二条。
+5. `switch_role {role_code:"dev"}` → `check_ready {task_id:"1"}` 变 `ready`，openQuestions=0。
+6. 反向验证：`switch_role {"qa"}` → 任务 #3 的 evidence 问题；不填 `evidence` 直接 `answer_question` 会拿到 **业务码 3001001**，问题保持 open。
+
+## 6. 归责与留痕口径
+
+- 每次建任务/抛问题/闭环/切角色/作废都写 `t_event`，`history` 或页面「留痕」抽屉可查。
+- `answered_by != asked_by` 才是正常闭环；同一人自答写 `self_answer=1`，单独动作 `question.self_answer`，不计入正常指标。
+- evidence 类问题缺证据：返回 `3001001`，问题**不动**，任务继续 blocked。
+- “闭环了但实际没人处理”：`answered_by` 是账号、`evidence` 是凭据、`t_event` 是时间线，三者对不上即可追责；`reopen_count` 记录被推翻次数。
+
+## 7. 常用错误码
+
+| 码 | 含义 |
+| --- | --- |
+| 3001001 | 证据必填（evidence 类问题） |
+| 3001002 | 任务仍被未闭环问题阻塞，不能完成 |
+| 3001003 | 任务/问题不属于当前角色，先切角色 |
+| 3001004 | 问题已闭环，不能重复回答 |
+| 3001005 | 没给结论（既没选选项也没写说明） |
+| 3001009 | 任务已结束，不能再抛问题 |
+| 3001012 | 不能切到未持有的角色 |
+| 3001015 | 不能向自己当前角色提问 |
+| 3001023 | 证据形态不合法（URL / commit SHA / 工单号 / 部署单 / *.md/*.pdf 之外） |
+| 3001024 | 只有已闭环的问题才能重开 |
+| 3001025 | 不是原提问人，且当前角色不是 boss，不能重开 |
+| 3001026 | 任务已结束（done/discarded），不能重开其下问题 |
+
+## 8. 已知边界（MVP 取舍）
+
+- 任务不按人分配，只按角色；同一角色多人时是"抢队列"，不是派工。
+- 菜单/字典页是 contrib 通用能力，flow 控制台下同样可用（`/flow/menu_management`、`/flow/dict_management`）。
+- evidence 只校验"形态"，不校验链接可达性——可追溯性靠人审 + 留痕；不填或填不了可核查的形态仍会被 3001001/3001023 挡住。
+- 任务 done/discarded 后不能再重开其下问题；需要继续跟进请新建任务（避免终态被悄悄翻回）。
+- 自动巡检（SLA 催办/升级）不在 v1.1，已拆为 v1.2 独立任务。
+
+## 9. 附：本地小工具（`flow-service/tools/`）
+
+| 工具 | 用法 | 用途 |
+| --- | --- | --- |
+| `dbctl` | `go run ./tools/dbctl -create flow_dev`、`-db flow_dev -query "SELECT ..."` | 建库、查种子/状态，不依赖 mysql 客户端 |
+| `webserve` | `go run ./tools/webserve`（默认 127.0.0.1:8090，指到 `admin-web/dist`） | 无 node 环境时静态预览前端：`/flow/**` 反代 8082、IAM 前缀反代 8080、`/seed?token=&to=` 注入登录态 |
+
+`webserve` 只是本地预览/截图辅助，正式联调仍用 `pnpm dev`。
+
+## 10. v1.1：闭环可回退 + 证据强校验 + 质量指标
+
+### 10.1 新增接口
+
+| 动作 | HTTP | 权限码 | 语义 |
+| --- | --- | --- | --- |
+| 重开问题 | `POST /flow/questions/{id}/reopen` | `flow.question.answer` | 仅 `answered` 可重开；原提问人或当前角色 boss 可发起 |
+| 质量指标 | `GET /flow/metrics` | `flow.task.list` | 当前角色维度，只读 |
+
+`reopen` 只改 `t_question` 一行：`status` 回 `open`、`reopen_count+1`、清空本轮答案；任务因 `EXISTS(open question)` 派生自动重新 `blocked`，不碰 `t_task.status`。子问题被打回时，若父问题是由“子问题闭环回填”自动闭环的，会沿 `parent_question_id` 一并重开，避免任务假 ready。
+
+### 10.2 证据规则（3001023）
+
+`evidence` 类问题闭环时必须命中以下任一形态（服务层校验，不依赖前端）：
+
+- URL：`http(s)://` 且 host 非空
+- commit：7–40 位 hex，可带 `sha:` / `commit:` 前缀；纯数字不算
+- 工单：`FAST-123`、`PR-88`、`#123`、`!42`
+- 部署单：`deploy:xxx`、`dep:xxx`、`DEP-xxx`
+- 文档：`*.md` / `*.pdf`（允许 `docs/` 前缀）
+
+不校验链接可达性（内网/离线链接会把正常闭环卡死）；只挡“done / 已修好了 / ok”这类无法回溯的空头承诺。
+
+### 10.3 指标口径
+
+`GET /flow/metrics` 返回当前角色：
+
+| 字段 | 口径 |
+| --- | --- |
+| `open_tasks` / `ready_tasks` / `blocked_tasks` | 当前角色 open 任务；ready/blocked 仍按 open 问题派生 |
+| `open_questions` / `answered_questions` | 发给当前角色的问题，按状态计数 |
+| `reopened_questions` | 上述 answered 问题的 `reopen_count` 之和 |
+| `avg_answer_minutes` / `p50_answer_minutes` | `answered_at - create_time` 的均值与中位数（分钟） |
+| `reopen_rate` / `self_answer_rate` | reopened / answered、self_answer / answered（0–1） |
+| `stalled_tasks` | 当前角色 open 任务中，存在闭环已超 7 天的问题（“闭环了但没推进”） |
+
+### 10.4 验证脚本（可复跑）
+
+```powershell
+# 1) 起服务后，用个人 AK/SK 走 MCP HTTP（勿把 SK 写进仓库）
+$h = @{ 'x-fa-access-key' = $env:FLOW_AK; 'x-fa-secret-key' = $env:FLOW_SK }
+$body = '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"metrics","arguments":{}}}'
+Invoke-RestMethod -Uri 'http://127.0.0.1:8082/flow/mcp' -Method Post -ContentType 'application/json' -Headers $h -Body $body
+
+# 2) 重开（用原提问人账号或 boss 角色）：把 <qid> 换成自己的已闭环问题
+$body = '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"reopen_question","arguments":{"question_id":"<qid>","reason":"结论缺少证据，打回补"}}}'
+Invoke-RestMethod -Uri 'http://127.0.0.1:8082/flow/mcp' -Method Post -ContentType 'application/json' -Headers $h -Body $body
+```
+
+验收要点：重开后 `check_ready` 对应任务从 `ready` 回到 `blocked`；`my_questions` 能看到该问题回到 open；`history` 有 `question.reopen`；`metrics` 的 `reopen_rate` 随之上升。

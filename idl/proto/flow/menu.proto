@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+package flow.v1;
+
+option go_package = "github.com/linjunhao1997/idl/pb/flow;flow_v1";
+option java_multiple_files = true;
+option java_package = "com.flow.v1";
+
+import "common/common.proto";
+import "common/menu/menu.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/empty.proto";
+
+// 菜单管理服务（flow 宿主）：共享 common.menu.v1，service 自持（ADR 0003）。
+// 方法签名与 iam.v1.MenuService 一致，contrib 实现可同时满足两个接口；
+// HTTP 路径以 /flow 服务前缀挂载。
+service MenuService {
+  rpc CreateMenu(common.menu.v1.CreateMenuRequest) returns (common.menu.v1.Menu) {
+    option (google.api.http) = {
+      post: "/flow/menu/menus"
+      body: "*"
+    };
+  }
+
+  rpc GetMenu(common.v1.GetRequest) returns (common.menu.v1.Menu) {
+    option (google.api.http) = {
+      get: "/flow/menu/menus/{id}"
+    };
+  }
+
+  rpc UpdateMenu(common.menu.v1.UpdateMenuRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      patch: "/flow/menu/menus/{id}"
+      body: "*"
+    };
+  }
+
+  rpc DeleteMenu(common.menu.v1.DeleteMenuRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/flow/menu/menus/{id}"
+    };
+  }
+
+  rpc ListMenuTree(google.protobuf.Empty) returns (common.menu.v1.ListMenuTreeResponse) {
+    option (google.api.http) = {
+      get: "/flow/menu/menu-tree"
+    };
+  }
+
+  // 当前应用全量启用菜单树（纯码门槛裁决），仅需登录态。
+  rpc ListMyMenuTree(google.protobuf.Empty) returns (common.menu.v1.ListMenuTreeResponse) {
+    option (google.api.http) = {
+      get: "/flow/menu/my-menu-tree"
+    };
+  }
+}

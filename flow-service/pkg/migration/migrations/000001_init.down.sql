@@ -1,0 +1,11 @@
+-- 000001 回滚：flow 自持库整库对象（本库只服务 flow）。
+DROP TABLE IF EXISTS `t_event`;
+DROP TABLE IF EXISTS `t_r_task_question`;
+DROP TABLE IF EXISTS `t_question`;
+DROP TABLE IF EXISTS `t_task`;
+DROP TABLE IF EXISTS `t_member`;
+DROP TABLE IF EXISTS `t_r_member_role`;
+DROP TABLE IF EXISTS `t_work_role`;
+DROP TABLE IF EXISTS `t_dict_item`;
+DROP TABLE IF EXISTS `t_dict_type`;
+DROP TABLE IF EXISTS `t_menu`;

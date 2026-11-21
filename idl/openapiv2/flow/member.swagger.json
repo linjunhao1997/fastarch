@@ -1,0 +1,397 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "flow/member.proto",
+    "version": "version not set"
+  },
+  "tags": [
+    {
+      "name": "MemberService"
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/flow/me": {
+      "get": {
+        "summary": "我是谁：身份 + 当前角色 + 可担任角色（首次调用自动建档）",
+        "operationId": "MemberService_GetMe",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Member"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "MemberService"
+        ]
+      }
+    },
+    "/flow/me/role": {
+      "post": {
+        "summary": "切换当前角色（一人多角色）；只允许切到自己持有的角色",
+        "operationId": "MemberService_SwitchRole",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Member"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1SwitchRoleRequest"
+            }
+          }
+        ],
+        "tags": [
+          "MemberService"
+        ]
+      }
+    },
+    "/flow/me/roles": {
+      "get": {
+        "summary": "我当前可以担任的角色清单",
+        "operationId": "MemberService_ListMyRoles",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListMyRolesResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "MemberService"
+        ]
+      }
+    },
+    "/flow/members": {
+      "get": {
+        "summary": "成员与角色：当前是老板（boss）角色的人才有权查看与分配。",
+        "operationId": "MemberService_ListMembers",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListMembersResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "currentPage",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "keyword",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "MemberService"
+        ]
+      }
+    },
+    "/flow/members/{id}/roles": {
+      "post": {
+        "summary": "给某个成员设定\"能担任哪些工作角色\"（整体替换语义，传全集）。",
+        "operationId": "MemberService_AssignMemberRoles",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1MemberBrief"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "int64"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "roleCodes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "目标角色 code 全集；至少一个，且必须是启用角色"
+                }
+              }
+            }
+          }
+        ],
+        "tags": [
+          "MemberService"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "rpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    },
+    "v1ListMembersResponse": {
+      "type": "object",
+      "properties": {
+        "page": {
+          "$ref": "#/definitions/v1Page"
+        },
+        "members": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1MemberBrief"
+          }
+        },
+        "allRoles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1WorkRole"
+          },
+          "title": "全部启用角色，供前端渲染勾选项（不按成员裁剪）"
+        },
+        "currentRoleCode": {
+          "type": "string",
+          "title": "调用者当前角色 code：前端据此决定是否可编辑（boss 才能改）"
+        }
+      }
+    },
+    "v1ListMyRolesResponse": {
+      "type": "object",
+      "properties": {
+        "roles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1WorkRole"
+          }
+        }
+      }
+    },
+    "v1Member": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "accountId": {
+          "type": "string",
+          "title": "IAM 账号 id（string 编码）"
+        },
+        "name": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "currentRoleId": {
+          "type": "string"
+        },
+        "currentRole": {
+          "$ref": "#/definitions/v1WorkRole"
+        },
+        "roles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1WorkRole"
+          }
+        },
+        "readyTasks": {
+          "type": "integer",
+          "format": "int32",
+          "title": "当前角色的任务概览（与工作台首屏同源，省一次请求）"
+        },
+        "blockedTasks": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "openQuestions": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "v1MemberBrief": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "accountId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "currentRoleId": {
+          "type": "string"
+        },
+        "currentRole": {
+          "$ref": "#/definitions/v1WorkRole"
+        },
+        "roles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1WorkRole"
+          }
+        }
+      },
+      "title": "MemberBrief 是成员卡片：不含任务统计（列表页一次拉全部成员，省掉 N 次统计）。"
+    },
+    "v1Page": {
+      "type": "object",
+      "properties": {
+        "total": {
+          "type": "string",
+          "format": "int64",
+          "title": "总记录数"
+        },
+        "currentPage": {
+          "type": "string",
+          "format": "int64",
+          "title": "当前页码"
+        },
+        "pageSize": {
+          "type": "string",
+          "format": "int64",
+          "title": "每页记录数"
+        },
+        "totalPages": {
+          "type": "string",
+          "format": "int64",
+          "title": "总页数"
+        }
+      },
+      "title": "分页信息（所有服务的列表响应复用）"
+    },
+    "v1SwitchRoleRequest": {
+      "type": "object",
+      "properties": {
+        "roleCode": {
+          "type": "string",
+          "title": "角色 code 或中文名"
+        }
+      }
+    },
+    "v1WorkRole": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "code": {
+          "type": "string",
+          "description": "dev / qa / arch / pm / pjm / ops ..."
+        },
+        "name": {
+          "type": "string",
+          "description": "开发 / 测试 / 架构师 / 产品经理 ..."
+        },
+        "stage": {
+          "type": "string",
+          "title": "环节名：编码实现"
+        },
+        "sort": {
+          "type": "integer",
+          "format": "int32"
+        }
+      },
+      "title": "工作角色（环节职责，不含任何权限语义）"
+    }
+  }
+}

@@ -1,0 +1,133 @@
+syntax = "proto3";
+
+package flow.v1;
+
+option go_package = "github.com/linjunhao1997/idl/pb/flow;flow_v1";
+option java_multiple_files = true;
+option java_package = "com.flow.v1";
+
+import "common/common.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+import "buf/validate/validate.proto";
+
+// 澄清单服务（flow 宿主）：系统的引擎。一条 open 问题 = 对应任务被卡住。
+// 闭环只有 open → answered 一步，不设"处理中"中间态（多态即不可查询）。
+service QuestionService {
+  // 待我（当前角色）回答的问题，自带 AI 预填选项
+  rpc ListMyQuestions(ListMyQuestionsRequest) returns (ListQuestionsResponse) {
+    option (google.api.http) = {
+      get: "/flow/questions"
+    };
+  }
+
+  // 提问：问题一落库，对应任务立刻变 blocked（派生，无需更新任务）
+  rpc RaiseQuestion(RaiseQuestionRequest) returns (Question) {
+    option (google.api.http) = {
+      post: "/flow/questions"
+      body: "*"
+    };
+  }
+
+  // 升级：被问的人也答不了，向上挂子问题；父问题保持 open
+  rpc EscalateQuestion(EscalateQuestionRequest) returns (Question) {
+    option (google.api.http) = {
+      post: "/flow/questions/{id}/escalate"
+      body: "*"
+    };
+  }
+
+  // 闭环：选预填选项或补充说明；evidence 类必须带证据，否则 3001001
+  rpc AnswerQuestion(AnswerQuestionRequest) returns (Question) {
+    option (google.api.http) = {
+      post: "/flow/questions/{id}/answer"
+      body: "*"
+    };
+  }
+
+  // 重开：已闭环问题被打回 -> status 回 open，任务因派生自动重新 blocked。
+  // 仅原提问人可发起；老板角色保留兜底权（3001024/3001025/3001026）。
+  rpc ReopenQuestion(ReopenQuestionRequest) returns (Question) {
+    option (google.api.http) = {
+      post: "/flow/questions/{id}/reopen"
+      body: "*"
+    };
+  }
+}
+
+// AI 预填选项：结构由 agent 生成，人工只需选一个
+message QuestionOption {
+  string id = 1;    // A / B / C
+  string label = 2;
+  bool rec = 3;     // 是否 AI 推荐
+}
+
+message Question {
+  string id = 1;
+  string task_id = 2;
+  string task_title = 3;
+  string from_role_id = 4;
+  string from_role_name = 5;
+  string to_role_id = 6;
+  string to_role_name = 7;
+  string asked_by = 8;         // 提出人 account_id
+  string body = 9;
+  repeated QuestionOption options = 10;
+  string answer = 11;
+  string picked = 12;
+  string answer_kind = 13;     // decision / evidence
+  string evidence = 14;        // 执行类闭环证据
+  string status = 15;          // open / answered
+  string parent_question_id = 16;
+  int32 reopen_count = 17;
+  bool self_answer = 18;       // 自问自答（不进正常指标）
+  string answered_by = 19;
+  google.protobuf.Timestamp answered_at = 20;
+  google.protobuf.Timestamp create_time = 21;
+}
+
+message ListMyQuestionsRequest {
+  int64 current_page = 1;
+  int64 page_size = 2;
+  // open（默认）/ answered / all
+  string status = 3;
+  // mine = 待我回答（默认）；raised = 我提出的
+  string scope = 4;
+  // 只看某个任务下的问题；0 表示不限
+  int64 task_id = 5;
+}
+
+message ListQuestionsResponse {
+  common.v1.Page page = 1;
+  repeated Question questions = 2;
+  int32 open_count = 3;
+}
+
+message RaiseQuestionRequest {
+  int64 task_id = 1 [(buf.validate.field).required = true];
+  string to_role_code = 2 [(buf.validate.field).string.min_len = 1];
+  string body = 3 [(buf.validate.field).string.min_len = 1];
+  // decision（默认，一句话可关）/ evidence（必须带证据才算闭环）
+  string answer_kind = 4;
+  repeated QuestionOption options = 5;
+}
+
+message EscalateQuestionRequest {
+  int64 id = 1 [(buf.validate.field).required = true];
+  string to_role_code = 2 [(buf.validate.field).string.min_len = 1];
+  string body = 3 [(buf.validate.field).string.min_len = 1];
+  repeated QuestionOption options = 4;
+}
+
+message AnswerQuestionRequest {
+  int64 id = 1 [(buf.validate.field).required = true];
+  string option_id = 2;
+  string text = 3;
+  string evidence = 4;
+}
+
+message ReopenQuestionRequest {
+  int64 id = 1 [(buf.validate.field).required = true];
+  // 为什么打回：写清哪条答案不可靠、期望补什么，最长 512
+  string reason = 2 [(buf.validate.field).string.max_len = 512];
+}

@@ -1,0 +1,27 @@
+database:
+  dsn: "root:mysql12345678@tcp(127.0.0.1:3306)/flow_dev?charset=utf8mb4&parseTime=True&loc=Local"
+
+redis:
+  addr: "localhost:6379"
+
+grpc:
+  addr: "127.0.0.1"
+  port: 9092
+
+http:
+  addr: "127.0.0.1"
+  port: 8082
+  endpoint: "127.0.0.1:9092"
+
+app:
+  name: "flow-service"
+  mode: "debug"
+
+flow:
+  application_code: "flow"
+  application_name: "任务工作台"
+  # IAM gRPC 地址：入站判权透传 JWT 调 CheckPermission
+  iam_addr: "127.0.0.1:9090"
+  # 单人验证场景：首次登录自动建档并授予全部工作角色（true 适合单机自测，false 走"老板分配"）
+  bootstrap_all_roles: false
+  default_role_code: "dev"

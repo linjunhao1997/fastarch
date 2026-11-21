@@ -1,0 +1,128 @@
+syntax = "proto3";
+
+package flow.v1;
+
+option go_package = "github.com/linjunhao1997/idl/pb/flow;flow_v1";
+option java_multiple_files = true;
+option java_package = "com.flow.v1";
+
+import "common/common.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+import "buf/validate/validate.proto";
+
+// 任务服务（flow 宿主）：任务只归属「工作角色」，不归属人。
+// t_task.status 只有 open/done/discarded；能不能开工（ready/blocked）由问题表现算，
+// 不落库（宪法 V 派生而非复制）。
+service TaskService {
+  // 当前角色的任务清单（self-scoped：角色取自 JWT + 当前角色，不接受入参指定别人）
+  rpc ListMyTasks(ListMyTasksRequest) returns (ListTasksResponse) {
+    option (google.api.http) = {
+      get: "/flow/tasks"
+    };
+  }
+
+  rpc GetTask(common.v1.GetRequest) returns (Task) {
+    option (google.api.http) = {
+      get: "/flow/tasks/{id}"
+    };
+  }
+
+  // 建任务（默认落在当前角色上）
+  rpc CreateTask(CreateTaskRequest) returns (Task) {
+    option (google.api.http) = {
+      post: "/flow/tasks"
+      body: "*"
+    };
+  }
+
+  // 完成任务（动作语义，宪法 XIV）
+  rpc CloseTask(common.v1.GetRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      post: "/flow/tasks/{id}/close"
+    };
+  }
+
+  // 作废任务：被阻塞且不再需要的任务直接丢弃，不占队列
+  rpc DiscardTask(common.v1.GetRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      post: "/flow/tasks/{id}/discard"
+    };
+  }
+
+  // 当前角色的闭环质量指标（只读；口径见 docs/flow-workbench-implementation.md v1.1）
+  rpc GetMyMetrics(google.protobuf.Empty) returns (FlowMetrics) {
+    option (google.api.http) = {
+      get: "/flow/metrics"
+    };
+  }
+}
+
+// 卡住任务的问题摘要（只读回传）
+message TaskBlocker {
+  string question_id = 1;
+  string body = 2;
+  string to_role_name = 3;
+  string answer_kind = 4; // decision / evidence
+  string created_at = 5;
+}
+
+message Task {
+  string id = 1;
+  string role_id = 2;
+  string role_name = 3;
+  string title = 4;
+  string brief = 5;
+  string status = 6;        // 落库终态：open / done / discarded
+  string state = 7;         // 派生：ready / blocked / done / discarded
+  int32 open_questions = 8; // 未闭环问题数
+  repeated TaskBlocker blockers = 9;
+  string created_by = 10;
+  string updated_by = 11;
+  google.protobuf.Timestamp create_time = 12;
+  google.protobuf.Timestamp update_time = 13;
+}
+
+message ListMyTasksRequest {
+  int64 current_page = 1;
+  int64 page_size = 2;
+  string keyword = 3;
+  // 可选派生状态过滤：ready / blocked / done / discarded
+  string state = 4;
+}
+
+message ListTasksResponse {
+  common.v1.Page page = 1;
+  repeated Task tasks = 2;
+  // 当前角色概览（前端首屏横幅直接用，不另发请求）
+  int32 ready_count = 3;
+  int32 blocked_count = 4;
+  string role_id = 5;
+  string role_name = 6;
+}
+
+message CreateTaskRequest {
+  string title = 1 [(buf.validate.field).string.min_len = 1];
+  string brief = 2;
+  // 可选：不传则落在当前角色；传了必须是本人可担任的角色
+  string role_code = 3;
+}
+
+// 当前角色的闭环质量指标（只读）。
+// 任务维度看“队列是否在转”，问题维度看“闭环是否可信”。
+message FlowMetrics {
+  string role_id = 1;
+  string role_name = 2;
+  int32 open_tasks = 3;       // 当前角色 open 任务总数
+  int32 ready_tasks = 4;      // 派生：无 open 问题
+  int32 blocked_tasks = 5;    // 派生：至少一条 open 问题
+  int32 open_questions = 6;   // 发给当前角色、待回答
+  int32 answered_questions = 7; // 发给当前角色、已闭环
+  int32 reopened_questions = 8; // 上述已闭环问题的 reopen_count 之和
+  double avg_answer_minutes = 9; // 平均闭环时长（分钟）
+  double p50_answer_minutes = 10; // 闭环时长中位数（分钟）
+  double reopen_rate = 11;    // reopened / answered（0–1）
+  double self_answer_rate = 12; // 同账号闭环 / answered（0–1）
+  int32 stalled_tasks = 13;   // open 任务中，存在闭环已超 7 天的问题（“闭环了但没推进”）
+}
