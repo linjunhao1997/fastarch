@@ -82,6 +82,9 @@ message Task {
   string updated_by = 11;
   google.protobuf.Timestamp create_time = 12;
   google.protobuf.Timestamp update_time = 13;
+  // v1.1.1 角色归因：谁派发的（工作角色），与“现在在谁手里”分开
+  string created_role_id = 14;
+  string created_role_name = 15;
 }
 
 message ListMyTasksRequest {
@@ -90,6 +93,9 @@ message ListMyTasksRequest {
   string keyword = 3;
   // 可选派生状态过滤：ready / blocked / done / discarded
   string state = 4;
+  // v1.1.1 视图范围：""/mine=当前角色队列；created=我发起的（跨角色）；
+  // all=全链路（仅 boss/pjm，只读）
+  string scope = 5;
 }
 
 message ListTasksResponse {

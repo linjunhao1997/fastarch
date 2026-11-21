@@ -76,6 +76,9 @@ export interface Task {
   openQuestions: number;
   blockers: TaskBlocker[];
   createdBy: string;
+  /** v1.1.1：派发这条任务时的工作角色 */
+  createdRoleId?: string;
+  createdRoleName?: string;
   updatedBy: string;
   createTime: string;
   updateTime: string;
@@ -86,6 +89,8 @@ export interface ListMyTasksParams {
   pageSize?: number;
   keyword?: string;
   state?: string;
+  /** mine=当前角色队列；created=我发起的；all=全链路（boss/pjm） */
+  scope?: 'mine' | 'created' | 'all';
 }
 
 export interface ListTasksResponse {
@@ -146,6 +151,9 @@ export interface Question {
   reopenCount: number;
   selfAnswer: boolean;
   answeredBy: string;
+  /** v1.1.1：闭环该问题的工作角色（一人多角色时可还原） */
+  answeredRoleId?: string;
+  answeredRoleName?: string;
   answeredAt?: string;
   createTime?: string;
 }

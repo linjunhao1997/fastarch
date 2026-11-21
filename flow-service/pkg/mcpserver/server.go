@@ -1,4 +1,4 @@
-// Package mcpserver 提供 flow 工作台的 MCP stdio / HTTP 服务（单个服务、15 个工具）。
+// Package mcpserver 提供 flow 工作台的 MCP stdio / HTTP 服务（单个服务、16 个工具）。
 // 它本身不直连数据库、不复制判权逻辑，只把 agent 的调用转成 flow HTTP 接口，
 // 因此"谁能看到什么"始终由 IAM + flow 服务端裁决。
 package mcpserver
@@ -217,6 +217,18 @@ func tools() []map[string]any {
 			"inputSchema": map[string]any{"type": "object", "properties": map[string]any{}},
 		},
 		{
+			"name":        "list_tasks",
+			"description": "列任务：scope=mine（当前角色队列）/created（我发起的，跨角色）/all（全链路，仅 boss/pjm）；state 可筛 ready/blocked/done/discarded。",
+			"inputSchema": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"scope":     map[string]any{"type": "string", "enum": []string{"mine", "created", "all"}, "description": "默认 mine"},
+					"state":     map[string]any{"type": "string", "description": "ready / blocked / done / discarded，可空"},
+					"page_size": map[string]any{"type": "integer", "description": "默认 20"},
+				},
+			},
+		},
+		{
 			"name":        "my_questions",
 			"description": "待我当前角色回答的 open 问题（自带 AI 预填选项）。scope=raised 时改为看我自己提出的问题。",
 			"inputSchema": map[string]any{
@@ -416,6 +428,24 @@ func (s *server) callTool(ctx context.Context, name string, args map[string]any)
 
 	case "metrics":
 		body, err := s.get(ctx, "/flow/metrics")
+		if err != nil {
+			return "", err
+		}
+		return pretty(body), nil
+
+	case "list_tasks":
+		size := argInt64(args, "page_size")
+		if size <= 0 {
+			size = 20
+		}
+		path := fmt.Sprintf("/flow/tasks?page_size=%d", size)
+		if scope := argStr(args, "scope"); scope != "" {
+			path += "&scope=" + scope
+		}
+		if state := argStr(args, "state"); state != "" {
+			path += "&state=" + state
+		}
+		body, err := s.get(ctx, path)
 		if err != nil {
 			return "", err
 		}

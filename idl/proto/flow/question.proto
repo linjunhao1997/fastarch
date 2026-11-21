@@ -84,6 +84,9 @@ message Question {
   string answered_by = 19;
   google.protobuf.Timestamp answered_at = 20;
   google.protobuf.Timestamp create_time = 21;
+  // v1.1.1 角色归因：一人多角色时，能还原“用哪个角色答的”
+  string answered_role_id = 22;
+  string answered_role_name = 23;
 }
 
 message ListMyQuestionsRequest {

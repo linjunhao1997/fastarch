@@ -22,6 +22,7 @@ type Question struct {
 	ReopenCount      int        `gorm:"column:reopen_count"`
 	SelfAnswer       bool       `gorm:"column:self_answer"`
 	AnsweredBy       int64      `gorm:"column:answered_by"`
+	AnsweredRoleId   int64      `gorm:"column:answered_role_id"`
 	AnsweredAt       *time.Time `gorm:"column:answered_at"`
 	Version          int64      `gorm:"column:version"`
 	IsDeleted        bool       `gorm:"column:is_deleted;default:false"`
@@ -51,6 +52,7 @@ const (
 	QuestionColumnReopenCount      = "reopen_count"
 	QuestionColumnSelfAnswer       = "self_answer"
 	QuestionColumnAnsweredBy       = "answered_by"
+	QuestionColumnAnsweredRoleId   = "answered_role_id"
 	QuestionColumnAnsweredAt       = "answered_at"
 	QuestionColumnVersion          = "version"
 	QuestionColumnIsDeleted        = "is_deleted"
@@ -66,7 +68,7 @@ var QuestionFields = []string{
 	QuestionColumnBody, QuestionColumnOptions, QuestionColumnAnswer,
 	QuestionColumnPicked, QuestionColumnAnswerKind, QuestionColumnEvidence,
 	QuestionColumnStatus, QuestionColumnParentQuestionId, QuestionColumnReopenCount,
-	QuestionColumnSelfAnswer, QuestionColumnAnsweredBy, QuestionColumnAnsweredAt,
+	QuestionColumnSelfAnswer, QuestionColumnAnsweredBy, QuestionColumnAnsweredRoleId, QuestionColumnAnsweredAt,
 	QuestionColumnVersion, QuestionColumnIsDeleted,
 	QuestionColumnCreatedBy, QuestionColumnUpdatedBy,
 	QuestionColumnCreateTime, QuestionColumnUpdateTime,

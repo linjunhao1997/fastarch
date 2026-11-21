@@ -15,6 +15,7 @@ type Task struct {
 	Version       int64     `gorm:"column:version"`
 	IsDeleted     bool      `gorm:"column:is_deleted;default:false"`
 	CreatedBy     string    `gorm:"column:created_by;size:64"`
+	CreatedRoleId int64     `gorm:"column:created_role_id"`
 	UpdatedBy     string    `gorm:"column:updated_by;size:64"`
 	CreateTime    time.Time `gorm:"column:create_time"`
 	UpdateTime    time.Time `gorm:"column:update_time"`
@@ -32,6 +33,7 @@ const (
 	TaskColumnVersion       = "version"
 	TaskColumnIsDeleted     = "is_deleted"
 	TaskColumnCreatedBy     = "created_by"
+	TaskColumnCreatedRoleId = "created_role_id"
 	TaskColumnUpdatedBy     = "updated_by"
 	TaskColumnCreateTime    = "create_time"
 	TaskColumnUpdateTime    = "update_time"
@@ -40,7 +42,7 @@ const (
 var TaskFields = []string{
 	TaskColumnId, TaskColumnApplicationId, TaskColumnRoleId, TaskColumnTitle,
 	TaskColumnBrief, TaskColumnStatus, TaskColumnVersion, TaskColumnIsDeleted,
-	TaskColumnCreatedBy, TaskColumnUpdatedBy, TaskColumnCreateTime, TaskColumnUpdateTime,
+	TaskColumnCreatedBy, TaskColumnCreatedRoleId, TaskColumnUpdatedBy, TaskColumnCreateTime, TaskColumnUpdateTime,
 }
 
 // 任务终态（只有这三个；blocked 是派生状态，不落库）

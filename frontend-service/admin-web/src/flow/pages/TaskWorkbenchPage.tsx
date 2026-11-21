@@ -52,6 +52,7 @@ export default function TaskWorkbenchPage() {
   // 走 App.useApp() 的实例方法：静态 Modal.confirm / message 在本工程的挂载环境下不渲染（点了像没反应）
   const { message, modal } = App.useApp();
   const [state, setState] = useState('');
+  const [scope, setScope] = useState<'mine' | 'created' | 'all'>('mine');
   const [keyword, setKeyword] = useState('');
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
@@ -62,8 +63,8 @@ export default function TaskWorkbenchPage() {
   const me = meQuery.data;
 
   const tasksQuery = useQuery({
-    queryKey: ['flow', 'tasks', me?.currentRoleId, state, keyword, page],
-    queryFn: () => taskApi.list({ currentPage: page, pageSize: 10, keyword, state }),
+    queryKey: ['flow', 'tasks', me?.currentRoleId, scope, state, keyword, page],
+    queryFn: () => taskApi.list({ currentPage: page, pageSize: 10, keyword, state, scope }),
     enabled: !!me,
   });
   const data = tasksQuery.data;
@@ -74,6 +75,26 @@ export default function TaskWorkbenchPage() {
     enabled: !!me?.currentRoleId,
   });
   const metrics = metricsQuery.data;
+  const canAll = me?.currentRole?.code === 'boss' || me?.currentRole?.code === 'pjm';
+  const scopeTabs = canAll
+    ? [
+        { label: '我的队列', value: 'mine' },
+        { label: '我发起的', value: 'created' },
+        { label: '全链路', value: 'all' },
+      ]
+    : [
+        { label: '我的队列', value: 'mine' },
+        { label: '我发起的', value: 'created' },
+      ];
+  const groupedTasks = useMemo(() => {
+    const groups = new Map<string, Task[]>();
+    for (const task of data?.tasks ?? []) {
+      const key = task.roleName || '未分配角色';
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(task);
+    }
+    return Array.from(groups.entries());
+  }, [data]);
 
   const invalidate = async () => {
     await Promise.all([
@@ -88,6 +109,7 @@ export default function TaskWorkbenchPage() {
     mutationFn: (code: string) => memberApi.switchRole(code),
     onSuccess: async (next) => {
       setPage(1);
+      setScope('mine');
       await invalidate();
       message.success(`已切换为「${next.currentRole?.name ?? ''}」`);
     },
@@ -141,6 +163,16 @@ export default function TaskWorkbenchPage() {
         ),
       },
       {
+        title: '链路',
+        key: 'chain',
+        width: 210,
+        render: (_, record) => (
+          <Text style={{ fontSize: 12 }}>
+            {record.createdRoleName || '—'} → <Text strong>{record.roleName || '—'}</Text>
+          </Text>
+        ),
+      },
+      {
         title: '状态',
         dataIndex: 'state',
         key: 'state',
@@ -190,12 +222,12 @@ export default function TaskWorkbenchPage() {
         render: (_, record) => (
           <Space size={0}>
             <Button type="link" size="small" onClick={() => setDetail(record)}>详情</Button>
-            {record.state === 'blocked' ? (
+            {scope === 'mine' && record.state === 'blocked' ? (
               <Link to={`/flow/questions?task=${record.id}`}>
                 <Button type="link" size="small">去闭环</Button>
               </Link>
             ) : null}
-            {record.state === 'ready' ? (
+            {scope === 'mine' && record.state === 'ready' ? (
               <Button
                 type="link"
                 size="small"
@@ -216,7 +248,7 @@ export default function TaskWorkbenchPage() {
                 完成
               </Button>
             ) : null}
-            {record.status === 'open' ? (
+            {scope === 'mine' && record.status === 'open' ? (
               <Button
                 type="link"
                 size="small"
@@ -244,7 +276,7 @@ export default function TaskWorkbenchPage() {
         ),
       },
     ],
-    [closeMutation, discardMutation, modal],
+    [closeMutation, discardMutation, modal, scope],
   );
 
   return (
@@ -313,7 +345,7 @@ export default function TaskWorkbenchPage() {
         ) : null}
       </Card>
 
-      {data && data.blockedCount > 0 ? (
+      {scope === 'mine' && data && data.blockedCount > 0 ? (
         <Alert
           type="warning"
           showIcon
@@ -327,7 +359,13 @@ export default function TaskWorkbenchPage() {
       ) : null}
 
       <Card
-        title={`${data?.roleName || '当前角色'} 的任务`}
+        title={
+          scope === 'created'
+            ? '我发起的任务'
+            : scope === 'all'
+              ? '全链路任务（按角色）'
+              : `${data?.roleName || '当前角色'} 的任务`
+        }
         extra={
           <Space>
             <Input.Search
@@ -346,6 +384,21 @@ export default function TaskWorkbenchPage() {
         }
       >
         <Space direction="vertical" size={12} style={{ display: 'flex' }}>
+          <Space wrap>
+            <Segmented
+              options={scopeTabs}
+              value={scope}
+              onChange={(value) => {
+                setScope(value as 'mine' | 'created' | 'all');
+                setPage(1);
+              }}
+            />
+            {scope !== 'mine' ? (
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                只读视图：任务仍归当前角色所有，完成/作废请切回对应角色。
+              </Text>
+            ) : null}
+          </Space>
           <Segmented
             options={STATE_TABS}
             value={state}
@@ -354,20 +407,37 @@ export default function TaskWorkbenchPage() {
               setPage(1);
             }}
           />
-          <Table<Task>
-            rowKey="id"
-            loading={tasksQuery.isFetching}
-            columns={columns}
-            dataSource={data?.tasks ?? []}
-            locale={{ emptyText: <Empty description="这个角色暂时没有任务" /> }}
-            pagination={{
-              current: page,
-              pageSize: 10,
-              total: Number(data?.page.total ?? 0),
-              showTotal: (total) => `共 ${total} 条`,
-              onChange: setPage,
-            }}
-          />
+          {scope === 'all' ? (
+            <Space direction="vertical" size={12} style={{ display: 'flex' }}>
+              {groupedTasks.length === 0 ? <Empty description="还没有任务" /> : null}
+              {groupedTasks.map(([roleName, roleTasks]) => (
+                <Card key={roleName} size="small" title={`${roleName}（${roleTasks.length}）`}>
+                  <Table<Task>
+                    rowKey="id"
+                    columns={columns}
+                    dataSource={roleTasks}
+                    pagination={false}
+                    locale={{ emptyText: <Empty description="该角色暂无任务" /> }}
+                  />
+                </Card>
+              ))}
+            </Space>
+          ) : (
+            <Table<Task>
+              rowKey="id"
+              loading={tasksQuery.isFetching}
+              columns={columns}
+              dataSource={data?.tasks ?? []}
+              locale={{ emptyText: <Empty description="这个视图暂时没有任务" /> }}
+              pagination={{
+                current: page,
+                pageSize: 10,
+                total: Number(data?.page.total ?? 0),
+                showTotal: (total) => `共 ${total} 条`,
+                onChange: setPage,
+              }}
+            />
+          )}
         </Space>
       </Card>
 

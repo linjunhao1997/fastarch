@@ -412,6 +412,13 @@
         "createTime": {
           "type": "string",
           "format": "date-time"
+        },
+        "answeredRoleId": {
+          "type": "string",
+          "title": "v1.1.1 角色归因：一人多角色时，能还原“用哪个角色答的”"
+        },
+        "answeredRoleName": {
+          "type": "string"
         }
       }
     },

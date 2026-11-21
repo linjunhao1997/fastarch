@@ -29,20 +29,44 @@ func (s *TaskService) ListMyTasks(ctx context.Context, req *flow_v1.ListMyTasksR
 		return nil, err
 	}
 	role := currentRole(m, roles)
-
-	resp := &flow_v1.ListTasksResponse{}
-	if role == nil {
+	scope := strings.TrimSpace(req.GetScope())
+	if scope == "" {
+		scope = "mine"
+	}
+	if scope != "mine" && scope != "created" && scope != "all" {
+		return nil, ErrTaskScopeInvalid
+	}
+	if scope == "all" && (role == nil || (role.Code != "boss" && role.Code != "pjm")) {
+		return nil, ErrAllTasksForbidden
+	}
+	if scope == "mine" && role == nil {
+		resp := &flow_v1.ListTasksResponse{}
 		resp.Page = pageOf(req.GetCurrentPage(), req.GetPageSize(), 0)
 		return resp, nil
 	}
-	resp.RoleId = cast.ToString(role.Id)
-	resp.RoleName = role.Name
+
+	resp := &flow_v1.ListTasksResponse{}
+	if role != nil {
+		resp.RoleId = cast.ToString(role.Id)
+		resp.RoleName = role.Name
+	}
 
 	limit, offset := limitAndOffset(req.GetCurrentPage(), req.GetPageSize())
 	q := s.host.DB.WithContext(ctx).Model(&model.Task{}).
 		Where(model.TaskColumnApplicationId, s.host.AppId).
-		Where(model.TaskColumnRoleId, role.Id).
 		Where(model.TaskColumnIsDeleted, false)
+	switch scope {
+	case "created":
+		accountId, err := accountIdFromContext(ctx)
+		if err != nil {
+			return nil, err
+		}
+		q = q.Where(model.TaskColumnCreatedBy, cast.ToString(accountId))
+	case "all":
+		// 全链路只读：不按当前角色过滤，权限在上方已校验。
+	default:
+		q = q.Where(model.TaskColumnRoleId, role.Id)
+	}
 	if kw := strings.TrimSpace(req.GetKeyword()); kw != "" {
 		q = q.Where(model.TaskColumnTitle+" LIKE ?", "%"+kw+"%")
 	}
@@ -86,14 +110,16 @@ func (s *TaskService) ListMyTasks(ctx context.Context, req *flow_v1.ListMyTasksR
 
 	resp.Page = pageOf(req.GetCurrentPage(), req.GetPageSize(), total)
 	for i := range tasks {
-		resp.Tasks = append(resp.Tasks, taskToPb(&tasks[i], roleNames[tasks[i].RoleId], blockers[tasks[i].Id]))
+		resp.Tasks = append(resp.Tasks, taskToPb(&tasks[i], roleNames[tasks[i].RoleId], roleNameOf(roleNames, tasks[i].CreatedRoleId), blockers[tasks[i].Id]))
 	}
-	ready, blocked, err := s.host.taskStats(ctx, role.Id)
-	if err != nil {
-		return nil, err
+	if role != nil {
+		ready, blocked, err := s.host.taskStats(ctx, role.Id)
+		if err != nil {
+			return nil, err
+		}
+		resp.ReadyCount = int32(ready)
+		resp.BlockedCount = int32(blocked)
 	}
-	resp.ReadyCount = int32(ready)
-	resp.BlockedCount = int32(blocked)
 	return resp, nil
 }
 
@@ -113,7 +139,7 @@ func (s *TaskService) GetTask(ctx context.Context, req *common_v1.GetRequest) (*
 	if err != nil {
 		return nil, err
 	}
-	return taskToPb(t, roleNames[t.RoleId], blockers[t.Id]), nil
+	return taskToPb(t, roleNames[t.RoleId], roleNameOf(roleNames, t.CreatedRoleId), blockers[t.Id]), nil
 }
 
 func (s *TaskService) CreateTask(ctx context.Context, req *flow_v1.CreateTaskRequest) (*flow_v1.Task, error) {
@@ -121,7 +147,8 @@ func (s *TaskService) CreateTask(ctx context.Context, req *flow_v1.CreateTaskReq
 	if err != nil {
 		return nil, err
 	}
-	role := currentRole(m, roles)
+	creatorRole := currentRole(m, roles)
+	role := creatorRole
 	if code := strings.TrimSpace(req.GetRoleCode()); code != "" {
 		role = findRole(roles, code)
 		if role == nil {
@@ -144,6 +171,7 @@ func (s *TaskService) CreateTask(ctx context.Context, req *flow_v1.CreateTaskReq
 		Version:       0,
 		IsDeleted:     false,
 		CreatedBy:     cast.ToString(accountId),
+		CreatedRoleId: creatorRole.Id,
 		UpdatedBy:     cast.ToString(accountId),
 		CreateTime:    now(),
 		UpdateTime:    now(),
@@ -154,14 +182,15 @@ func (s *TaskService) CreateTask(ctx context.Context, req *flow_v1.CreateTaskReq
 		return nil, err
 	}
 	if err := s.host.appendEvent(ctx, tx, accountId, model.EventActionTaskCreate, model.EntityTask, t.Id,
-		map[string]any{"role_id": t.RoleId, "title": t.Title}); err != nil {
+		map[string]any{"role_id": t.RoleId, "title": t.Title,
+			"created_role_id": t.CreatedRoleId, "created_role_name": creatorRole.Name}); err != nil {
 		tx.Rollback()
 		return nil, err
 	}
 	if err := tx.Commit().Error; err != nil {
 		return nil, err
 	}
-	return taskToPb(&t, role.Name, nil), nil
+	return taskToPb(&t, role.Name, creatorRole.Name, nil), nil
 }
 
 func (s *TaskService) CloseTask(ctx context.Context, req *common_v1.GetRequest) (*emptypb.Empty, error) {
@@ -471,7 +500,7 @@ func (h *Host) blockersOf(ctx context.Context, taskIds []int64) (map[int64][]*fl
 	return out, nil
 }
 
-func taskToPb(t *model.Task, roleName string, blockers []*flow_v1.TaskBlocker) *flow_v1.Task {
+func taskToPb(t *model.Task, roleName, createdRoleName string, blockers []*flow_v1.TaskBlocker) *flow_v1.Task {
 	state := model.TaskStateReady
 	switch t.Status {
 	case model.TaskStatusDone:
@@ -484,20 +513,29 @@ func taskToPb(t *model.Task, roleName string, blockers []*flow_v1.TaskBlocker) *
 		}
 	}
 	return &flow_v1.Task{
-		Id:            cast.ToString(t.Id),
-		RoleId:        cast.ToString(t.RoleId),
-		RoleName:      roleName,
-		Title:         t.Title,
-		Brief:         t.Brief,
-		Status:        t.Status,
-		State:         state,
-		OpenQuestions: int32(len(blockers)),
-		Blockers:      blockers,
-		CreatedBy:     t.CreatedBy,
-		UpdatedBy:     t.UpdatedBy,
-		CreateTime:    tsOf(t.CreateTime),
-		UpdateTime:    tsOf(t.UpdateTime),
+		Id:              cast.ToString(t.Id),
+		RoleId:          cast.ToString(t.RoleId),
+		RoleName:        roleName,
+		Title:           t.Title,
+		Brief:           t.Brief,
+		Status:          t.Status,
+		State:           state,
+		OpenQuestions:   int32(len(blockers)),
+		Blockers:        blockers,
+		CreatedBy:       t.CreatedBy,
+		CreatedRoleId:   cast.ToString(t.CreatedRoleId),
+		CreatedRoleName: createdRoleName,
+		UpdatedBy:       t.UpdatedBy,
+		CreateTime:      tsOf(t.CreateTime),
+		UpdateTime:      tsOf(t.UpdateTime),
 	}
+}
+
+func roleNameOf(m map[int64]string, id int64) string {
+	if id <= 0 {
+		return ""
+	}
+	return m[id]
 }
 
 func currentRole(m *model.Member, roles []model.WorkRole) *model.WorkRole {

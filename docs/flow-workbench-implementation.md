@@ -192,6 +192,8 @@ MCP 只是 HTTP 客户端：身份与判权仍由 JWT + IAM `CheckPermission` �
 | 3001024 | 只有已闭环的问题才能重开 |
 | 3001025 | 不是原提问人，且当前角色不是 boss，不能重开 |
 | 3001026 | 任务已结束（done/discarded），不能重开其下问题 |
+| 3001027 | 全链路任务视图仅老板 / 项目经理可查看 |
+| 3001028 | 任务视图 scope 仅支持 mine / created / all |
 
 ## 8. 已知边界（MVP 取舍）
 
@@ -260,3 +262,40 @@ Invoke-RestMethod -Uri 'http://127.0.0.1:8082/flow/mcp' -Method Post -ContentTyp
 ```
 
 验收要点：重开后 `check_ready` 对应任务从 `ready` 回到 `blocked`；`my_questions` 能看到该问题回到 open；`history` 有 `question.reopen`；`metrics` 的 `reopen_rate` 随之上升。
+
+## 11. v1.1.1：角色归因与任务视图（老板反馈修复）
+
+### 11.1 问题：一人多角色时“谁派的/谁答的”丢失
+
+- 任务表只记 `created_by`（账号），页面只能按“当前角色队列”查，老板把任务派给 pm 后，老板/分析师看不到已派出的任务。
+- 问题表只记 `answered_by`（账号），一个人切多个角色作答时，无法还原“用哪个角色答的”。
+
+### 11.2 数据与契约
+
+| 表 / 消息 | 新增 | 写入时机 |
+| --- | --- | --- |
+| `t_task` / `Task` | `created_role_id` / `created_role_name` | `CreateTask` 时取**创建动作发生时的当前角色** |
+| `t_question` / `Question` | `answered_role_id` / `answered_role_name` | `AnswerQuestion` 时取**当前回答角色**；`reopen` 清 0 |
+| `ListMyTasksRequest` | `scope` | `mine`（默认）/ `created`（我发起的）/ `all`（全链路，仅 boss/pjm） |
+
+迁移 `000002_role_attribution` 只加两列，旧数据保持 0，前端显示“—”；不改变 ready/blocked 派生。
+
+### 11.3 视图语义
+
+- **我的队列（mine）**：当前角色名下的任务，可完成/作废/去闭环。
+- **我发起的（created）**：`created_by = 当前账号` 的任务，跨角色可见，只读；解决“老板派完就看不见”。
+- **全链路（all）**：老板 / 项目经理可见，按 `role_name` 分组，只读；其他角色调用返回 3001027。
+- 任务表新增“链路”列：`创建角色 → 当前角色`，一眼看出这一跳是谁派的、现在在谁手里。
+- 问题卡片与留痕抽屉显示“回答角色：老板（boss）”，同账号多角色不再靠猜。
+
+### 11.4 MCP 与页面
+
+- MCP 增 `list_tasks(scope/state/page_size)`，工具数 16；agent 也能看“我发起的”和全链路。
+- 任务工作台顶部 Segmented 切换视图；全链路按角色分组展示；非 mine 视图隐藏完成/作废/去闭环，避免越权操作。
+- 问题中心已闭环卡片 + 留痕事件都显示回答角色；旧事件没有 `answer_role_id` 时显示“—”。
+
+### 11.5 验收
+
+- `go build ./...` / `go vet ./...` / `pnpm build` 通过。
+- boss 的“我发起的”能看到 #12、#18、#19、#20 等派发记录；analyst 队列能看到 #18。
+- q7/q8/q10 显示“老板（boss）”，q9 显示“测试（qa）”。

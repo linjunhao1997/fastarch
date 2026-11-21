@@ -343,16 +343,17 @@ func (s *QuestionService) AnswerQuestion(ctx context.Context, req *flow_v1.Answe
 	crossRole := self && q.FromRoleId != role.Id
 	t := now()
 	updates := map[string]any{
-		model.QuestionColumnAnswer:     answer,
-		model.QuestionColumnPicked:     picked,
-		model.QuestionColumnEvidence:   evidence,
-		model.QuestionColumnStatus:     model.QuestionStatusAnswered,
-		model.QuestionColumnAnsweredBy: accountId,
-		model.QuestionColumnAnsweredAt: &t,
-		model.QuestionColumnSelfAnswer: self,
-		model.QuestionColumnVersion:    q.Version + 1,
-		model.QuestionColumnUpdatedBy:  cast.ToString(accountId),
-		model.QuestionColumnUpdateTime: &t,
+		model.QuestionColumnAnswer:         answer,
+		model.QuestionColumnPicked:         picked,
+		model.QuestionColumnEvidence:       evidence,
+		model.QuestionColumnStatus:         model.QuestionStatusAnswered,
+		model.QuestionColumnAnsweredBy:     accountId,
+		model.QuestionColumnAnsweredRoleId: role.Id,
+		model.QuestionColumnAnsweredAt:     &t,
+		model.QuestionColumnSelfAnswer:     self,
+		model.QuestionColumnVersion:        q.Version + 1,
+		model.QuestionColumnUpdatedBy:      cast.ToString(accountId),
+		model.QuestionColumnUpdateTime:     &t,
 	}
 
 	tx := s.host.DB.WithContext(ctx).Begin()
@@ -377,7 +378,8 @@ func (s *QuestionService) AnswerQuestion(ctx context.Context, req *flow_v1.Answe
 	}
 	if err := s.host.appendEvent(ctx, tx, accountId, action, model.EntityQuestion, q.Id,
 		map[string]any{"task_id": q.TaskId, "picked": picked, "answer_kind": q.AnswerKind, "evidence": evidence,
-			"self_answer": self, "cross_role": crossRole, "from_role_id": q.FromRoleId, "answer_role_id": role.Id}); err != nil {
+			"self_answer": self, "cross_role": crossRole, "from_role_id": q.FromRoleId,
+			"answer_role_id": role.Id, "answer_role_code": role.Code, "answer_role_name": role.Name}); err != nil {
 		tx.Rollback()
 		return nil, err
 	}
@@ -455,17 +457,18 @@ func (s *QuestionService) ReopenQuestion(ctx context.Context, req *flow_v1.Reope
 		Where(model.QuestionColumnId, q.Id).
 		Where(model.QuestionColumnStatus, model.QuestionStatusAnswered).
 		Updates(map[string]any{
-			model.QuestionColumnAnswer:      "",
-			model.QuestionColumnPicked:      "",
-			model.QuestionColumnEvidence:    "",
-			model.QuestionColumnStatus:      model.QuestionStatusOpen,
-			model.QuestionColumnAnsweredBy:  int64(0),
-			model.QuestionColumnAnsweredAt:  nil,
-			model.QuestionColumnSelfAnswer:  false,
-			model.QuestionColumnReopenCount: q.ReopenCount + 1,
-			model.QuestionColumnVersion:     q.Version + 1,
-			model.QuestionColumnUpdatedBy:   cast.ToString(accountId),
-			model.QuestionColumnUpdateTime:  &tnow,
+			model.QuestionColumnAnswer:         "",
+			model.QuestionColumnPicked:         "",
+			model.QuestionColumnEvidence:       "",
+			model.QuestionColumnStatus:         model.QuestionStatusOpen,
+			model.QuestionColumnAnsweredBy:     int64(0),
+			model.QuestionColumnAnsweredRoleId: int64(0),
+			model.QuestionColumnAnsweredAt:     nil,
+			model.QuestionColumnSelfAnswer:     false,
+			model.QuestionColumnReopenCount:    q.ReopenCount + 1,
+			model.QuestionColumnVersion:        q.Version + 1,
+			model.QuestionColumnUpdatedBy:      cast.ToString(accountId),
+			model.QuestionColumnUpdateTime:     &tnow,
 		})
 	if res.Error != nil {
 		tx.Rollback()
@@ -535,16 +538,17 @@ func (s *QuestionService) reopenParents(ctx context.Context, tx *gorm.DB, parent
 			Where(model.QuestionColumnId, parent.Id).
 			Where(model.QuestionColumnStatus, model.QuestionStatusAnswered).
 			Updates(map[string]any{
-				model.QuestionColumnAnswer:     "",
-				model.QuestionColumnPicked:     "",
-				model.QuestionColumnEvidence:   "",
-				model.QuestionColumnStatus:     model.QuestionStatusOpen,
-				model.QuestionColumnAnsweredBy: int64(0),
-				model.QuestionColumnAnsweredAt: nil,
-				model.QuestionColumnSelfAnswer: false,
-				model.QuestionColumnVersion:    parent.Version + 1,
-				model.QuestionColumnUpdatedBy:  cast.ToString(accountId),
-				model.QuestionColumnUpdateTime: &tnow,
+				model.QuestionColumnAnswer:         "",
+				model.QuestionColumnPicked:         "",
+				model.QuestionColumnEvidence:       "",
+				model.QuestionColumnStatus:         model.QuestionStatusOpen,
+				model.QuestionColumnAnsweredBy:     int64(0),
+				model.QuestionColumnAnsweredRoleId: int64(0),
+				model.QuestionColumnAnsweredAt:     nil,
+				model.QuestionColumnSelfAnswer:     false,
+				model.QuestionColumnVersion:        parent.Version + 1,
+				model.QuestionColumnUpdatedBy:      cast.ToString(accountId),
+				model.QuestionColumnUpdateTime:     &tnow,
 			})
 		if res.Error != nil {
 			return res.Error
@@ -708,6 +712,8 @@ func questionToPb(q *model.Question, taskTitle string, roleNames map[int64]strin
 		ReopenCount:      int32(q.ReopenCount),
 		SelfAnswer:       q.SelfAnswer,
 		AnsweredBy:       cast.ToString(q.AnsweredBy),
+		AnsweredRoleId:   cast.ToString(q.AnsweredRoleId),
+		AnsweredRoleName: roleNameOf(roleNames, q.AnsweredRoleId),
 		AnsweredAt:       tsPtr(q.AnsweredAt),
 		CreateTime:       tsOf(q.CreateTime),
 	}

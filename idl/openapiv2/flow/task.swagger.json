@@ -84,6 +84,13 @@
             "in": "query",
             "required": false,
             "type": "string"
+          },
+          {
+            "name": "scope",
+            "description": "v1.1.1 视图范围：\"\"/mine=当前角色队列；created=我发起的（跨角色）；\nall=全链路（仅 boss/pjm，只读）",
+            "in": "query",
+            "required": false,
+            "type": "string"
           }
         ],
         "tags": [
@@ -438,6 +445,13 @@
         "updateTime": {
           "type": "string",
           "format": "date-time"
+        },
+        "createdRoleId": {
+          "type": "string",
+          "title": "v1.1.1 角色归因：谁派发的（工作角色），与“现在在谁手里”分开"
+        },
+        "createdRoleName": {
+          "type": "string"
         }
       }
     },

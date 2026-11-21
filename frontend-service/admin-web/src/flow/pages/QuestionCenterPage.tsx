@@ -204,11 +204,13 @@ function OpenQuestionCard({
 function AnsweredCard({
   question,
   canReopen,
+  roles,
   onDone,
   onShowHistory,
 }: {
   question: Question;
   canReopen: boolean;
+  roles: { id: string; code: string; name: string }[];
   onDone: () => void | Promise<void>;
   onShowHistory: (q: Question) => void;
 }) {
@@ -218,6 +220,9 @@ function AnsweredCard({
   const [submitting, setSubmitting] = useState(false);
   const pickedLabel = question.picked
     ? (question.options.find((o) => o.id === question.picked)?.label ?? question.picked)
+    : '';
+  const answeredRoleCode = question.answeredRoleId
+    ? (roles.find((r) => String(r.id) === String(question.answeredRoleId))?.code ?? '')
     : '';
 
   const doReopen = async () => {
@@ -271,6 +276,13 @@ function AnsweredCard({
         </Descriptions.Item>
         {pickedLabel ? <Descriptions.Item label="所选选项">{pickedLabel}</Descriptions.Item> : null}
         {question.evidence ? <Descriptions.Item label="证据">{question.evidence}</Descriptions.Item> : null}
+        {question.status !== 'open' ? (
+          <Descriptions.Item label="回答角色">
+            {question.answeredRoleName
+              ? `${question.answeredRoleName}${answeredRoleCode ? `（${answeredRoleCode}）` : ''}`
+              : '—'}
+          </Descriptions.Item>
+        ) : null}
         {question.status !== 'open' ? (
           <Descriptions.Item label="闭环时间">
             {question.answeredAt ? new Date(question.answeredAt).toLocaleString() : '—'}
@@ -455,6 +467,7 @@ export default function QuestionCenterPage() {
                     key={q.id}
                     question={q}
                     canReopen={q.status === 'answered' && (q.askedBy === me?.accountId || me?.currentRole?.code === 'boss')}
+                    roles={me?.roles ?? []}
                     onDone={refresh}
                     onShowHistory={setHistoryFor}
                   />
@@ -486,19 +499,36 @@ export default function QuestionCenterPage() {
           <Spin />
         ) : (
           <Timeline
-            items={(historyQuery.data?.events ?? []).map((e: FlowEvent) => ({
-              children: (
-                <Space direction="vertical" size={2}>
-                  <Text strong>{e.action}</Text>
-                  <Text type="secondary" style={{ fontSize: 12 }}>
-                    {e.at} · {e.actorName || `账号 ${e.actor}`}
-                  </Text>
-                  {e.detail ? (
-                    <Paragraph style={{ margin: 0, fontSize: 12, color: '#888' }}>{e.detail}</Paragraph>
-                  ) : null}
-                </Space>
-              ),
-            }))}
+            items={(historyQuery.data?.events ?? []).map((e: FlowEvent) => {
+              let detail: Record<string, unknown> | null = null;
+              if (e.detail) {
+                try {
+                  detail = JSON.parse(e.detail) as Record<string, unknown>;
+                } catch {
+                  detail = null;
+                }
+              }
+              const answerRoleName = typeof detail?.answer_role_name === 'string' ? detail.answer_role_name : '';
+              const answerRoleCode = typeof detail?.answer_role_code === 'string' ? detail.answer_role_code : '';
+              return {
+                children: (
+                  <Space direction="vertical" size={2}>
+                    <Text strong>{e.action}</Text>
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      {e.at} · {e.actorName || `账号 ${e.actor}`}
+                    </Text>
+                    {answerRoleName ? (
+                      <Text style={{ fontSize: 12 }}>
+                        回答角色：{answerRoleName}{answerRoleCode ? `（${answerRoleCode}）` : ''}
+                      </Text>
+                    ) : null}
+                    {e.detail ? (
+                      <Paragraph style={{ margin: 0, fontSize: 12, color: '#888' }}>{e.detail}</Paragraph>
+                    ) : null}
+                  </Space>
+                ),
+              };
+            })}
           />
         )}
       </Drawer>

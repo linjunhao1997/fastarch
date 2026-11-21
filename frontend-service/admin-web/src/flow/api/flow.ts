@@ -53,13 +53,14 @@ export const memberApi = {
 };
 
 export const taskApi = {
-  list: ({ currentPage = 1, pageSize = 10, keyword = '', state = '' }: ListMyTasksParams = {}) =>
+  list: ({ currentPage = 1, pageSize = 10, keyword = '', state = '', scope = 'mine' }: ListMyTasksParams = {}) =>
     request<ListTasksResponse>(
       query('/flow/tasks', {
         current_page: currentPage,
         page_size: pageSize,
         keyword,
         state,
+        scope,
       }),
     ),
   get: (id: string) => request<Task>(`/flow/tasks/${id}`),
