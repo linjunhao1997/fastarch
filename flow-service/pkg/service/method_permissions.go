@@ -15,8 +15,7 @@ var methodPermissions = map[string][]string{
 	"/flow.v1.TaskService/GetTask":      {"flow.task.get"},
 	"/flow.v1.TaskService/CreateTask":   {"flow.task.create"},
 	"/flow.v1.TaskService/CloseTask":    {"flow.task.close"},
-	"/flow.v1.TaskService/DiscardTask":  {"flow.task.discard"},
-	"/flow.v1.TaskService/GetMyMetrics": {"flow.task.list"},
+	"/flow.v1.TaskService/DiscardTask": {"flow.task.discard"},
 
 	"/flow.v1.QuestionService/ListMyQuestions":  {"flow.question.list"},
 	"/flow.v1.QuestionService/RaiseQuestion":    {"flow.question.raise"},

@@ -150,7 +150,6 @@ stdio 模式只认调用者环境里的 token（`FLOW_TOKEN` / token 文件）�
 | `my_questions` | 待我回答 / 我提出的问题（带预填选项） | `GET /flow/questions` |
 | `answer_question` | 闭环问题（选项 / 结论 / 证据） | `POST /flow/questions/{id}/answer` |
 | `reopen_question` | 答错打回：仅原提问人或 boss；任务自动重新 blocked | `POST /flow/questions/{id}/reopen` |
-| `metrics` | 当前角色闭环质量指标（只读） | `GET /flow/metrics` |
 | `raise_question` | 抛阻塞问题给上游角色 | `POST /flow/questions` |
 | `history` | 留痕查询 | `GET /flow/events` |
 
@@ -172,7 +171,7 @@ MCP 只是 HTTP 客户端：身份与判权仍由 JWT + IAM `CheckPermission` �
 ## 6. 归责与留痕口径
 
 - 每次建任务/抛问题/闭环/切角色/作废都写 `t_event`，`history` 或页面「留痕」抽屉可查。
-- `answered_by != asked_by` 才是正常闭环；同一人自答写 `self_answer=1`，单独动作 `question.self_answer`，不计入正常指标。
+- `answered_by != asked_by` 才是正常闭环；同一人自答写 `self_answer=1`，单独动作 `question.self_answer`。
 - evidence 类问题缺证据：返回 `3001001`，问题**不动**，任务继续 blocked。
 - “闭环了但实际没人处理”：`answered_by` 是账号、`evidence` 是凭据、`t_event` 是时间线，三者对不上即可追责；`reopen_count` 记录被推翻次数。
 
@@ -212,14 +211,13 @@ MCP 只是 HTTP 客户端：身份与判权仍由 JWT + IAM `CheckPermission` �
 
 `webserve` 只是本地预览/截图辅助，正式联调仍用 `pnpm dev`。
 
-## 10. v1.1：闭环可回退 + 证据强校验 + 质量指标
+## 10. v1.1：闭环可回退 + 证据强校验
 
 ### 10.1 新增接口
 
 | 动作 | HTTP | 权限码 | 语义 |
 | --- | --- | --- | --- |
 | 重开问题 | `POST /flow/questions/{id}/reopen` | `flow.question.answer` | 仅 `answered` 可重开；原提问人或当前角色 boss 可发起 |
-| 质量指标 | `GET /flow/metrics` | `flow.task.list` | 当前角色维度，只读 |
 
 `reopen` 只改 `t_question` 一行：`status` 回 `open`、`reopen_count+1`、清空本轮答案；任务因 `EXISTS(open question)` 派生自动重新 `blocked`，不碰 `t_task.status`。子问题被打回时，若父问题是由“子问题闭环回填”自动闭环的，会沿 `parent_question_id` 一并重开，避免任务假 ready。
 
@@ -235,33 +233,18 @@ MCP 只是 HTTP 客户端：身份与判权仍由 JWT + IAM `CheckPermission` �
 
 不校验链接可达性（内网/离线链接会把正常闭环卡死）；只挡“done / 已修好了 / ok”这类无法回溯的空头承诺。
 
-### 10.3 指标口径
-
-`GET /flow/metrics` 返回当前角色：
-
-| 字段 | 口径 |
-| --- | --- |
-| `open_tasks` / `ready_tasks` / `blocked_tasks` | 当前角色 open 任务；ready/blocked 仍按 open 问题派生 |
-| `open_questions` / `answered_questions` | 发给当前角色的问题，按状态计数 |
-| `reopened_questions` | 上述 answered 问题的 `reopen_count` 之和 |
-| `avg_answer_minutes` / `p50_answer_minutes` | `answered_at - create_time` 的均值与中位数（分钟） |
-| `reopen_rate` / `self_answer_rate` | reopened / answered、self_answer / answered（0–1） |
-| `stalled_tasks` | 当前角色 open 任务中，存在闭环已超 7 天的问题（“闭环了但没推进”） |
-
-### 10.4 验证脚本（可复跑）
+### 10.3 验证脚本（可复跑）
 
 ```powershell
-# 1) 起服务后，用个人 AK/SK 走 MCP HTTP（勿把 SK 写进仓库）
+# 起服务后，用个人 AK/SK 走 MCP HTTP（勿把 SK 写进仓库）
 $h = @{ 'x-fa-access-key' = $env:FLOW_AK; 'x-fa-secret-key' = $env:FLOW_SK }
-$body = '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"metrics","arguments":{}}}'
-Invoke-RestMethod -Uri 'http://127.0.0.1:8082/flow/mcp' -Method Post -ContentType 'application/json' -Headers $h -Body $body
 
-# 2) 重开（用原提问人账号或 boss 角色）：把 <qid> 换成自己的已闭环问题
-$body = '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"reopen_question","arguments":{"question_id":"<qid>","reason":"结论缺少证据，打回补"}}}'
+# 重开（用原提问人账号或 boss 角色）：把 <qid> 换成自己的已闭环问题
+$body = '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"reopen_question","arguments":{"question_id":"<qid>","reason":"结论缺少证据，打回补"}}}'
 Invoke-RestMethod -Uri 'http://127.0.0.1:8082/flow/mcp' -Method Post -ContentType 'application/json' -Headers $h -Body $body
 ```
 
-验收要点：重开后 `check_ready` 对应任务从 `ready` 回到 `blocked`；`my_questions` 能看到该问题回到 open；`history` 有 `question.reopen`；`metrics` 的 `reopen_rate` 随之上升。
+验收要点：重开后 `check_ready` 对应任务从 `ready` 回到 `blocked`；`my_questions` 能看到该问题回到 open；`history` 有 `question.reopen`。
 
 ## 11. v1.1.1：角色归因与任务视图（老板反馈修复）
 
@@ -338,4 +321,5 @@ v1.1.1 的任务仍只挂 `role_id`，`CreateTask` 允许用 `role_code` 把任�
 - “我的任务”只显示自己的任务；有未完成下级时完成按钮换成“等 N 个下级完成”。
 - “上游任务”与“全链路”只读，提供“基于此建我的任务”，打开新建弹窗并带上父任务。
 - 新建弹窗明确：任务归你和当前角色，不改派；父任务要等这条及所有下级完成。
+- 顶部只保留可开工 / 被阻塞 / 待我闭环；平均闭环、P50 闭环、重开率、闭环后停滞已下线（含 `/flow/metrics` 与 MCP `metrics`）。
 

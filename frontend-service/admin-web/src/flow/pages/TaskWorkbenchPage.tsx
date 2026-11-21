@@ -73,12 +73,6 @@ export default function TaskWorkbenchPage() {
   });
   const data = tasksQuery.data;
 
-  const metricsQuery = useQuery({
-    queryKey: ['flow', 'metrics', me?.currentRoleId],
-    queryFn: () => taskApi.metrics(),
-    enabled: !!me?.currentRoleId,
-  });
-  const metrics = metricsQuery.data;
   const scopeTabs = [
     { label: '我的任务', value: 'mine' },
     ...(me?.currentRole?.code !== 'boss' ? [{ label: '上游任务', value: 'upstream' }] : []),
@@ -354,32 +348,6 @@ export default function TaskWorkbenchPage() {
             </Space>
           </Col>
         </Row>
-        {metrics ? (
-          <Row gutter={16} style={{ marginTop: 18 }}>
-            <Col span={6}>
-              <Statistic title="平均闭环" value={metrics.avgAnswerMinutes.toFixed(1)} suffix="分钟" />
-            </Col>
-            <Col span={6}>
-              <Statistic title="P50 闭环" value={metrics.p50AnswerMinutes.toFixed(1)} suffix="分钟" />
-            </Col>
-            <Col span={6}>
-              <Statistic
-                title="重开率"
-                value={(metrics.reopenRate * 100).toFixed(1)}
-                suffix="%"
-                valueStyle={{ color: metrics.reopenRate > 0.2 ? '#cf1322' : undefined }}
-              />
-            </Col>
-            <Col span={6}>
-              <Statistic
-                title="闭环后停滞"
-                value={metrics.stalledTasks}
-                suffix="个任务"
-                valueStyle={{ color: metrics.stalledTasks > 0 ? '#d46b08' : '#389e0d' }}
-              />
-            </Col>
-          </Row>
-        ) : null}
       </Card>
 
       {scope === 'mine' && data && data.blockedCount > 0 ? (

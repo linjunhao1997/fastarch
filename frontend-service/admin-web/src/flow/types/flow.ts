@@ -118,23 +118,6 @@ export interface CreateTaskRequest {
   parentTaskId?: string;
 }
 
-/** 当前角色闭环质量指标（只读，/flow/metrics） */
-export interface FlowMetrics {
-  roleId: string;
-  roleName: string;
-  openTasks: number;
-  readyTasks: number;
-  blockedTasks: number;
-  openQuestions: number;
-  answeredQuestions: number;
-  reopenedQuestions: number;
-  avgAnswerMinutes: number;
-  p50AnswerMinutes: number;
-  reopenRate: number;
-  selfAnswerRate: number;
-  stalledTasks: number;
-}
-
 export interface QuestionOption {
   id: string;
   label: string;

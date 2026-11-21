@@ -6,7 +6,6 @@ import { request } from '@/shared/api/request';
 import type {
   AnswerQuestionRequest,
   CreateTaskRequest,
-  FlowMetrics,
   ListEventsResponse,
   ListMembersParams,
   ListMembersResponse,
@@ -67,8 +66,6 @@ export const taskApi = {
   create: (data: CreateTaskRequest) => request<Task>('/flow/tasks', { method: 'POST', body: data }),
   close: (id: string) => request<void>(`/flow/tasks/${id}/close`, { method: 'POST' }),
   discard: (id: string) => request<void>(`/flow/tasks/${id}/discard`, { method: 'POST' }),
-  /** 当前角色的闭环质量指标（只读） */
-  metrics: () => request<FlowMetrics>('/flow/metrics'),
 };
 
 export const questionApi = {

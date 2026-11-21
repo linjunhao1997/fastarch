@@ -51,13 +51,6 @@ service TaskService {
       post: "/flow/tasks/{id}/discard"
     };
   }
-
-  // 当前角色的闭环质量指标（只读；口径见 docs/flow-workbench-implementation.md v1.1）
-  rpc GetMyMetrics(google.protobuf.Empty) returns (FlowMetrics) {
-    option (google.api.http) = {
-      get: "/flow/metrics"
-    };
-  }
 }
 
 // 卡住任务的问题摘要（只读回传）
@@ -124,22 +117,4 @@ message CreateTaskRequest {
   string role_code = 3;
   // 父任务 id；为空表示顶层任务。父任务必须属于上游角色。
   string parent_task_id = 4;
-}
-
-// 当前角色的闭环质量指标（只读）。
-// 任务维度看“队列是否在转”，问题维度看“闭环是否可信”。
-message FlowMetrics {
-  string role_id = 1;
-  string role_name = 2;
-  int32 open_tasks = 3;       // 当前角色 open 任务总数
-  int32 ready_tasks = 4;      // 派生：无 open 问题
-  int32 blocked_tasks = 5;    // 派生：至少一条 open 问题
-  int32 open_questions = 6;   // 发给当前角色、待回答
-  int32 answered_questions = 7; // 发给当前角色、已闭环
-  int32 reopened_questions = 8; // 上述已闭环问题的 reopen_count 之和
-  double avg_answer_minutes = 9; // 平均闭环时长（分钟）
-  double p50_answer_minutes = 10; // 闭环时长中位数（分钟）
-  double reopen_rate = 11;    // reopened / answered（0–1）
-  double self_answer_rate = 12; // 同账号闭环 / answered（0–1）
-  int32 stalled_tasks = 13;   // open 任务中，存在闭环已超 7 天的问题（“闭环了但没推进”）
 }

@@ -16,29 +16,6 @@
     "application/json"
   ],
   "paths": {
-    "/flow/metrics": {
-      "get": {
-        "summary": "当前角色的闭环质量指标（只读；口径见 docs/flow-workbench-implementation.md v1.1）",
-        "operationId": "TaskService_GetMyMetrics",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/v1FlowMetrics"
-            }
-          },
-          "default": {
-            "description": "An unexpected error response.",
-            "schema": {
-              "$ref": "#/definitions/rpcStatus"
-            }
-          }
-        },
-        "tags": [
-          "TaskService"
-        ]
-      }
-    },
     "/flow/tasks": {
       "get": {
         "summary": "当前人 + 当前角色的任务清单（self-scoped）",
@@ -274,73 +251,6 @@
           "title": "父任务 id；为空表示顶层任务。父任务必须属于上游角色。"
         }
       }
-    },
-    "v1FlowMetrics": {
-      "type": "object",
-      "properties": {
-        "roleId": {
-          "type": "string"
-        },
-        "roleName": {
-          "type": "string"
-        },
-        "openTasks": {
-          "type": "integer",
-          "format": "int32",
-          "title": "当前角色 open 任务总数"
-        },
-        "readyTasks": {
-          "type": "integer",
-          "format": "int32",
-          "title": "派生：无 open 问题"
-        },
-        "blockedTasks": {
-          "type": "integer",
-          "format": "int32",
-          "title": "派生：至少一条 open 问题"
-        },
-        "openQuestions": {
-          "type": "integer",
-          "format": "int32",
-          "title": "发给当前角色、待回答"
-        },
-        "answeredQuestions": {
-          "type": "integer",
-          "format": "int32",
-          "title": "发给当前角色、已闭环"
-        },
-        "reopenedQuestions": {
-          "type": "integer",
-          "format": "int32",
-          "title": "上述已闭环问题的 reopen_count 之和"
-        },
-        "avgAnswerMinutes": {
-          "type": "number",
-          "format": "double",
-          "title": "平均闭环时长（分钟）"
-        },
-        "p50AnswerMinutes": {
-          "type": "number",
-          "format": "double",
-          "title": "闭环时长中位数（分钟）"
-        },
-        "reopenRate": {
-          "type": "number",
-          "format": "double",
-          "title": "reopened / answered（0–1）"
-        },
-        "selfAnswerRate": {
-          "type": "number",
-          "format": "double",
-          "title": "同账号闭环 / answered（0–1）"
-        },
-        "stalledTasks": {
-          "type": "integer",
-          "format": "int32",
-          "title": "open 任务中，存在闭环已超 7 天的问题（“闭环了但没推进”）"
-        }
-      },
-      "title": "当前角色的闭环质量指标（只读）。\n任务维度看“队列是否在转”，问题维度看“闭环是否可信”。"
     },
     "v1ListTasksResponse": {
       "type": "object",

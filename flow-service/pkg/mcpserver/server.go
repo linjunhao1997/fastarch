@@ -212,11 +212,6 @@ func tools() []map[string]any {
 			},
 		},
 		{
-			"name":        "metrics",
-			"description": "当前角色的闭环质量指标：任务 open/ready/blocked、问题闭环时长均值/P50、自答率、重开率、闭环后 7 天未推进任务数。只读。",
-			"inputSchema": map[string]any{"type": "object", "properties": map[string]any{}},
-		},
-		{
 			"name":        "list_tasks",
 			"description": "列任务：scope=mine（我当前角色名下的任务）/upstream（上游角色任务，只读，用来建子任务）/created（我发起的，跨角色）/all（全链路，仅 boss/pjm）；state 可筛 ready/blocked/done/discarded。",
 			"inputSchema": map[string]any{
@@ -421,13 +416,6 @@ func (s *server) callTool(ctx context.Context, name string, args map[string]any)
 			size = 20
 		}
 		body, err := s.get(ctx, fmt.Sprintf("/flow/tasks?state=ready&page_size=%d", size))
-		if err != nil {
-			return "", err
-		}
-		return pretty(body), nil
-
-	case "metrics":
-		body, err := s.get(ctx, "/flow/metrics")
 		if err != nil {
 			return "", err
 		}

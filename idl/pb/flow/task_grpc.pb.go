@@ -21,12 +21,11 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	TaskService_ListMyTasks_FullMethodName  = "/flow.v1.TaskService/ListMyTasks"
-	TaskService_GetTask_FullMethodName      = "/flow.v1.TaskService/GetTask"
-	TaskService_CreateTask_FullMethodName   = "/flow.v1.TaskService/CreateTask"
-	TaskService_CloseTask_FullMethodName    = "/flow.v1.TaskService/CloseTask"
-	TaskService_DiscardTask_FullMethodName  = "/flow.v1.TaskService/DiscardTask"
-	TaskService_GetMyMetrics_FullMethodName = "/flow.v1.TaskService/GetMyMetrics"
+	TaskService_ListMyTasks_FullMethodName = "/flow.v1.TaskService/ListMyTasks"
+	TaskService_GetTask_FullMethodName     = "/flow.v1.TaskService/GetTask"
+	TaskService_CreateTask_FullMethodName  = "/flow.v1.TaskService/CreateTask"
+	TaskService_CloseTask_FullMethodName   = "/flow.v1.TaskService/CloseTask"
+	TaskService_DiscardTask_FullMethodName = "/flow.v1.TaskService/DiscardTask"
 )
 
 // TaskServiceClient is the client API for TaskService service.
@@ -42,8 +41,6 @@ type TaskServiceClient interface {
 	CloseTask(ctx context.Context, in *common.GetRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// 作废任务：被阻塞且不再需要的任务直接丢弃，不占队列
 	DiscardTask(ctx context.Context, in *common.GetRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	// 当前角色的闭环质量指标（只读；口径见 docs/flow-workbench-implementation.md v1.1）
-	GetMyMetrics(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*FlowMetrics, error)
 }
 
 type taskServiceClient struct {
@@ -99,15 +96,6 @@ func (c *taskServiceClient) DiscardTask(ctx context.Context, in *common.GetReque
 	return out, nil
 }
 
-func (c *taskServiceClient) GetMyMetrics(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*FlowMetrics, error) {
-	out := new(FlowMetrics)
-	err := c.cc.Invoke(ctx, TaskService_GetMyMetrics_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 // TaskServiceServer is the server API for TaskService service.
 // All implementations should embed UnimplementedTaskServiceServer
 // for forward compatibility
@@ -121,8 +109,6 @@ type TaskServiceServer interface {
 	CloseTask(context.Context, *common.GetRequest) (*emptypb.Empty, error)
 	// 作废任务：被阻塞且不再需要的任务直接丢弃，不占队列
 	DiscardTask(context.Context, *common.GetRequest) (*emptypb.Empty, error)
-	// 当前角色的闭环质量指标（只读；口径见 docs/flow-workbench-implementation.md v1.1）
-	GetMyMetrics(context.Context, *emptypb.Empty) (*FlowMetrics, error)
 }
 
 // UnimplementedTaskServiceServer should be embedded to have forward compatible implementations.
@@ -143,9 +129,6 @@ func (UnimplementedTaskServiceServer) CloseTask(context.Context, *common.GetRequ
 }
 func (UnimplementedTaskServiceServer) DiscardTask(context.Context, *common.GetRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DiscardTask not implemented")
-}
-func (UnimplementedTaskServiceServer) GetMyMetrics(context.Context, *emptypb.Empty) (*FlowMetrics, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetMyMetrics not implemented")
 }
 
 // UnsafeTaskServiceServer may be embedded to opt out of forward compatibility for this service.
@@ -249,24 +232,6 @@ func _TaskService_DiscardTask_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
-func _TaskService_GetMyMetrics_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(emptypb.Empty)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(TaskServiceServer).GetMyMetrics(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: TaskService_GetMyMetrics_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(TaskServiceServer).GetMyMetrics(ctx, req.(*emptypb.Empty))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 // TaskService_ServiceDesc is the grpc.ServiceDesc for TaskService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -293,10 +258,6 @@ var TaskService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DiscardTask",
 			Handler:    _TaskService_DiscardTask_Handler,
-		},
-		{
-			MethodName: "GetMyMetrics",
-			Handler:    _TaskService_GetMyMetrics_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

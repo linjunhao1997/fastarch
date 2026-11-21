@@ -2,9 +2,7 @@ package service
 
 import (
 	"context"
-	"sort"
 	"strings"
-	"time"
 
 	common_v1 "github.com/linjunhao1997/idl/pb/common"
 	flow_v1 "github.com/linjunhao1997/idl/pb/flow"
@@ -425,134 +423,6 @@ func (s *TaskService) DiscardTask(ctx context.Context, req *common_v1.GetRequest
 		return nil, err
 	}
 	return &emptypb.Empty{}, nil
-}
-
-// GetMyMetrics 返回当前角色的闭环质量指标（只读）。
-// 口径刻意区分“任务队列是否在转”和“问题闭环是否可信”：
-// 任务数看 open/ready/blocked，问题数看闭环时长、自答率、重开率、闭环后停滞。
-func (s *TaskService) GetMyMetrics(ctx context.Context, _ *emptypb.Empty) (*flow_v1.FlowMetrics, error) {
-	m, roles, err := s.host.ensureMember(ctx)
-	if err != nil {
-		return nil, err
-	}
-	role := currentRole(m, roles)
-	if role == nil {
-		return nil, ErrRoleNotFound
-	}
-	accountId, err := accountIdFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	taskBase := func() *gorm.DB {
-		return s.host.DB.WithContext(ctx).Table(model.Task{}.TableName()+" AS t").
-			Where("t.application_id = ?", s.host.AppId).
-			Where("t.role_id = ?", role.Id).
-			Where("t.owner_id = ?", accountId).
-			Where("t.is_deleted = ?", false)
-	}
-	var openTasks int64
-	if err := taskBase().Where("t.status = ?", model.TaskStatusOpen).Count(&openTasks).Error; err != nil {
-		return nil, err
-	}
-	var readyTasks int64
-	if err := taskBase().Where("t.status = ?", model.TaskStatusOpen).
-		Where("NOT EXISTS (SELECT 1 FROM " + model.Question{}.TableName() +
-			" q WHERE q.task_id = t.id AND q.status = 'open' AND q.is_deleted = 0)").
-		Count(&readyTasks).Error; err != nil {
-		return nil, err
-	}
-	blockedTasks := openTasks - readyTasks
-
-	questionBase := func() *gorm.DB {
-		return s.host.DB.WithContext(ctx).Model(&model.Question{}).
-			Where(model.QuestionColumnApplicationId, s.host.AppId).
-			Where(model.QuestionColumnToRoleId, role.Id).
-			Where(model.QuestionColumnIsDeleted, false)
-	}
-	var openQuestions, answeredQuestions, selfAnswered int64
-	if err := questionBase().Where(model.QuestionColumnStatus, model.QuestionStatusOpen).Count(&openQuestions).Error; err != nil {
-		return nil, err
-	}
-	if err := questionBase().Where(model.QuestionColumnStatus, model.QuestionStatusAnswered).Count(&answeredQuestions).Error; err != nil {
-		return nil, err
-	}
-	if err := questionBase().Where(model.QuestionColumnStatus, model.QuestionStatusAnswered).
-		Where(model.QuestionColumnSelfAnswer, true).Count(&selfAnswered).Error; err != nil {
-		return nil, err
-	}
-	var reopened int64
-	if err := questionBase().Where(model.QuestionColumnStatus, model.QuestionStatusAnswered).
-		Select("COALESCE(SUM(" + model.QuestionColumnReopenCount + "), 0)").Scan(&reopened).Error; err != nil {
-		return nil, err
-	}
-
-	// 闭环时长样本：只取 answered_at 非空的已闭环问题。
-	var samples []struct {
-		CreateTime time.Time  `gorm:"column:create_time"`
-		AnsweredAt *time.Time `gorm:"column:answered_at"`
-	}
-	if err := questionBase().Where(model.QuestionColumnStatus, model.QuestionStatusAnswered).
-		Select(model.QuestionColumnCreateTime + ", " + model.QuestionColumnAnsweredAt).
-		Find(&samples).Error; err != nil {
-		return nil, err
-	}
-	minutes := make([]float64, 0, len(samples))
-	for _, sample := range samples {
-		if sample.AnsweredAt == nil {
-			continue
-		}
-		d := sample.AnsweredAt.Sub(sample.CreateTime).Minutes()
-		if d >= 0 {
-			minutes = append(minutes, d)
-		}
-	}
-	avgMinutes, p50Minutes := 0.0, 0.0
-	if len(minutes) > 0 {
-		sort.Float64s(minutes)
-		sum := 0.0
-		for _, v := range minutes {
-			sum += v
-		}
-		avgMinutes = sum / float64(len(minutes))
-		mid := len(minutes) / 2
-		if len(minutes)%2 == 0 {
-			p50Minutes = (minutes[mid-1] + minutes[mid]) / 2
-		} else {
-			p50Minutes = minutes[mid]
-		}
-	}
-
-	// 闭环后停滞：任务还 open，但已有问题闭环超过 7 天，说明“答了没推进”。
-	var stalled int64
-	if err := taskBase().Where("t.status = ?", model.TaskStatusOpen).
-		Where("EXISTS (SELECT 1 FROM "+model.Question{}.TableName()+" q WHERE q.task_id = t.id"+
-			" AND q.status = 'answered' AND q.answered_at IS NOT NULL AND q.answered_at < ? AND q.is_deleted = 0)",
-			now().Add(-7*24*time.Hour)).
-		Count(&stalled).Error; err != nil {
-		return nil, err
-	}
-
-	reopenRate, selfRate := 0.0, 0.0
-	if answeredQuestions > 0 {
-		reopenRate = float64(reopened) / float64(answeredQuestions)
-		selfRate = float64(selfAnswered) / float64(answeredQuestions)
-	}
-	return &flow_v1.FlowMetrics{
-		RoleId:            cast.ToString(role.Id),
-		RoleName:          role.Name,
-		OpenTasks:         int32(openTasks),
-		ReadyTasks:        int32(readyTasks),
-		BlockedTasks:      int32(blockedTasks),
-		OpenQuestions:     int32(openQuestions),
-		AnsweredQuestions: int32(answeredQuestions),
-		ReopenedQuestions: int32(reopened),
-		AvgAnswerMinutes:  avgMinutes,
-		P50AnswerMinutes:  p50Minutes,
-		ReopenRate:        reopenRate,
-		SelfAnswerRate:    selfRate,
-		StalledTasks:      int32(stalled),
-	}, nil
 }
 
 // ---- 共用读取 ----
