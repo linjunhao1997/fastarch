@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package home.v1;
+
+option go_package = "github.com/linjunhao1997/idl/pb/home;home_v1";
+option java_multiple_files = true;
+option java_package = "com.home.v1";
+
+import "common/menu/menu.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/empty.proto";
+
+// 菜单服务（home 宿主）：共享 common.menu.v1，service 自持（ADR 0003）。
+// 企业官网控制台只需要「当前用户菜单树」，其余菜单增删改由 IAM 统一管理；
+// 方法签名是 contrib menu.MenuService 的子集，可直接注册该实现。
+service MenuService {
+  // 当前应用全量启用菜单树（纯码门槛裁决），仅需登录态。
+  rpc ListMyMenuTree(google.protobuf.Empty) returns (common.menu.v1.ListMenuTreeResponse) {
+    option (google.api.http) = {
+      get: "/home/menu/my-menu-tree"
+    };
+  }
+}

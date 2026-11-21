@@ -10,7 +10,7 @@ import { PermissionProvider } from '@/shared/hooks/PermissionProvider';
 
 interface AuthWrapperProps {
   /** 受保护区所属控制台；由所在路由子树决定（统一登录后不再由登录页锁定） */
-  consoleKind: 'iam' | 'sender';
+  consoleKind: 'iam' | 'sender' | 'flow' | 'home';
   children: ReactNode;
 }
 
@@ -45,11 +45,13 @@ export default function AuthWrapper({ consoleKind, children }: AuthWrapperProps)
 
   // ConsoleProvider 决定菜单/字典前缀；DataScopeProvider 决定业务数据归属；
   // PermissionProvider 决定能做什么操作。三者正交，均须挂在受保护区外层。
+  // home 控制台的数据范围默认收口到 home 应用，进入后仍可手动切换。
   return (
     <ConsoleProvider>
-      <DataScopeProvider>
+      <DataScopeProvider preferredAppCode={consoleKind === 'home' ? 'home' : undefined}>
         <PermissionProvider>{children}</PermissionProvider>
       </DataScopeProvider>
     </ConsoleProvider>
   );
 }
+

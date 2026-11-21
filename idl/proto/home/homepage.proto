@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+package home.v1;
+
+option go_package = "github.com/linjunhao1997/idl/pb/home;home_v1";
+option java_multiple_files = true;
+option java_package = "com.home.v1";
+
+import "common/common.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+import "buf/validate/validate.proto";
+
+// 企业官网首页配置服务（home 宿主）。
+// 单应用单首页：草稿与已发布分离，发布把当前草稿复制为已发布版本。
+// HTTP 路径以 /home 服务前缀挂载（ADR 0003）。
+service HomepageService {
+  // 读取当前应用的首页配置：草稿 + 已发布 + 版本。
+  rpc GetHomepage(GetHomepageRequest) returns (Homepage) {
+    option (google.api.http) = {
+      get: "/home/homepage"
+    };
+  }
+
+  // 保存草稿：只写 draft，不影响 published；expected_version 用于乐观锁。
+  rpc SaveDraft(SaveDraftRequest) returns (Homepage) {
+    option (google.api.http) = {
+      put: "/home/homepage/draft"
+      body: "*"
+    };
+  }
+
+  // 发布：把当前草稿复制为已发布版本，记录发布时间。
+  rpc PublishHomepage(PublishHomepageRequest) returns (Homepage) {
+    option (google.api.http) = {
+      post: "/home/homepage/publish"
+      body: "*"
+    };
+  }
+
+  // 读取已发布版本（供官网渲染/预览）；未发布返回空内容。
+  rpc GetPublishedHomepage(GetPublishedHomepageRequest) returns (PublishedHomepage) {
+    option (google.api.http) = {
+      get: "/home/homepage/published"
+    };
+  }
+}
+
+message GetHomepageRequest {}
+
+// 首页配置实体（单行，application_id 隔离）。
+message Homepage {
+  string id = 1;
+  string draft_json = 2;
+  string published_json = 3;
+  google.protobuf.Timestamp published_at = 4;
+  int64 version = 5;
+  // 审计字段（只读回传）
+  string updated_by = 6;
+  google.protobuf.Timestamp update_time = 7;
+  common.v1.ApplicationSummary application = 8;
+}
+
+message SaveDraftRequest {
+  // 首页内容 JSON（对象），字段契约见前端 HomepageContent；服务端校验合法 JSON 与大小上限。
+  string content_json = 1 [(buf.validate.field).string.min_len = 2, (buf.validate.field).string.max_len = 409600];
+  // 期望版本：0 表示不校验；>0 时版本不一致返回 3002004。
+  int64 expected_version = 2;
+}
+
+message PublishHomepageRequest {
+  int64 expected_version = 1;
+}
+
+message GetPublishedHomepageRequest {}
+
+message PublishedHomepage {
+  string content_json = 1;
+  google.protobuf.Timestamp published_at = 2;
+  int64 version = 3;
+}

@@ -56,7 +56,14 @@ func Interceptor(client *Client, cfg Config) grpc.UnaryServerInterceptor {
 		if err != nil {
 			slog.Error("iam check permission failed (fail-closed)",
 				"domain", cfg.ErrorDomain, "method", info.FullMethod, "error", err)
-			return nil, status.Error(codes.FailedPrecondition, "权限校验服务暂时不可用，请稍后重试")
+			switch status.Code(err) {
+			case codes.Unauthenticated:
+				return nil, status.Error(codes.Unauthenticated, "未登录或登录已过期")
+			case codes.PermissionDenied:
+				return nil, status.Error(codes.PermissionDenied, "permission denied")
+			default:
+				return nil, status.Error(codes.FailedPrecondition, "权限校验服务暂时不可用，请稍后重试")
+			}
 		}
 		if !ok {
 			slog.Warn("permission denied by iam",

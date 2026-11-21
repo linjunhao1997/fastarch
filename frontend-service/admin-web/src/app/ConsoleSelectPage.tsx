@@ -2,8 +2,10 @@ import { useEffect, type ReactNode } from 'react';
 import { Card, Col, Row, Typography } from 'antd';
 import {
   ApiOutlined,
+  GlobalOutlined,
   MessageOutlined,
   SafetyOutlined,
+  UnorderedListOutlined,
 } from '@ant-design/icons';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { LOGIN_PATH } from '@/app/routes';
@@ -14,6 +16,8 @@ import { layoutTokens, themeTokens } from '@/shared/theme';
 const CONSOLE_ICONS: Record<ConsoleKinds, ReactNode> = {
   iam: <SafetyOutlined />,
   sender: <MessageOutlined />,
+  flow: <UnorderedListOutlined />,
+  home: <GlobalOutlined />,
 };
 
 /**

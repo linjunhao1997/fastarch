@@ -48,14 +48,22 @@ function writeStoredCode(code: string): void {
   }
 }
 
-export function DataScopeProvider({ children }: { children: ReactNode }) {
+export function DataScopeProvider({
+  children,
+  preferredAppCode,
+}: {
+  children: ReactNode;
+  /** 进入某控制台时的默认数据范围；若该应用在接入集合内则优先选中。 */
+  preferredAppCode?: string;
+}) {
   const queryClient = useQueryClient();
+  const initialSelection = preferredAppCode || readStoredCode();
   const [applications, setApplications] = useState<MyProfileApplication[]>([]);
-  const [appCode, setAppCodeState] = useState<string>(readStoredCode);
+  const [appCode, setAppCodeState] = useState<string>(initialSelection);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   // 只在挂载时读取一次初始选中值；切换范围不重新拉取接入集合（集合由权限分配决定）。
-  const initialAppCode = useRef(appCode);
+  const initialAppCode = useRef(initialSelection);
 
   useEffect(() => {
     let cancelled = false;
@@ -77,7 +85,10 @@ export function DataScopeProvider({ children }: { children: ReactNode }) {
         }
         // 选中态校验：已存 code 不在接入集合（换账号/权限变更）则回落到第一个。
         const valid = apps.find((app) => app.code === initialAppCode.current && app.status === 'enabled');
-        if (!valid) {
+        if (valid) {
+          setAppCodeState(valid.code);
+          writeStoredCode(valid.code);
+        } else {
           const fallback = apps.find((app) => app.status === 'enabled');
           const next = fallback?.code ?? '';
           setAppCodeState(next);

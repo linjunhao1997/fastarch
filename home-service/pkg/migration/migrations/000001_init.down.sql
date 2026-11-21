@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS `t_homepage`;
+DROP TABLE IF EXISTS `t_menu`;

@@ -10,6 +10,7 @@ import {
   KeyOutlined,
   LockOutlined,
   MenuOutlined,
+  QuestionCircleOutlined,
   SafetyOutlined,
   SecurityScanOutlined,
   TeamOutlined,
@@ -23,11 +24,14 @@ import { layoutTokens } from '@/shared/theme';
 import { PERMISSIONS } from '@/shared/types/permissions';
 import type { MenuTreeNode } from '@/shared/types';
 import { senderRoutes } from '@/sender/router';
+import { flowRoutes } from '@/flow/router';
+import { homeRoutes } from '@/home/router';
 
 const IndexPage = lazy(() => import('@/app/IndexPage'));
 const LoginPage = lazy(() => import('@/shared/pages/LoginPage'));
 const ConsoleSelectPage = lazy(() => import('@/app/ConsoleSelectPage'));
 const HomePage = lazy(() => import('@/app/HomePage'));
+const PublicHomepagePage = lazy(() => import('@/home/pages/PublicHomepagePage'));
 const AccountListPage = lazy(() => import('@/iam/pages/AccountManagement/AccountListPage'));
 const CreateAccountPage = lazy(() => import('@/iam/pages/AccountManagement/CreateAccountPage'));
 const EditAccountPage = lazy(() => import('@/iam/pages/AccountManagement/EditAccountPage'));
@@ -66,6 +70,8 @@ export const routes: RouteObject[] = [
   // 统一登录：只有 IAM 登录页；sender 不再有登录入口，JWT 透传由拦截层完成。
   { path: LOGIN_PATH, element: withSuspense(<LoginPage />) },
   { path: CONSOLE_SELECT_PATH, element: withSuspense(<ConsoleSelectPage />) },
+  // 企业官网公开首页：独立于后台控制台，直接渲染已发布版本。
+  { path: '/site', element: withSuspense(<PublicHomepagePage />) },
   {
     path: '/',
     element: withSuspense(<AuthWrapper consoleKind="iam"><IndexPage /></AuthWrapper>),
@@ -228,6 +234,18 @@ export const routes: RouteObject[] = [
     element: withSuspense(<AuthWrapper consoleKind="sender"><IndexPage /></AuthWrapper>),
     children: [...senderRoutes],
   },
+  // flow 控制台（任务工作台）：与其它控制台共用登录入口，独立路由子树
+  {
+    path: '/flow',
+    element: withSuspense(<AuthWrapper consoleKind="flow"><IndexPage /></AuthWrapper>),
+    children: [...flowRoutes],
+  },
+  // home 控制台（企业官网）：可视化配置首页文案与布局，独立路由子树
+  {
+    path: '/home',
+    element: withSuspense(<AuthWrapper consoleKind="home"><IndexPage /></AuthWrapper>),
+    children: [...homeRoutes],
+  },
 ];
 
 export const router = createBrowserRouter(routes);
@@ -243,6 +261,7 @@ export const MENU_ICONS: Record<string, ReactNode> = {
   KeyOutlined: <KeyOutlined />,
   ApiOutlined: <ApiOutlined />,
   MenuOutlined: <MenuOutlined />,
+  QuestionCircleOutlined: <QuestionCircleOutlined />,
   BookOutlined: <BookOutlined />,
   UnorderedListOutlined: <UnorderedListOutlined />,
   TeamOutlined: <TeamOutlined />,

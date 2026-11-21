@@ -1,0 +1,257 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "home/homepage.proto",
+    "version": "version not set"
+  },
+  "tags": [
+    {
+      "name": "HomepageService"
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/home/homepage": {
+      "get": {
+        "summary": "读取当前应用的首页配置：草稿 + 已发布 + 版本。",
+        "operationId": "HomepageService_GetHomepage",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Homepage"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "HomepageService"
+        ]
+      }
+    },
+    "/home/homepage/draft": {
+      "put": {
+        "summary": "保存草稿：只写 draft，不影响 published；expected_version 用于乐观锁。",
+        "operationId": "HomepageService_SaveDraft",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Homepage"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1SaveDraftRequest"
+            }
+          }
+        ],
+        "tags": [
+          "HomepageService"
+        ]
+      }
+    },
+    "/home/homepage/publish": {
+      "post": {
+        "summary": "发布：把当前草稿复制为已发布版本，记录发布时间。",
+        "operationId": "HomepageService_PublishHomepage",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Homepage"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1PublishHomepageRequest"
+            }
+          }
+        ],
+        "tags": [
+          "HomepageService"
+        ]
+      }
+    },
+    "/home/homepage/published": {
+      "get": {
+        "summary": "读取已发布版本（供官网渲染/预览）；未发布返回空内容。",
+        "operationId": "HomepageService_GetPublishedHomepage",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1PublishedHomepage"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "HomepageService"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "rpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    },
+    "v1ApplicationSummary": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "title": "t_application.id（string 编码，避免 JS 精度丢失）"
+        },
+        "code": {
+          "type": "string",
+          "title": "服务段命名空间（iam/sender…）"
+        },
+        "name": {
+          "type": "string",
+          "title": "展示名"
+        },
+        "status": {
+          "type": "string",
+          "title": "enabled / disabled"
+        }
+      },
+      "title": "应用展示摘要（跨服务通用，只读回传；仅含展示字段，不含 app_id/密钥等机器字段）。\n用于让列表/详情直接渲染\"归属应用\"，避免前端二次查询应用目录。"
+    },
+    "v1Homepage": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "draftJson": {
+          "type": "string"
+        },
+        "publishedJson": {
+          "type": "string"
+        },
+        "publishedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "version": {
+          "type": "string",
+          "format": "int64"
+        },
+        "updatedBy": {
+          "type": "string",
+          "title": "审计字段（只读回传）"
+        },
+        "updateTime": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "application": {
+          "$ref": "#/definitions/v1ApplicationSummary"
+        }
+      },
+      "title": "首页配置实体（单行，application_id 隔离）。"
+    },
+    "v1PublishHomepageRequest": {
+      "type": "object",
+      "properties": {
+        "expectedVersion": {
+          "type": "string",
+          "format": "int64"
+        }
+      }
+    },
+    "v1PublishedHomepage": {
+      "type": "object",
+      "properties": {
+        "contentJson": {
+          "type": "string"
+        },
+        "publishedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "version": {
+          "type": "string",
+          "format": "int64"
+        }
+      }
+    },
+    "v1SaveDraftRequest": {
+      "type": "object",
+      "properties": {
+        "contentJson": {
+          "type": "string",
+          "title": "首页内容 JSON（对象），字段契约见前端 HomepageContent；服务端校验合法 JSON 与大小上限。"
+        },
+        "expectedVersion": {
+          "type": "string",
+          "format": "int64",
+          "title": "期望版本：0 表示不校验；\u003e0 时版本不一致返回 3002004。"
+        }
+      }
+    }
+  }
+}

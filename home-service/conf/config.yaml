@@ -1,0 +1,23 @@
+database:
+  dsn: "root:mysql12345678@tcp(127.0.0.1:3306)/home_dev?charset=utf8mb4&parseTime=True&loc=Local"
+
+redis:
+  addr: "localhost:6379"
+
+grpc:
+  addr: "127.0.0.1"
+  port: 9093
+
+http:
+  addr: "127.0.0.1"
+  port: 8083
+  endpoint: "127.0.0.1:9093"
+
+app:
+  name: "home-service"
+  mode: "debug"
+
+home:
+  application_code: "home"
+  application_name: "企业官网"
+  iam_addr: "127.0.0.1:9090"

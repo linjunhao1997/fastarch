@@ -5,13 +5,15 @@
  * 控制台内不再切换。菜单/字典 API 前缀由此决定：iam 走 /iam/...，sender 走
  * /sender/...。数据范围（appCode）与控制台正交，见 DataScopeContext。
  */
-export type ConsoleKinds = 'iam' | 'sender';
+export type ConsoleKinds = 'iam' | 'sender' | 'flow' | 'home';
 
 const CONSOLE_STORAGE_KEY = 'app_console';
 
 export const CONSOLE_LABELS: Record<ConsoleKinds, string> = {
   iam: '身份认证平台',
   sender: '消息中心',
+  flow: '任务工作台',
+  home: '企业官网',
 };
 
 export interface ConsoleDefinition {
@@ -30,6 +32,8 @@ export interface ConsoleDefinition {
 export const CONSOLE_REGISTRY: readonly ConsoleDefinition[] = [
   { code: 'iam', label: CONSOLE_LABELS.iam, path: '/', description: '用户、应用、认证与权限管理' },
   { code: 'sender', label: CONSOLE_LABELS.sender, path: '/sender', description: '消息模板与发送记录' },
+  { code: 'flow', label: CONSOLE_LABELS.flow, path: '/flow', description: '角色任务队列、阻塞问题闭环与留痕' },
+  { code: 'home', label: CONSOLE_LABELS.home, path: '/home', description: '企业首页文案、主题与布局可视化配置' },
 ] as const;
 
 let currentConsole: ConsoleKinds;
@@ -37,7 +41,7 @@ let currentConsole: ConsoleKinds;
 function loadInitialConsole(): ConsoleKinds {
   try {
     const stored = localStorage.getItem(CONSOLE_STORAGE_KEY);
-    if (stored === 'iam' || stored === 'sender') return stored;
+    if (stored === 'iam' || stored === 'sender' || stored === 'flow' || stored === 'home') return stored;
   } catch {
     // ignore
   }
@@ -68,7 +72,7 @@ export function clearConsole(): void {
 
 /**
  * 按当前控制台拼菜单/字典 API 前缀。
- * 登录即锁定，取值只有 /iam 或 /sender。
+ * 登录即锁定，取值只有 /iam、/sender、/flow 或 /home。
  */
 export function appApiPrefix(): string {
   return `/${currentConsole}`;

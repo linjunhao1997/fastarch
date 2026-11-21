@@ -73,6 +73,39 @@ export const PERMISSIONS = {
   senderDictCreate: 'sender.dict.create',
   senderDictUpdate: 'sender.dict.update',
   senderDictDelete: 'sender.dict.delete',
+  // flow 模块（与 flow-service/pkg/service/method_permissions.go 对齐）
+  flowMemberGet: 'flow.member.get',
+  flowMemberSwitch: 'flow.member.switch',
+  flowTaskList: 'flow.task.list',
+  flowTaskGet: 'flow.task.get',
+  flowTaskCreate: 'flow.task.create',
+  flowTaskClose: 'flow.task.close',
+  flowTaskDiscard: 'flow.task.discard',
+  flowQuestionList: 'flow.question.list',
+  flowQuestionRaise: 'flow.question.raise',
+  flowQuestionEscalate: 'flow.question.escalate',
+  flowQuestionAnswer: 'flow.question.answer',
+  flowEventList: 'flow.event.list',
+  flowMenuList: 'flow.menu.list',
+  flowMenuCreate: 'flow.menu.create',
+  flowMenuUpdate: 'flow.menu.update',
+  flowMenuDelete: 'flow.menu.delete',
+  flowDictList: 'flow.dict.list',
+  flowDictCreate: 'flow.dict.create',
+  flowDictUpdate: 'flow.dict.update',
+  flowDictDelete: 'flow.dict.delete',
+  // home 模块（与 home-service/pkg/service/method_permissions.go 对齐）
+  homePageGet: 'home.page.get',
+  homePageUpdate: 'home.page.update',
+  homePagePublish: 'home.page.publish',
+  homeMenuList: 'home.menu.list',
+  homeMenuCreate: 'home.menu.create',
+  homeMenuUpdate: 'home.menu.update',
+  homeMenuDelete: 'home.menu.delete',
+  homeDictList: 'home.dict.list',
+  homeDictCreate: 'home.dict.create',
+  homeDictUpdate: 'home.dict.update',
+  homeDictDelete: 'home.dict.delete',
 } as const;
 
 /**
@@ -83,9 +116,13 @@ export const PERMISSIONS = {
 export const MENU_MODULE_CODES: Record<ConsoleKinds, { create: string; update: string; delete: string }> = {
   iam: { create: 'iam.menu.create', update: 'iam.menu.update', delete: 'iam.menu.delete' },
   sender: { create: 'sender.menu.create', update: 'sender.menu.update', delete: 'sender.menu.delete' },
+  flow: { create: 'flow.menu.create', update: 'flow.menu.update', delete: 'flow.menu.delete' },
+  home: { create: 'home.menu.create', update: 'home.menu.update', delete: 'home.menu.delete' },
 };
 
 export const DICT_MODULE_CODES: Record<ConsoleKinds, { create: string; update: string; delete: string }> = {
   iam: { create: 'iam.dict.create', update: 'iam.dict.update', delete: 'iam.dict.delete' },
   sender: { create: 'sender.dict.create', update: 'sender.dict.update', delete: 'sender.dict.delete' },
+  flow: { create: 'flow.dict.create', update: 'flow.dict.update', delete: 'flow.dict.delete' },
+  home: { create: 'home.dict.create', update: 'home.dict.update', delete: 'home.dict.delete' },
 };
